@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { NewsList } from "@/components/news/NewsList";
 import { useQuotes } from "@/hooks/useQuotes";
@@ -41,15 +40,14 @@ export default function NewsPage() {
       <Card>
         <CardContent className="py-1">
           {Array.from({ length: pages }, (_, i) => (
-            <NewsList key={i} stock={filter ?? undefined} page={i + 1} />
+            <NewsList
+              key={i}
+              stock={filter ?? undefined}
+              page={i + 1}
+              isLast={i + 1 === pages}
+              onMore={() => setPages((p) => p + 1)}
+            />
           ))}
-          <Button
-            variant="ghost"
-            className="my-2 w-full"
-            onClick={() => setPages((p) => p + 1)}
-          >
-            더 보기
-          </Button>
         </CardContent>
       </Card>
 

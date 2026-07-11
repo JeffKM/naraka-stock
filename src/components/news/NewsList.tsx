@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getJson } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
@@ -25,14 +26,19 @@ function formatDate(date: string): string {
 }
 
 // 뉴스 목록 (T-503/504 공용) — stock 지정 시 해당 종목만
+// isLast + onMore: 페이지 누적 방식에서 마지막 블록이 "더 보기" 버튼을 담당
 export function NewsList({
   stock,
   page = 1,
   compact = false,
+  isLast = false,
+  onMore,
 }: {
   stock?: string;
   page?: number;
   compact?: boolean;
+  isLast?: boolean;
+  onMore?: () => void;
 }) {
   const { data, isLoading } = useQuery({
     queryKey: ["news", stock ?? "all", page],
@@ -55,11 +61,15 @@ export function NewsList({
   const items = compact ? data?.items.slice(0, 5) : data?.items;
 
   if (!items || items.length === 0) {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        아직 소식이 없습니다 👻
-      </p>
-    );
+    // 빈 안내는 첫 페이지에서만 — 추가 페이지가 비었을 땐 아무것도 그리지 않는다
+    if (page === 1) {
+      return (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          아직 소식이 없습니다 👻
+        </p>
+      );
+    }
+    return null;
   }
 
   return (
@@ -81,6 +91,12 @@ export function NewsList({
           )}
         </article>
       ))}
+      {/* 다음 페이지가 있을 때만 마지막 블록에 더 보기 노출 */}
+      {!compact && isLast && data?.hasMore && onMore && (
+        <Button variant="ghost" className="my-2" onClick={onMore}>
+          더 보기
+        </Button>
+      )}
     </div>
   );
 }
