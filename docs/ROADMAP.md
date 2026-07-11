@@ -3,18 +3,18 @@
 > 개발 기간: 2026-07-11 ~ 2026-07-28 (약 2.5주) · 테스트: 07-29 ~ 07-31 · **오픈: 2026-08-01 15:00**
 > 진행 규칙: Phase 순서대로 진행, 각 Task 완료 시 체크 + 진행률 갱신. 매 Phase 종료 시 `npm run build` + `npm run lint` 통과 필수.
 
-**전체 진행률: 2/42 (5%)**
+**전체 진행률: 6/42 (14%)**
 
 ---
 
-## Phase 0 — 프로젝트 기반 (2/6)
+## Phase 0 — 프로젝트 기반 (6/6) ✅
 
 - [x] **T-001** shadcn/ui 초기화 (다크 테마 기본) + 공통 의존성 설치 (zustand, @tanstack/react-query, react-hook-form, zod, lucide-react, sonner)
 - [x] **T-002** Supabase 연동: 서버 전용 service-role 클라이언트 (`lib/supabase/server.ts`), `.env.example`, supabase CLI 초기화 — 커스텀 인증이라 브라우저 클라이언트 없음 (⚠️ 실제 Supabase 프로젝트 생성·키 입력은 수동 필요)
-- [ ] **T-003** DB 스키마 마이그레이션 작성 (PRD §9.2 전체 테이블 + RLS 정책)
-- [ ] **T-004** 시드 데이터: 종목 8개, config 기본값, 테스트 가입 코드
-- [ ] **T-005** 공통 레이아웃: 모바일 하단 탭 내비게이션, 헤더(장 상태 표시), 다크 테마
-- [ ] **T-006** `ApiResponse<T>` 래퍼·에러 핸들링 컨벤션, 도메인 타입 정의 (`types/`)
+- [x] **T-003** DB 스키마 마이그레이션 작성 (전체 테이블 + RLS 전면 차단 + service_role 명시 grant) — 로컬 Supabase에서 적용·검증 완료
+- [x] **T-004** 시드 데이터: 종목 8개(확정 종목명), config 기본값, 기준가(07-31), 테스트 가입 코드
+- [x] **T-005** 공통 레이아웃: 하단 5탭 내비게이션, 헤더(장 상태 배지), 다크 "아기자기한 지옥" 팔레트, TanStack Query Provider
+- [x] **T-006** `ApiResponse<T>` 래퍼·에러 핸들링 컨벤션(`lib/api/response.ts`), 도메인 타입(`types/`), 장 시간 유틸(`lib/market.ts`)
 
 ## Phase 1 — 인증·계정 (0/5)
 
