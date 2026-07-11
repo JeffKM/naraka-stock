@@ -17,9 +17,11 @@ const TABS = [
   { href: "/history", label: "내역", icon: History },
 ] as const;
 
-// 모바일 하단 탭 내비게이션 (5탭 고정)
+// 모바일 하단 탭 내비게이션 (5탭 고정) — 운영자 콘솔에서는 숨긴다
 export function BottomNav() {
   const pathname = usePathname();
+
+  if (pathname.startsWith("/admin")) return null;
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur">

@@ -27,7 +27,10 @@ export default function AdminPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-xl font-bold">운영자 콘솔</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold">운영자 콘솔</h1>
+        <LogoutButton />
+      </div>
       <DashboardSection />
       <SignupCodeSection />
       <VisitCodeSection />
@@ -35,6 +38,18 @@ export default function AdminPage() {
       <ManualNewsSection />
       <UserSection />
     </div>
+  );
+}
+
+function LogoutButton() {
+  async function logout() {
+    await postJson("/api/auth/logout");
+    window.location.href = "/login"; // proxy 리다이렉트 초기화를 위해 전체 이동
+  }
+  return (
+    <Button variant="outline" size="sm" onClick={logout}>
+      로그아웃
+    </Button>
   );
 }
 
