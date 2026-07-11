@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { AuthButton } from "./AuthButton";
 import { MarketStatusBadge } from "./MarketStatusBadge";
 
-// 상단 고정 헤더: 로고 + 장 상태 배지
+// 상단 고정 헤더: 로고 + 장 상태 배지 + 로그인/로그아웃
 export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur">
@@ -12,7 +13,10 @@ export function Header() {
             <span className="text-primary">나라카</span>증권
           </span>
         </Link>
-        <MarketStatusBadge />
+        <div className="flex items-center gap-2">
+          <MarketStatusBadge />
+          <AuthButton />
+        </div>
       </div>
     </header>
   );

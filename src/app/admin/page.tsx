@@ -27,29 +27,15 @@ export default function AdminPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">운영자 콘솔</h1>
-        <LogoutButton />
-      </div>
+      <h1 className="text-xl font-bold">운영자 콘솔</h1>
       <DashboardSection />
+      <RankingSection />
       <SignupCodeSection />
       <VisitCodeSection />
       <EventSection />
       <ManualNewsSection />
       <UserSection />
     </div>
-  );
-}
-
-function LogoutButton() {
-  async function logout() {
-    await postJson("/api/auth/logout");
-    window.location.href = "/login"; // proxy 리다이렉트 초기화를 위해 전체 이동
-  }
-  return (
-    <Button variant="outline" size="sm" onClick={logout}>
-      로그아웃
-    </Button>
   );
 }
 
@@ -85,6 +71,50 @@ function DashboardSection() {
           <div key={s.label}>
             <p className="text-xs text-muted-foreground">{s.label}</p>
             <p className="font-semibold">{s.value ?? "—"}</p>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+// 총자산 랭킹 (운영자 전용 — 순위는 매장에서 발표)
+function RankingSection() {
+  const { data } = useQuery({
+    queryKey: ["admin-ranking"],
+    queryFn: () =>
+      getJson<{
+        top: Array<{ rank: number; nickname: string; totalAssets: number }>;
+        totalUsers: number;
+      }>("/api/ranking"),
+    refetchInterval: 60_000,
+  });
+
+  const medals = ["🥇", "🥈", "🥉"];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">
+          랭킹{" "}
+          <span className="text-sm font-normal text-muted-foreground">
+            참가자 {data?.totalUsers ?? "—"}명
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col divide-y divide-border/60">
+        {data?.top.length === 0 && (
+          <p className="py-4 text-center text-sm text-muted-foreground">아직 참가자가 없습니다</p>
+        )}
+        {data?.top.map((entry) => (
+          <div key={entry.rank} className="flex items-center justify-between py-2">
+            <span>
+              <span className="mr-2 inline-block w-7 text-center font-bold">
+                {medals[entry.rank - 1] ?? entry.rank}
+              </span>
+              {entry.nickname}
+            </span>
+            <span className="tabular-nums text-sm">{formatMoney(entry.totalAssets)}</span>
           </div>
         ))}
       </CardContent>
