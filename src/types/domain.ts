@@ -57,6 +57,14 @@ export interface NewsItem {
   publishedAt: string;
 }
 
+// 로그인 유저 정보 (/api/auth/me 응답)
+export interface Me {
+  id: number;
+  nickname: string;
+  cash: number;
+  isAdmin: boolean;
+}
+
 // 랭킹 한 줄
 export interface RankingEntry {
   rank: number;

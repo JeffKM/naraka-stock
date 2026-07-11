@@ -11,6 +11,7 @@ export type ApiErrorCode =
   | "INSUFFICIENT_QUANTITY" // 보유 수량 부족
   | "CODE_INVALID" // 가입·방문 코드 무효
   | "CODE_ALREADY_USED" // 코드 중복 사용
+  | "NICKNAME_TAKEN" // 닉네임 중복
   | "BANNED" // 정지 계정
   | "INTERNAL"; // 서버 내부 오류
 

@@ -1,0 +1,90 @@
+"use client";
+
+import { zodResolver } from "@hookform/resolvers/zod";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { postJson } from "@/lib/api/client";
+import { loginSchema, type LoginInput } from "@/lib/validation/auth";
+
+function LoginForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginInput>({ resolver: zodResolver(loginSchema) });
+
+  async function onSubmit(values: LoginInput) {
+    try {
+      await postJson("/api/auth/login", values);
+      // 보호 라우트에서 넘어온 경우 원래 목적지로 (외부 URL 방지: 경로만 허용)
+      const next = searchParams.get("next");
+      router.push(next?.startsWith("/") ? next : "/");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "로그인에 실패했습니다.");
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>로그인</CardTitle>
+        <CardDescription>닉네임과 비밀번호를 입력해주세요</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit(onSubmit)}>
+          <FieldGroup>
+            <Field data-invalid={!!errors.nickname}>
+              <FieldLabel htmlFor="nickname">닉네임</FieldLabel>
+              <Input
+                id="nickname"
+                autoComplete="username"
+                aria-invalid={!!errors.nickname}
+                {...register("nickname")}
+              />
+              <FieldError errors={[errors.nickname]} />
+            </Field>
+            <Field data-invalid={!!errors.password}>
+              <FieldLabel htmlFor="password">비밀번호</FieldLabel>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                aria-invalid={!!errors.password}
+                {...register("password")}
+              />
+              <FieldError errors={[errors.password]} />
+            </Field>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "로그인 중..." : "로그인"}
+            </Button>
+          </FieldGroup>
+        </form>
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          아직 계좌가 없나요?{" "}
+          <Link href="/signup" className="text-primary underline underline-offset-4">
+            계좌 개설
+          </Link>
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// useSearchParams는 Suspense 경계가 필요하다
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
