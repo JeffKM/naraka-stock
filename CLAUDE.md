@@ -15,10 +15,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 주요 명령어
 
 ```bash
-npm run dev    # 개발 서버 (localhost:3000)
-npm run build  # 프로덕션 빌드
-npm run lint   # ESLint 검사
+npm run dev       # 개발 서버 (localhost:3000)
+npm run build     # 프로덕션 빌드
+npm run lint      # ESLint 검사
+npm run simulate  # 밸런스 몬테카를로 시뮬레이션 (-- --runs N)
 ```
+
+## 로컬 개발 환경
+
+- 로컬 DB: `npx supabase start` (Docker 필요, storage/auth/analytics 등은 config.toml에서 비활성)
+- 스키마 초기화: `npx supabase db reset` (마이그레이션 + `supabase/seed.sql` 적용)
+- `.env.local`에 로컬 데모 키 설정됨 (커밋 금지) — 템플릿은 `.env.example`
+- 일일 배치 수동 실행: `curl -X POST "localhost:3000/api/cron/daily-batch?date=YYYY-MM-DD" -H "Authorization: Bearer $CRON_SECRET"`
+- 거래 함수는 `p_at` 파라미터로 장중 시각을 오버라이드해 SQL로 테스트 가능 (API는 미노출)
+- 배포·리허설 절차: `docs/DEPLOY.md`
 
 ## 기술 스택
 
