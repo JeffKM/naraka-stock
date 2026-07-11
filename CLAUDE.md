@@ -26,7 +26,7 @@ npm run lint   # ESLint 검사
 |------|------|
 | 프레임워크 | Next.js 16 (App Router) + React 19 — SSR/API routes 사용 (**정적 export 아님**) |
 | 언어 | TypeScript 5 (strict) |
-| 스타일링 | TailwindCSS v4 + shadcn/ui, 다크 테마 기본 |
+| 스타일링 | TailwindCSS v4 + shadcn/ui, 다크 테마 기본 — 디자인 컨셉 "아기자기한 지옥" (PRD §6.1, 레퍼런스 `docs/design-refs/`) |
 | 서버 상태 | TanStack Query v5 (5분 틱 폴링) |
 | 클라이언트 상태 | Zustand v5 (UI 상태만) |
 | 폼/검증 | React Hook Form v7 + Zod v4 |
