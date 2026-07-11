@@ -9,7 +9,7 @@ import { useQuotes } from "@/hooks/useQuotes";
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/market";
 
-const TIER_LABEL = { stable: "안정", normal: "일반", wild: "잡주" } as const;
+const TIER_LABEL = { stable: "우량주", normal: "일반주", wild: "테마주" } as const;
 
 // 시세판 홈 (T-401): 전 종목 전광판
 export default function Home() {

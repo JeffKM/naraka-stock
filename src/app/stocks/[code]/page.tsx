@@ -12,7 +12,7 @@ import { useQuotes } from "@/hooks/useQuotes";
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/market";
 
-const TIER_LABEL = { stable: "안정주", normal: "일반주", wild: "잡주" } as const;
+const TIER_LABEL = { stable: "우량주", normal: "일반주", wild: "테마주" } as const;
 
 // 종목 상세 (T-303/T-402/T-403)
 export default function StockDetailPage({
