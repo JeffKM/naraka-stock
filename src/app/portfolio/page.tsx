@@ -152,6 +152,13 @@ export default function PortfolioPage() {
         </CardContent>
       </Card>
 
+      {/* 운영자에게만 보이는 콘솔 진입점 */}
+      {me?.isAdmin && (
+        <Button variant="secondary" asChild>
+          <Link href="/admin">👺 운영자 콘솔</Link>
+        </Button>
+      )}
+
       <Button variant="outline" onClick={logout}>
         로그아웃
       </Button>
