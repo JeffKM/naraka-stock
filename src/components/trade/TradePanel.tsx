@@ -15,10 +15,11 @@ const SELL_FEE_RATE = 0.003; // 표시용 (실제 수수료는 서버 계산)
 
 interface TradePanelProps {
   quote: StockQuote;
+  marketHalted?: boolean; // 서킷브레이커 발동 중
 }
 
 // 매수/매도 패널 (T-303) — 수량만 서버로 보낸다. 가격·수수료는 표시용 추정치.
-export function TradePanel({ quote }: TradePanelProps) {
+export function TradePanel({ quote, marketHalted = false }: TradePanelProps) {
   const queryClient = useQueryClient();
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [quantityText, setQuantityText] = useState("");
@@ -124,16 +125,20 @@ export function TradePanel({ quote }: TradePanelProps) {
 
         <Button
           onClick={submit}
-          disabled={quantity <= 0 || quantity > maxQty || submitting || quote.isHalted}
+          disabled={
+            quantity <= 0 || quantity > maxQty || submitting || quote.isHalted || marketHalted
+          }
           className={side === "buy" ? "bg-bull hover:bg-bull/90" : "bg-bear hover:bg-bear/90"}
         >
-          {quote.isHalted
-            ? "거래 정지 중"
-            : submitting
-              ? "주문 중..."
-              : side === "buy"
-                ? "매수"
-                : "매도"}
+          {marketHalted
+            ? "서킷브레이커 발동 중"
+            : quote.isHalted
+              ? "거래 정지 중"
+              : submitting
+                ? "주문 중..."
+                : side === "buy"
+                  ? "매수"
+                  : "매도"}
         </Button>
       </CardContent>
     </Card>

@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { Header } from "@/components/layout/Header";
+import { MarketHaltBanner } from "@/components/quotes/MarketHaltBanner";
 import { Toaster } from "@/components/ui/sonner";
 
 const notoSansKr = Noto_Sans_KR({
@@ -42,6 +43,7 @@ export default function RootLayout({
       <body className="flex min-h-dvh flex-col">
         <Providers>
           <Header />
+          <MarketHaltBanner />
           <main className="mx-auto w-full max-w-lg flex-1 px-4 pb-24 pt-4">
             {children}
           </main>

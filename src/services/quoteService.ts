@@ -5,8 +5,9 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { MarketState, StockQuote, StockTier } from "@/types/domain";
 
 export interface QuoteBoard {
-  marketState: Exclude<MarketState, "halted">;
+  marketState: MarketState;
   asOf: string; // 기준 시각 (ISO)
+  haltedUntil: string | null; // 서킷브레이커 해제 시각 (발동 중일 때만)
   quotes: StockQuote[];
 }
 
@@ -16,8 +17,25 @@ export interface QuoteBoard {
 // - 개장 전·휴장일: 직전 개장일 종가 (등락률 0)
 export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard> {
   const supabase = getSupabaseAdmin();
-  const state = getMarketState(now);
+  let state: MarketState = getMarketState(now);
   const { date: today, hour } = getKstParts(now);
+
+  // 서킷브레이커 (어드민 수동 발동, T-405/T-604) — 장중에만 의미 있음
+  let haltedUntil: string | null = null;
+  if (state === "open") {
+    const { data: cb } = await supabase
+      .from("config")
+      .select("value")
+      .eq("key", "circuit_breaker_until")
+      .maybeSingle();
+    if (cb?.value) {
+      const until = new Date(String(cb.value));
+      if (until > now) {
+        state = "halted";
+        haltedUntil = until.toISOString();
+      }
+    }
+  }
 
   const { data: stocks, error: stocksError } = await supabase
     .from("stocks")
@@ -54,8 +72,8 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
 
   // 현재 참조할 틱 인덱스: 장중이면 현재 틱, 마감 후면 83, 그 외 null
   let tickIndex: number | null = null;
-  if (state === "open") {
-    tickIndex = getTickIndex(now);
+  if (state === "open" || state === "halted") {
+    tickIndex = getTickIndex(now); // CB 중에도 가격은 현재 틱에서 동결 표시
   } else if (state === "closed" && hour >= 22) {
     tickIndex = 83; // 오늘 장 마감 직후 → 오늘 종가
   }
@@ -96,5 +114,5 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
     };
   });
 
-  return { marketState: state, asOf: now.toISOString(), quotes };
+  return { marketState: state, asOf: now.toISOString(), haltedUntil, quotes };
 }
