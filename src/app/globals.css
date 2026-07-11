@@ -133,6 +133,20 @@
   --bear: oklch(0.5 0.17 255);
 }
 
+/* 상단 로딩 바 애니메이션 (FetchIndicator) */
+@keyframes fetch-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+@utility animate-fetch-slide {
+  animation: fetch-slide 1s ease-in-out infinite;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

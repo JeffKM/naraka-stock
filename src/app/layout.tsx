@@ -3,6 +3,7 @@ import { Geist_Mono, Noto_Sans_KR } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { FetchIndicator } from "@/components/layout/FetchIndicator";
 import { Header } from "@/components/layout/Header";
 import { MarketHaltBanner } from "@/components/quotes/MarketHaltBanner";
 import { Toaster } from "@/components/ui/sonner";
@@ -42,6 +43,7 @@ export default function RootLayout({
     >
       <body className="flex min-h-dvh flex-col">
         <Providers>
+          <FetchIndicator />
           <Header />
           <MarketHaltBanner />
           <main className="mx-auto w-full max-w-lg flex-1 px-4 pb-24 pt-4">

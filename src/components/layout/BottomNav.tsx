@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { History } from "lucide-react";
 import { Newspaper } from "lucide-react";
@@ -16,7 +16,13 @@ const TABS = [
   { href: "/history", label: "내역", icon: History },
 ] as const;
 
-// 모바일 하단 탭 내비게이션 (5탭 고정) — 운영자 콘솔에서는 숨긴다
+// 탭 아이콘 — 해당 탭으로 이동 중이면 깜빡여서 "누른 게 반응했다"는 피드백을 준다
+function TabIcon({ icon: Icon }: { icon: (typeof TABS)[number]["icon"] }) {
+  const { pending } = useLinkStatus();
+  return <Icon className={cn("size-5", pending && "animate-pulse text-primary")} aria-hidden />;
+}
+
+// 모바일 하단 탭 내비게이션 — 운영자 콘솔에서는 숨긴다
 export function BottomNav() {
   const pathname = usePathname();
 
@@ -36,7 +42,7 @@ export function BottomNav() {
                 active ? "text-primary" : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <Icon className="size-5" aria-hidden />
+              <TabIcon icon={Icon} />
               {label}
             </Link>
           );
