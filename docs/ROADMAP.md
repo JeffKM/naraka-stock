@@ -3,13 +3,13 @@
 > 개발 기간: 2026-07-11 ~ 2026-07-28 (약 2.5주) · 테스트: 07-29 ~ 07-31 · **오픈: 2026-08-01 15:00**
 > 진행 규칙: Phase 순서대로 진행, 각 Task 완료 시 체크 + 진행률 갱신. 매 Phase 종료 시 `npm run build` + `npm run lint` 통과 필수.
 
-**전체 진행률: 0/42 (0%)**
+**전체 진행률: 1/42 (2%)**
 
 ---
 
-## Phase 0 — 프로젝트 기반 (0/6)
+## Phase 0 — 프로젝트 기반 (1/6)
 
-- [ ] **T-001** shadcn/ui 초기화 (다크 테마 기본) + 공통 의존성 설치 (zustand, @tanstack/react-query, react-hook-form, zod, lucide-react, sonner)
+- [x] **T-001** shadcn/ui 초기화 (다크 테마 기본) + 공통 의존성 설치 (zustand, @tanstack/react-query, react-hook-form, zod, lucide-react, sonner)
 - [ ] **T-002** Supabase 프로젝트 생성·연동 (env 설정, 클라이언트 유틸 `lib/supabase/` — server/client 분리)
 - [ ] **T-003** DB 스키마 마이그레이션 작성 (PRD §9.2 전체 테이블 + RLS 정책)
 - [ ] **T-004** 시드 데이터: 종목 8개, config 기본값, 테스트 가입 코드
