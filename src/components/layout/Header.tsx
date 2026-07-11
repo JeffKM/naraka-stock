@@ -1,17 +1,15 @@
+import Image from "next/image";
 import Link from "next/link";
 import { AuthButton } from "./AuthButton";
 import { MarketStatusBadge } from "./MarketStatusBadge";
 
-// 상단 고정 헤더: 로고 + 장 상태 배지 + 로그인/로그아웃
+// 상단 고정 헤더: 나라카 로고 + 장 상태 배지 + 로그인/로그아웃
 export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-lg items-center justify-between px-4">
-        <Link href="/" className="flex items-center gap-1.5 font-heading text-lg font-bold">
-          <span aria-hidden>🦋</span>
-          <span>
-            <span className="text-primary">나라카</span>증권
-          </span>
+        <Link href="/" aria-label="나라카증권 홈">
+          <Image src="/logo.png" alt="나라카증권" width={52} height={40} priority />
         </Link>
         <div className="flex items-center gap-2">
           <MarketStatusBadge />
