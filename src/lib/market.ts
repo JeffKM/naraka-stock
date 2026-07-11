@@ -48,23 +48,40 @@ export function getKstParts(now: Date = new Date()): KstParts {
   };
 }
 
+// 장 시간 (config로 오버라이드 가능 — 임시 연장·특별 개장 대응)
+export interface MarketHours {
+  openHour: number;
+  closeHour: number;
+}
+
+export const DEFAULT_MARKET_HOURS: MarketHours = {
+  openHour: MARKET_OPEN_HOUR,
+  closeHour: MARKET_CLOSE_HOUR,
+};
+
 // 개장일 여부 (요일 기반 기본 규칙)
 export function isOpenDay(now: Date = new Date()): boolean {
   return !CLOSED_WEEKDAYS.includes(getKstParts(now).isoWeekday);
 }
 
 // 현재 장 상태 (서킷브레이커는 DB 상태라 여기서 판정하지 않는다)
-export function getMarketState(now: Date = new Date()): Exclude<MarketState, "halted"> {
+export function getMarketState(
+  now: Date = new Date(),
+  hours: MarketHours = DEFAULT_MARKET_HOURS
+): Exclude<MarketState, "halted"> {
   if (!isOpenDay(now)) return "holiday";
   const { hour } = getKstParts(now);
-  return hour >= MARKET_OPEN_HOUR && hour < MARKET_CLOSE_HOUR ? "open" : "closed";
+  return hour >= hours.openHour && hour < hours.closeHour ? "open" : "closed";
 }
 
 // 현재 시각의 틱 인덱스 (0~83). 장외 시간이면 null.
-export function getTickIndex(now: Date = new Date()): number | null {
-  if (getMarketState(now) !== "open") return null;
+export function getTickIndex(
+  now: Date = new Date(),
+  hours: MarketHours = DEFAULT_MARKET_HOURS
+): number | null {
+  if (getMarketState(now, hours) !== "open") return null;
   const { hour, minute } = getKstParts(now);
-  const minutesSinceOpen = (hour - MARKET_OPEN_HOUR) * 60 + minute;
+  const minutesSinceOpen = (hour - hours.openHour) * 60 + minute;
   return Math.min(
     Math.floor(minutesSinceOpen / TICK_INTERVAL_MINUTES),
     TICKS_PER_DAY - 1

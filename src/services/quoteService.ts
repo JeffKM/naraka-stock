@@ -1,5 +1,6 @@
 import "server-only";
 import { getKstParts, getMarketState, getTickIndex } from "@/lib/market";
+import { loadMarketHours } from "@/lib/marketHours";
 import { PRICE_LIMIT_RATE } from "@/lib/engine/randomWalk";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { MarketState, StockQuote, StockTier } from "@/types/domain";
@@ -17,7 +18,8 @@ export interface QuoteBoard {
 // - 개장 전·휴장일: 직전 개장일 종가 (등락률 0)
 export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard> {
   const supabase = getSupabaseAdmin();
-  let state: MarketState = getMarketState(now);
+  const hours = await loadMarketHours(); // config 기반 장 시간 (임시 개장 대응)
+  let state: MarketState = getMarketState(now, hours);
   const { date: today, hour } = getKstParts(now);
 
   // 서킷브레이커 (어드민 수동 발동, T-405/T-604) — 장중에만 의미 있음
@@ -73,8 +75,8 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
   // 현재 참조할 틱 인덱스: 장중이면 현재 틱, 마감 후면 83, 그 외 null
   let tickIndex: number | null = null;
   if (state === "open" || state === "halted") {
-    tickIndex = getTickIndex(now); // CB 중에도 가격은 현재 틱에서 동결 표시
-  } else if (state === "closed" && hour >= 22) {
+    tickIndex = getTickIndex(now, hours); // CB 중에도 가격은 현재 틱에서 동결 표시
+  } else if (state === "closed" && hour >= hours.closeHour) {
     tickIndex = 83; // 오늘 장 마감 직후 → 오늘 종가
   }
 

@@ -1,5 +1,6 @@
 import "server-only";
 import { getKstParts, getTickIndex } from "@/lib/market";
+import { loadMarketHours } from "@/lib/marketHours";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 // 차트 데이터 (T-402)
@@ -35,8 +36,9 @@ function tickTimeEpoch(date: string, tickIndex: number): number {
 
 export async function getChartData(stockCode: string, now: Date = new Date()): Promise<ChartData> {
   const supabase = getSupabaseAdmin();
+  const hours = await loadMarketHours();
   const { date: today, hour } = getKstParts(now);
-  const afterClose = hour >= 22;
+  const afterClose = hour >= hours.closeHour;
 
   // 일봉: 과거 확정분 (+ 마감 후엔 오늘 포함)
   const { data: dailyRows, error: dailyError } = await supabase
@@ -51,7 +53,7 @@ export async function getChartData(stockCode: string, now: Date = new Date()): P
   if (afterClose) {
     maxTick = 83;
   } else {
-    maxTick = getTickIndex(now); // 장중이면 현재 틱, 그 외 null
+    maxTick = getTickIndex(now, hours); // 장중이면 현재 틱, 그 외 null
   }
 
   let todayPoints: IntradayPoint[] = [];
