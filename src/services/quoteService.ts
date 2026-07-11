@@ -81,15 +81,21 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
   }
 
   const prices: Record<string, { price: number; isHalted: boolean }> = {};
+  const sparks: Record<string, number[]> = {};
   if (tickIndex !== null) {
+    // 현재 틱까지의 오늘 경로 전체 (현재가 + 스파크라인을 한 번에)
     const { data: tickRows, error: tickError } = await supabase
       .from("daily_ticks")
-      .select("stock_code, price, is_halted")
+      .select("stock_code, tick_index, price, is_halted")
       .eq("date", today)
-      .eq("tick_index", tickIndex);
+      .lte("tick_index", tickIndex)
+      .order("tick_index", { ascending: true });
     if (tickError) throw tickError;
     for (const row of tickRows) {
-      prices[row.stock_code] = { price: row.price, isHalted: row.is_halted };
+      (sparks[row.stock_code] ??= []).push(row.price);
+      if (row.tick_index === tickIndex) {
+        prices[row.stock_code] = { price: row.price, isHalted: row.is_halted };
+      }
     }
   }
 
@@ -113,6 +119,7 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
       // 반올림 오차를 감안해 ±10원 이내면 상·하한 도달로 표시
       isUpperLimit: prevClose > 0 && price >= upperLimit - 10,
       isLowerLimit: prevClose > 0 && price <= lowerLimit + 10,
+      spark: sparks[stock.code] ?? [],
     };
   });
 

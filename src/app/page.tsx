@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Sparkline } from "@/components/quotes/Sparkline";
 import { useQuotes } from "@/hooks/useQuotes";
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/market";
@@ -54,27 +55,30 @@ export default function Home() {
                     </Badge>
                   )}
                 </div>
-                <div className="text-right">
-                  <p
-                    className={cn(
-                      "font-semibold leading-tight",
-                      up && "text-bull",
-                      down && "text-bear"
-                    )}
-                  >
-                    {formatMoney(q.price)}
-                  </p>
-                  <p
-                    className={cn(
-                      "text-xs",
-                      up && "text-bull",
-                      down && "text-bear",
-                      !up && !down && "text-muted-foreground"
-                    )}
-                  >
-                    {up ? "▲" : down ? "▼" : "―"} {q.changePercent > 0 ? "+" : ""}
-                    {q.changePercent}%
-                  </p>
+                <div className="flex items-center gap-3">
+                  <Sparkline points={q.spark} positive={up} neutral={!up && !down} />
+                  <div className="text-right">
+                    <p
+                      className={cn(
+                        "font-semibold leading-tight",
+                        up && "text-bull",
+                        down && "text-bear"
+                      )}
+                    >
+                      {formatMoney(q.price)}
+                    </p>
+                    <p
+                      className={cn(
+                        "text-xs",
+                        up && "text-bull",
+                        down && "text-bear",
+                        !up && !down && "text-muted-foreground"
+                      )}
+                    >
+                      {up ? "▲" : down ? "▼" : "―"} {q.changePercent > 0 ? "+" : ""}
+                      {q.changePercent}%
+                    </p>
+                  </div>
                 </div>
               </Link>
             );

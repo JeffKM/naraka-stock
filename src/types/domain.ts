@@ -27,6 +27,7 @@ export interface StockQuote {
   isHalted: boolean; // VI 거래정지 중
   isUpperLimit: boolean; // 상한가 도달
   isLowerLimit: boolean; // 하한가 도달
+  spark: number[]; // 오늘 개장~현재 틱의 가격 경로 (스파크라인용, 장외엔 빈 배열)
 }
 
 export interface Holding {
