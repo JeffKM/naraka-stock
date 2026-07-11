@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "simulate": "tsx scripts/simulate.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
@@ -40,6 +41,7 @@
     "eslint-config-next": "16.2.10",
     "supabase": "^2.109.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.0",
     "typescript": "^5"
   }
 }

@@ -75,3 +75,30 @@ export function getTickIndex(now: Date = new Date()): number | null {
 export function formatMoney(amount: number): string {
   return `${amount.toLocaleString("ko-KR")}${CURRENCY_LABEL}`;
 }
+
+// ---------------------------------------------------------------------------
+// 게임 날짜(YYYY-MM-DD) 단위 헬퍼 — 배치·시뮬레이션에서 사용
+// ---------------------------------------------------------------------------
+
+export interface OpenDayRules {
+  holidayExceptions?: string[]; // 임시 휴장일
+  extraOpenDays?: string[]; // 월·화인데 여는 날
+}
+
+export function isoWeekdayOfDate(dateStr: string): number {
+  // UTC 정오로 파싱하면 타임존 영향 없이 요일 계산 가능
+  const day = new Date(`${dateStr}T12:00:00Z`).getUTCDay();
+  return day === 0 ? 7 : day; // 1(월)~7(일)
+}
+
+export function addDays(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+export function isOpenDate(dateStr: string, rules: OpenDayRules = {}): boolean {
+  if (rules.extraOpenDays?.includes(dateStr)) return true;
+  if (rules.holidayExceptions?.includes(dateStr)) return false;
+  return !CLOSED_WEEKDAYS.includes(isoWeekdayOfDate(dateStr));
+}
