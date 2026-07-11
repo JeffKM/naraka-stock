@@ -317,21 +317,22 @@ export const HINT_TEMPLATES: Record<string, Record<BiasLevel, NewsTemplate[]>> =
 // 공시 템플릿 (전일 실제 결과 요약, 100% 사실) — {name}, {pct} 치환
 export type DisclosureKind = "limitUp" | "limitDown" | "surge" | "plunge";
 
+// 공시는 사실 전달이므로 격식 있는 문체를 유지한다 (사장님 결정 2026-07-12)
 export const DISCLOSURE_TEMPLATES: Record<DisclosureKind, NewsTemplate[]> = {
   limitUp: [
-    { title: "[공시] {name}, 상한가로 마감! (+{pct}%)", body: "{name}이(가) 오늘 오를 수 있는 최대치까지 올라 장을 마쳤습니다. 산 사람들은 축제 분위기." },
-    { title: "[공시] {name} 상한가 직행 (+{pct}%)", body: "사겠다는 사람이 몰리면서 {name}이(가) 천장(+{pct}%)에 딱 붙어 마감했습니다." },
+    { title: "[공시] {name} 상한가 마감", body: "{name}이(가) 전일 대비 +{pct}% 상한가로 장을 마쳤습니다." },
+    { title: "[공시] {name} 상한가 직행", body: "매수세가 몰리며 {name}이(가) +{pct}% 상한가에 안착했습니다." },
   ],
   limitDown: [
-    { title: "[공시] {name}, 하한가로 추락 ({pct}%)", body: "{name}이(가) 오늘 떨어질 수 있는 최대치까지 떨어졌습니다. 들고 있던 사람들은 한숨." },
-    { title: "[공시] {name} 하한가 마감 ({pct}%)", body: "팔겠다는 사람이 쏟아지며 {name}이(가) 바닥({pct}%)에 갇힌 채 장을 마쳤습니다." },
+    { title: "[공시] {name} 하한가 마감", body: "{name}이(가) 전일 대비 {pct}% 하한가로 곤두박질쳤습니다." },
+    { title: "[공시] {name} 하한가 추락", body: "투매가 쏟아지며 {name}이(가) {pct}% 하한가에 갇혔습니다." },
   ],
   surge: [
-    { title: "[공시] {name} 급등 마감 (+{pct}%)", body: "{name}이(가) 어제보다 +{pct}% 크게 올랐습니다. 어제 사둔 사람들 어깨가 올라갔습니다." },
-    { title: "[공시] {name} 강세 (+{pct}%)", body: "{name}에 사자 행렬이 이어지며 +{pct}% 상승으로 마감했습니다." },
+    { title: "[공시] {name} 급등 마감 (+{pct}%)", body: "{name}이(가) 전일 대비 +{pct}% 급등했습니다." },
+    { title: "[공시] {name} 강세 (+{pct}%)", body: "{name}에 매수세가 유입되며 +{pct}% 상승 마감했습니다." },
   ],
   plunge: [
-    { title: "[공시] {name} 급락 마감 ({pct}%)", body: "{name}이(가) 어제보다 {pct}% 크게 떨어졌습니다. 저가 매수 기회일까요, 떨어지는 칼날일까요?" },
-    { title: "[공시] {name} 약세 ({pct}%)", body: "{name}에 팔자 행렬이 이어지며 {pct}% 하락으로 마감했습니다." },
+    { title: "[공시] {name} 급락 마감 ({pct}%)", body: "{name}이(가) 전일 대비 {pct}% 급락했습니다." },
+    { title: "[공시] {name} 약세 ({pct}%)", body: "{name}에 매도세가 이어지며 {pct}% 하락 마감했습니다." },
   ],
 };
