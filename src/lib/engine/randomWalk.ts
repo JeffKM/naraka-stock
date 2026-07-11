@@ -102,3 +102,44 @@ export function generateDailyPath(
     close: prices[TICKS_PER_DAY - 1],
   };
 }
+
+// 깜짝 이벤트용: 오늘 경로의 남은 구간(fromTick 이후)만 재생성 (T-604)
+// bias는 남은 시간 전체에 걸리는 드리프트로 작용한다. 상하한은 원래 기준가 유지.
+export function regenerateRemainingPath(
+  prevClose: number, // 오늘 상하한 기준 (직전 개장일 종가)
+  currentPrice: number, // 현재 틱 가격 (여기서부터 이어간다)
+  fromTick: number, // 현재 틱 인덱스 — 이후 틱(fromTick+1..83)을 새로 만든다
+  bias: number,
+  tier: StockTier,
+  rng: Rng
+): Tick[] {
+  const upperLimit = roundPrice(prevClose * (1 + PRICE_LIMIT_RATE));
+  const lowerLimit = roundPrice(prevClose * (1 - PRICE_LIMIT_RATE));
+  const remaining = TICKS_PER_DAY - 1 - fromTick;
+  if (remaining <= 0) return [];
+
+  const driftPerTick = Math.log(1 + bias / 100) / remaining;
+  const sigma = TICK_SIGMA[tier];
+
+  const ticks: Tick[] = [];
+  let price = currentPrice;
+  for (let i = fromTick + 1; i < TICKS_PER_DAY; i++) {
+    price *= Math.exp(driftPerTick + sigma * nextGaussian(rng));
+    if (rng() < JUMP_PROBABILITY[tier]) {
+      const size = JUMP_MIN + rng() * (JUMP_MAX - JUMP_MIN);
+      price *= rng() < 0.5 ? 1 + size : 1 - size;
+    }
+    price = Math.min(Math.max(price, lowerLimit), upperLimit);
+    ticks.push({ tickIndex: i, price: roundPrice(price), isHalted: false });
+  }
+
+  // VI 마킹 (직전 틱 대비 ±6% → 다음 틱 정지, 재생성 구간 내에서만)
+  for (let i = 0; i < ticks.length; i++) {
+    const base = i === 0 ? currentPrice : ticks[i - 1].price;
+    if (Math.abs(ticks[i].price - base) / base >= VI_THRESHOLD && i + 1 < ticks.length) {
+      ticks[i + 1].isHalted = true;
+    }
+  }
+
+  return ticks;
+}

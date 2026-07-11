@@ -5,7 +5,7 @@ import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth/token";
 // 쿠키의 JWT 서명만 검증한다 (DB 조회 없음). 정지·삭제 계정의 최종 차단은
 // 각 API의 requireUser 가드가 담당한다.
 
-const PROTECTED_PREFIXES = ["/portfolio", "/history"];
+const PROTECTED_PREFIXES = ["/portfolio", "/history", "/admin"];
 const AUTH_PAGES = ["/login", "/signup"];
 
 export async function proxy(request: NextRequest) {
@@ -29,5 +29,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/portfolio/:path*", "/history/:path*", "/login", "/signup"],
+  matcher: ["/portfolio/:path*", "/history/:path*", "/admin/:path*", "/login", "/signup"],
 };
