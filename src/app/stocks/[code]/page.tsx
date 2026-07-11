@@ -2,7 +2,9 @@
 
 import { use } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NewsList } from "@/components/news/NewsList";
 import { StockChart } from "@/components/chart/StockChart";
 import { TradePanel } from "@/components/trade/TradePanel";
 import { usePriceWiggle } from "@/hooks/usePriceWiggle";
@@ -68,6 +70,14 @@ export default function StockDetailPage({
       <StockChart code={quote.code} />
 
       <TradePanel quote={quote} marketHalted={data?.marketState === "halted"} />
+
+      {/* 해당 종목 뉴스 (T-504) */}
+      <Card>
+        <CardContent className="py-1">
+          <h2 className="pt-3 text-sm font-semibold text-muted-foreground">관련 뉴스</h2>
+          <NewsList stock={quote.code} compact />
+        </CardContent>
+      </Card>
     </div>
   );
 }

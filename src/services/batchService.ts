@@ -1,7 +1,13 @@
 import "server-only";
 import { drawDailyBiases, realizeBias } from "@/lib/engine/bias";
-import { generateDailyPath } from "@/lib/engine/randomWalk";
+import { generateDailyPath, PRICE_LIMIT_RATE } from "@/lib/engine/randomWalk";
 import { createRng, hashSeed } from "@/lib/engine/rng";
+import {
+  generateDisclosures,
+  generateHintNews,
+  type DailyMove,
+  type GeneratedNews,
+} from "@/lib/news/generate";
 import { addDays, getKstParts, isOpenDate, type OpenDayRules } from "@/lib/market";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { StockTier } from "@/types/domain";
@@ -18,6 +24,7 @@ export interface BatchResult {
   dividendsPaid: number;
   tomorrow: string | null;
   ticksInserted: number;
+  newsInserted: number;
   biases: Record<string, number>;
 }
 
@@ -59,13 +66,14 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
   // 종목 + 직전 종가 (가장 최근 daily_summary)
   const { data: stocks, error: stocksError } = await supabase
     .from("stocks")
-    .select("code, tier")
+    .select("code, name, tier")
     .eq("listed", true);
   if (stocksError) throw stocksError;
 
   let biases: Record<string, number> = {};
   const summaries: Array<Record<string, unknown>> = [];
   const ticks: Array<Record<string, unknown>> = [];
+  const news: GeneratedNews[] = [];
 
   if (tomorrowOpen) {
     // 직전 종가: 오늘 정산분이 아직 DB에 없으므로 "오늘 틱의 마지막 값"을 우선 사용,
@@ -108,6 +116,25 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
         }))
       );
     }
+
+    // 내일자 힌트 뉴스 (추첨 bias 기준 — 실현치 아님, T-502)
+    news.push(
+      ...generateHintNews(
+        stocks.map((s) => s.code),
+        biases,
+        tomorrowDate,
+        rng
+      )
+    );
+  }
+
+  // 오늘자 공시 (실제 결과 — 급등락·상하한만)
+  if (todayOpen) {
+    const moves = await loadTodayMoves(today, stocks);
+    const disclosureRng = createRng(
+      hashSeed(`${process.env.SESSION_SECRET}|disclosure|${today}`)
+    );
+    news.push(...generateDisclosures(moves, today, disclosureRng));
   }
 
   const { data: result, error } = await supabase.rpc("apply_daily_batch", {
@@ -118,6 +145,14 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
     p_tomorrow: tomorrowOpen ? tomorrowDate : null,
     p_summaries: summaries,
     p_ticks: ticks,
+    // DB 함수는 snake_case 키를 기대한다
+    p_news: news.map((n) => ({
+      date: n.date,
+      stock_code: n.stockCode,
+      grade: n.grade,
+      title: n.title,
+      body: n.body,
+    })),
   });
   if (error) throw error;
 
@@ -127,8 +162,55 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
     dividendsPaid: result.dividendsPaid,
     tomorrow: tomorrowOpen ? tomorrowDate : null,
     ticksInserted: result.ticksInserted,
+    newsInserted: result.newsInserted,
     biases,
   };
+}
+
+// 오늘의 실제 등락 (공시 생성용): 종가(틱83) vs 직전 개장일 종가
+async function loadTodayMoves(
+  today: string,
+  stocks: Array<{ code: string; name: string }>
+): Promise<DailyMove[]> {
+  const supabase = getSupabaseAdmin();
+
+  const { data: closesRows, error: closesError } = await supabase
+    .from("daily_ticks")
+    .select("stock_code, price")
+    .eq("date", today)
+    .eq("tick_index", 83);
+  if (closesError) throw closesError;
+  if (closesRows.length === 0) return []; // 오늘 틱 없음 (리허설 첫날 등)
+
+  const { data: prevRows, error: prevError } = await supabase
+    .from("daily_summary")
+    .select("stock_code, date, close")
+    .lt("date", today)
+    .order("date", { ascending: false });
+  if (prevError) throw prevError;
+
+  const prevCloses: Record<string, number> = {};
+  for (const row of prevRows) {
+    if (!(row.stock_code in prevCloses)) prevCloses[row.stock_code] = row.close;
+  }
+
+  const todayCloses = Object.fromEntries(closesRows.map((r) => [r.stock_code, r.price]));
+
+  return stocks.flatMap((stock) => {
+    const close = todayCloses[stock.code];
+    const prev = prevCloses[stock.code];
+    if (!close || !prev) return [];
+    const changePercent = Math.round(((close - prev) / prev) * 1000) / 10;
+    return [
+      {
+        code: stock.code,
+        name: stock.name,
+        changePercent,
+        isLimitUp: close >= Math.round(prev * (1 + PRICE_LIMIT_RATE)) - 10,
+        isLimitDown: close <= Math.round(prev * (1 - PRICE_LIMIT_RATE)) + 10,
+      },
+    ];
+  });
 }
 
 // 종목별 직전 종가 로드

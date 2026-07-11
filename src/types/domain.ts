@@ -51,6 +51,7 @@ export interface NewsItem {
   id: number;
   date: string; // 게임 날짜 (YYYY-MM-DD)
   stockCode: string | null; // null = 시장 전체 공지
+  stockName: string | null;
   grade: NewsGrade;
   title: string;
   body: string;
