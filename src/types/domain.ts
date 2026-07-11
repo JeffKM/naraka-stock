@@ -57,6 +57,24 @@ export interface NewsItem {
   publishedAt: string;
 }
 
+// 보유 종목 + 평가 정보 (/api/portfolio)
+export interface PortfolioHolding {
+  stockCode: string;
+  stockName: string;
+  quantity: number;
+  avgPrice: number;
+  currentPrice: number;
+  value: number; // 평가액
+  pnl: number; // 평가손익 (원)
+  pnlPercent: number; // 수익률 (%)
+}
+
+export interface Portfolio {
+  cash: number;
+  holdings: PortfolioHolding[];
+  totalAssets: number; // 현금 + 평가액 합
+}
+
 // 로그인 유저 정보 (/api/auth/me 응답)
 export interface Me {
   id: number;
