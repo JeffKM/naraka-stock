@@ -28,10 +28,13 @@ export interface ChartData {
   today: IntradayPoint[];
 }
 
-// KST 게임 날짜 + 틱 인덱스 → epoch 초 (15:00 KST 시작, 5분 간격)
-function tickTimeEpoch(date: string, tickIndex: number): number {
-  const base = new Date(`${date}T15:00:00+09:00`).getTime();
-  return Math.floor(base / 1000) + tickIndex * 300;
+// KST 게임 날짜 + 틱 인덱스 → 차트용 epoch 초 (개장 시각 기준, 5분 간격)
+// lightweight-charts는 타임스탬프를 UTC 벽시계로 렌더링하므로 +9h 보정해
+// 화면에 KST 시각이 그대로 보이게 한다.
+function tickTimeEpoch(date: string, tickIndex: number, openHour: number): number {
+  const open = String(openHour).padStart(2, "0");
+  const base = new Date(`${date}T${open}:00:00+09:00`).getTime();
+  return Math.floor(base / 1000) + tickIndex * 300 + 9 * 3600;
 }
 
 export async function getChartData(stockCode: string, now: Date = new Date()): Promise<ChartData> {
@@ -67,7 +70,7 @@ export async function getChartData(stockCode: string, now: Date = new Date()): P
       .order("tick_index", { ascending: true });
     if (tickError) throw tickError;
     todayPoints = tickRows.map((t) => ({
-      time: tickTimeEpoch(today, t.tick_index),
+      time: tickTimeEpoch(today, t.tick_index, hours.openHour),
       price: t.price,
     }));
   }
