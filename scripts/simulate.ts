@@ -18,12 +18,12 @@ const SELL_FEE_RATE = 0.003;
 const DIVIDEND_RATE = 0.01;
 
 const STOCKS: Array<{ code: string; tier: StockTier; initial: number }> = [
-  { code: "NRKE", tier: "stable", initial: 62000 },
-  { code: "NRKS", tier: "stable", initial: 48000 },
-  { code: "NRKM", tier: "normal", initial: 35000 },
-  { code: "MIHO", tier: "normal", initial: 21000 },
-  { code: "MERU", tier: "normal", initial: 54000 },
-  { code: "BNZN", tier: "normal", initial: 28000 },
+  { code: "NRKE", tier: "stable", initial: 128000 },
+  { code: "NRKS", tier: "stable", initial: 105000 },
+  { code: "NRKM", tier: "normal", initial: 45000 },
+  { code: "MIHO", tier: "normal", initial: 32000 },
+  { code: "MERU", tier: "normal", initial: 68000 },
+  { code: "BNZN", tier: "normal", initial: 38000 },
   { code: "OKJA", tier: "wild", initial: 9800 },
   { code: "NRKB", tier: "wild", initial: 6400 },
 ];
