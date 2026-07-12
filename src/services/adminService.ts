@@ -221,6 +221,34 @@ export async function triggerSurpriseEvent(
   return { fromTick: currentTick, replaced };
 }
 
+// ── 리허설 데이터 초기화 (개장 전 1회) ──────────────────────────
+
+export interface ResetResult {
+  usersDeleted: number;
+  tradesDeleted: number;
+  ticksDeleted: number;
+  newsDeleted: number;
+}
+
+export async function resetRehearsalData(): Promise<ResetResult> {
+  const supabase = getSupabaseAdmin();
+
+  // 기준가 날짜 = 이벤트 시작 전날 (config 기반)
+  const { data: cfg, error: cfgError } = await supabase
+    .from("config")
+    .select("value")
+    .eq("key", "event_start")
+    .single();
+  if (cfgError) throw cfgError;
+  const baselineDate = addDays(String(cfg.value), -1);
+
+  const { data, error } = await supabase.rpc("reset_rehearsal_data", {
+    p_baseline_date: baselineDate,
+  });
+  if (error) throw error;
+  return data as ResetResult;
+}
+
 // ── 종목 관리 (신규 상장·등급 변경) ─────────────────────────────
 
 export async function listStocks(): Promise<Stock[]> {
