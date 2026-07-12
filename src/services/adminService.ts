@@ -3,8 +3,9 @@ import { ApiException } from "@/lib/api/response";
 import { regenerateRemainingPath } from "@/lib/engine/randomWalk";
 import { createRng } from "@/lib/engine/rng";
 import { getKstParts, getTickIndex, addDays } from "@/lib/market";
+import { loadMarketHours } from "@/lib/marketHours";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import type { StockTier } from "@/types/domain";
+import type { Stock, StockTier } from "@/types/domain";
 
 // 어드민 서비스 (T-602~T-605) — 모든 진입점은 route에서 requireAdmin을 통과한 뒤 호출된다.
 
@@ -218,6 +219,105 @@ export async function triggerSurpriseEvent(
   if (rpcError) throw rpcError;
 
   return { fromTick: currentTick, replaced };
+}
+
+// ── 종목 관리 (신규 상장·등급 변경) ─────────────────────────────
+
+export async function listStocks(): Promise<Stock[]> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("stocks")
+    .select("code, name, tier, description, listed")
+    .order("code");
+  if (error) throw error;
+  return data.map((s) => ({ ...s, tier: s.tier as StockTier }));
+}
+
+export interface CreateStockInput {
+  code: string;
+  name: string;
+  tier: StockTier;
+  description: string;
+  initialPrice: number;
+}
+
+// 신규 상장: 종목 등록 + 기준가 생성. 장중이면 남은 오늘 경로까지 만들어
+// 즉시 거래 가능하게 한다. 장외면 다음 배치가 자동으로 경로를 생성한다.
+// 주의: 힌트 뉴스 템플릿은 종목별 수작업이라 신규 종목은 공시만 자동 발행된다.
+export async function createStock(
+  input: CreateStockInput
+): Promise<{ tradableNow: boolean }> {
+  const supabase = getSupabaseAdmin();
+  const { date: today } = getKstParts();
+
+  const { error: insertError } = await supabase.from("stocks").insert({
+    code: input.code,
+    name: input.name,
+    tier: input.tier,
+    description: input.description,
+  });
+  if (insertError) {
+    if (insertError.code === "23505") {
+      throw new ApiException("VALIDATION", "이미 존재하는 종목 코드입니다.");
+    }
+    throw insertError;
+  }
+
+  // 기준가: 어제 날짜 요약으로 넣어 등락률·배치의 직전 종가 역할을 하게 한다
+  const { error: summaryError } = await supabase.from("daily_summary").upsert({
+    stock_code: input.code,
+    date: addDays(today, -1),
+    open: input.initialPrice,
+    high: input.initialPrice,
+    low: input.initialPrice,
+    close: input.initialPrice,
+    bias: 0,
+  });
+  if (summaryError) throw summaryError;
+
+  // 장중 상장이면 현재 틱부터 오늘 남은 경로 생성 (상장가에서 출발, 중립 드리프트)
+  const hours = await loadMarketHours();
+  const currentTick = getTickIndex(new Date(), hours);
+  if (currentTick === null) {
+    return { tradableNow: false };
+  }
+
+  const rng = createRng(Date.now() % 0xffffffff);
+  const ticks = regenerateRemainingPath(
+    input.initialPrice,
+    input.initialPrice,
+    currentTick - 1, // 현재 틱부터 생성
+    0,
+    input.tier,
+    rng
+  );
+  const { error: rpcError } = await supabase.rpc("replace_future_ticks", {
+    p_stock_code: input.code,
+    p_date: today,
+    p_from_tick: currentTick - 1,
+    p_ticks: ticks.map((t) => ({
+      tick_index: t.tickIndex,
+      price: t.price,
+      is_halted: t.isHalted,
+    })),
+  });
+  if (rpcError) throw rpcError;
+
+  return { tradableNow: true };
+}
+
+// 등급 변경: 변동성·배당·이벤트 가중치는 다음 배치 경로부터 반영된다
+export async function updateStockTier(code: string, tier: StockTier): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("stocks")
+    .update({ tier })
+    .eq("code", code)
+    .select("code");
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new ApiException("NOT_FOUND", "없는 종목입니다.");
+  }
 }
 
 // ── T-605 수동 뉴스·유저 관리 ───────────────────────────────────
