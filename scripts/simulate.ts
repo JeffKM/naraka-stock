@@ -17,14 +17,15 @@ const INITIAL_CASH = 1_000_000;
 const SELL_FEE_RATE = 0.003;
 const DIVIDEND_RATE = 0.01;
 
+// 등급·기준가는 운영 확정안 기준 (2026-07-12, migrations/20260713030000)
 const STOCKS: Array<{ code: string; tier: StockTier; initial: number }> = [
   { code: "NRKE", tier: "stable", initial: 128000 },
-  { code: "NRKS", tier: "stable", initial: 105000 },
+  { code: "OKJA", tier: "stable", initial: 105000 },
+  { code: "NRKS", tier: "normal", initial: 62000 },
   { code: "NRKM", tier: "normal", initial: 45000 },
-  { code: "MIHO", tier: "normal", initial: 32000 },
   { code: "MERU", tier: "normal", initial: 68000 },
   { code: "BNZN", tier: "normal", initial: 38000 },
-  { code: "OKJA", tier: "wild", initial: 9800 },
+  { code: "MIHO", tier: "wild", initial: 18000 },
   { code: "NRKB", tier: "wild", initial: 6400 },
 ];
 
