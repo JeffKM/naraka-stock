@@ -90,7 +90,7 @@ export default function SignupPage() {
               <Input
                 id="password"
                 type="password"
-                placeholder="4자 이상"
+                placeholder="영문·숫자·특수문자 포함 8~16자"
                 autoComplete="new-password"
                 aria-invalid={!!errors.password}
                 {...withHangulToQwerty(register("password"))}

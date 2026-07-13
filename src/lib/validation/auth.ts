@@ -7,10 +7,14 @@ export const nicknameSchema = z
   .max(8, "닉네임은 8자 이하여야 합니다")
   .regex(/^[가-힣a-zA-Z0-9]+$/, "닉네임은 한글·영문·숫자만 사용할 수 있습니다");
 
+// 비밀번호: 8~16자, 영문·숫자·특수문자 각 1자 이상 포함
 export const passwordSchema = z
   .string()
-  .min(4, "비밀번호는 4자 이상이어야 합니다")
-  .max(64, "비밀번호는 64자 이하여야 합니다");
+  .min(8, "비밀번호는 8자 이상이어야 합니다")
+  .max(16, "비밀번호는 16자 이하여야 합니다")
+  .regex(/[a-zA-Z]/, "비밀번호에 영문을 포함해주세요")
+  .regex(/[0-9]/, "비밀번호에 숫자를 포함해주세요")
+  .regex(/[^a-zA-Z0-9]/, "비밀번호에 특수문자를 포함해주세요");
 
 export const signupSchema = z.object({
   code: z.string().min(1, "가입 코드를 입력해주세요"),
