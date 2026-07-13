@@ -122,15 +122,15 @@
   --sidebar-accent-foreground: oklch(0.95 0.02 85);
   --sidebar-border: oklch(0.93 0.03 60 / 10%);
   --sidebar-ring: oklch(0.5 0.15 27);
-  /* 등락 컬러: 상승은 밝은 레드(브랜드 레드보다 밝고 선명), 하락은 파랑 */
-  --bull: oklch(0.66 0.21 25);
-  --bear: oklch(0.64 0.15 250);
+  /* 등락 컬러: 토스증권 시그니처 — 상승 #F04452 / 하락 #3182F6 */
+  --bull: oklch(0.6406 0.2075 21.05);
+  --bear: oklch(0.6201 0.1906 258.2);
 }
 
-/* 라이트 모드 등락 컬러 (다크 고정 운영이지만 안전값으로 정의) */
+/* 라이트 모드 등락 컬러 (다크 고정 운영이지만 안전값으로 동일 유지) */
 :root {
-  --bull: oklch(0.55 0.21 27);
-  --bear: oklch(0.5 0.17 255);
+  --bull: oklch(0.6406 0.2075 21.05);
+  --bear: oklch(0.6201 0.1906 258.2);
 }
 
 /* 상단 로딩 바 애니메이션 (FetchIndicator) */
@@ -145,6 +145,80 @@
 
 @utility animate-fetch-slide {
   animation: fetch-slide 1s ease-in-out infinite;
+}
+
+/* 체결 완료 이펙트 (TradeSuccessOverlay) */
+@keyframes trade-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes confetti-burst {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy)) rotate(var(--rot));
+    opacity: 0;
+  }
+}
+
+@utility animate-trade-pop {
+  animation: trade-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@utility animate-check-draw {
+  stroke-dasharray: 48;
+  stroke-dashoffset: 48;
+  animation: check-draw 0.4s ease-out 0.15s forwards;
+}
+
+@utility animate-confetti {
+  animation: confetti-burst 0.9s ease-out 0.1s both;
+}
+
+/* 자산 카운트업 등락 플래시 (AssetSummaryCard) */
+@keyframes flash-bull {
+  0% {
+    color: var(--bull);
+  }
+  100% {
+    color: inherit;
+  }
+}
+
+@keyframes flash-bear {
+  0% {
+    color: var(--bear);
+  }
+  100% {
+    color: inherit;
+  }
+}
+
+@utility animate-flash-bull {
+  animation: flash-bull 1.6s ease-out;
+}
+
+@utility animate-flash-bear {
+  animation: flash-bear 1.6s ease-out;
 }
 
 @layer base {

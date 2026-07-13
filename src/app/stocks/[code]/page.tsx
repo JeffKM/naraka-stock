@@ -8,6 +8,7 @@ import { NewsList } from "@/components/news/NewsList";
 import { StockChart } from "@/components/chart/StockChart";
 import { StockStats } from "@/components/quotes/StockStats";
 import { MyHoldingCard } from "@/components/trade/MyHoldingCard";
+import { StockComments } from "@/components/trade/StockComments";
 import { TradePanel } from "@/components/trade/TradePanel";
 import { usePriceWiggle } from "@/hooks/usePriceWiggle";
 import { useQuotes } from "@/hooks/useQuotes";
@@ -84,6 +85,9 @@ export default function StockDetailPage({
           <NewsList stock={quote.code} compact />
         </CardContent>
       </Card>
+
+      {/* 종목 토론방 — 주가 보면서 밈 나누는 댓글창 */}
+      <StockComments stockCode={quote.code} />
     </div>
   );
 }

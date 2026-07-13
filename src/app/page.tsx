@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AssetSummaryCard } from "@/components/quotes/AssetSummaryCard";
 import { IndexCards, IndexCardsSkeleton } from "@/components/quotes/IndexCards";
 import { NewsHighlight } from "@/components/news/NewsHighlight";
+import { PopularStocks } from "@/components/quotes/PopularStocks";
 import { Sparkline } from "@/components/quotes/Sparkline";
 import { useQuotes } from "@/hooks/useQuotes";
 import { cn } from "@/lib/utils";
@@ -55,6 +56,8 @@ export default function Home() {
       {isLoading ? <IndexCardsSkeleton /> : data && <IndexCards indices={data.indices} />}
 
       <AssetSummaryCard />
+
+      <PopularStocks />
 
       <div className="flex justify-end gap-1">
         {(

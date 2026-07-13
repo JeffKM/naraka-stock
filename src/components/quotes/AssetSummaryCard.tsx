@@ -5,10 +5,28 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCountUp } from "@/hooks/useCountUp";
 import { getJson } from "@/lib/api/client";
 import { formatMoney } from "@/lib/market";
 import { cn } from "@/lib/utils";
 import type { Portfolio } from "@/types/domain";
+
+// 총자산 숫자: 5분 틱 갱신 때 카운트업으로 굴러가고 방향색 플래시가 스친다
+function AnimatedTotal({ total }: { total: number }) {
+  const { display, direction, seq } = useCountUp(total);
+  return (
+    <p
+      key={seq}
+      className={cn(
+        "text-lg font-bold leading-tight tabular-nums",
+        direction === "up" && "animate-flash-bull",
+        direction === "down" && "animate-flash-bear"
+      )}
+    >
+      {formatMoney(display)}
+    </p>
+  );
+}
 
 // 내 자산 요약 카드 (Phase 8, 토스 홈 "내 계좌" 벤치마킹)
 // 탭하면 지갑으로 이동. 비로그인이면 로그인 유도로 대체.
@@ -17,6 +35,7 @@ export function AssetSummaryCard() {
     queryKey: ["portfolio"],
     queryFn: () => getJson<Portfolio>("/api/portfolio"),
     retry: false,
+    refetchInterval: 60_000, // 5분 틱 갱신을 놓치지 않게 폴링 (카운트업 연출의 전제)
   });
 
   if (isLoading) {
@@ -60,9 +79,7 @@ export function AssetSummaryCard() {
         <CardContent className="flex items-center justify-between py-3">
           <div>
             <p className="text-xs text-muted-foreground">내 투자</p>
-            <p className="text-lg font-bold leading-tight tabular-nums">
-              {formatMoney(portfolio.totalAssets)}
-            </p>
+            <AnimatedTotal total={portfolio.totalAssets} />
             <p
               className={cn(
                 "text-xs tabular-nums",
