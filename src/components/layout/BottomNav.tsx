@@ -9,12 +9,12 @@ import { Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // 랭킹은 운영자 콘솔 전용 (순위는 매장에서 발표)
-// 거래내역은 지갑 페이지에 통합, 그 자리에 고객센터 탭
+// 거래내역은 지갑 페이지에 통합, 그 자리에 문의 탭
 const TABS = [
   { href: "/", label: "시세", icon: TrendingUp },
   { href: "/news", label: "뉴스", icon: Newspaper },
   { href: "/portfolio", label: "지갑", icon: Wallet },
-  { href: "/support", label: "고객센터", icon: Headset },
+  { href: "/support", label: "문의", icon: Headset },
 ] as const;
 
 // 탭 아이콘 — 해당 탭으로 이동 중이면 깜빡여서 "누른 게 반응했다"는 피드백을 준다

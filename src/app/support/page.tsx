@@ -3,9 +3,17 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
+import { PencilLine } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getJson, postJson } from "@/lib/api/client";
 import type { SupportCategory, SupportPost } from "@/types/domain";
@@ -28,17 +36,13 @@ function formatTime(iso: string): string {
   });
 }
 
-// 고객센터 (버그·문의 접수): 글을 남기면 운영자가 확인 후 답변을 달아준다
-export default function SupportPage() {
+// 문의 작성 모달: 분류 선택 + 내용 입력 → 접수
+function SupportComposeDialog() {
   const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<SupportCategory>("inquiry");
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
-  const { data, isLoading } = useQuery({
-    queryKey: ["support"],
-    queryFn: () => getJson<{ posts: SupportPost[] }>("/api/support"),
-  });
 
   async function submit() {
     if (content.trim().length < 2 || submitting) return;
@@ -47,6 +51,7 @@ export default function SupportPage() {
       await postJson("/api/support", { category, content: content.trim() });
       toast.success("접수 완료! 확인하는 대로 답변을 남겨드릴게요.");
       setContent("");
+      setOpen(false);
       queryClient.invalidateQueries({ queryKey: ["support"] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "접수에 실패했습니다.");
@@ -56,14 +61,18 @@ export default function SupportPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-xl font-bold">고객센터</h1>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">문의 남기기</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm">
+          <PencilLine className="size-4" />
+          문의하기
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>문의 남기기</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">
             버그나 궁금한 점을 남겨주세요. 운영자가 확인하고 답변을 달아드립니다.
           </p>
@@ -89,18 +98,50 @@ export default function SupportPage() {
           <Button onClick={submit} disabled={submitting || content.trim().length < 2}>
             {submitting ? "접수 중..." : "접수하기"}
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function StatusBadge({ status }: { status: SupportPost["status"] }) {
+  if (status === "done") return <Badge className="px-1.5 text-[11px]">답변완료</Badge>;
+  if (status === "reviewing") {
+    return (
+      <Badge variant="outline" className="px-1.5 text-[11px] text-primary">
+        검토중
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="secondary" className="px-1.5 text-[11px]">
+      접수완료
+    </Badge>
+  );
+}
+
+// 문의: 내 문의 내역이 먼저 보이고, 작성은 문의하기 버튼 → 모달
+export default function SupportPage() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["support"],
+    queryFn: () => getJson<{ posts: SupportPost[] }>("/api/support"),
+  });
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold">문의</h1>
+        <SupportComposeDialog />
+      </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">내 문의 내역</CardTitle>
-        </CardHeader>
         <CardContent className="flex flex-col divide-y divide-border/60">
           {isLoading && <Skeleton className="h-16 w-full" />}
           {data?.posts.length === 0 && (
-            <p className="py-6 text-center text-sm text-muted-foreground">
+            <p className="py-10 text-center text-sm text-muted-foreground">
               아직 남긴 문의가 없습니다
+              <br />
+              궁금한 점은 문의하기 버튼으로 남겨주세요
             </p>
           )}
           {data?.posts.map((post) => (
@@ -109,17 +150,7 @@ export default function SupportPage() {
                 <span className="text-sm font-medium">{CATEGORY_LABEL[post.category]}</span>
                 <span className="flex items-center gap-2 text-xs text-muted-foreground">
                   {formatTime(post.createdAt)}
-                  {post.status === "done" ? (
-                    <Badge className="px-1.5 text-[11px]">답변완료</Badge>
-                  ) : post.status === "reviewing" ? (
-                    <Badge variant="outline" className="px-1.5 text-[11px] text-primary">
-                      검토중
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary" className="px-1.5 text-[11px]">
-                      접수완료
-                    </Badge>
-                  )}
+                  <StatusBadge status={post.status} />
                 </span>
               </div>
               <p className="whitespace-pre-wrap text-sm">{post.content}</p>
