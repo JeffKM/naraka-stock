@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Sparkline } from "@/components/quotes/Sparkline";
 import { cn } from "@/lib/utils";
 import type { IndexQuote } from "@/types/domain";
@@ -10,6 +11,23 @@ function formatIndex(value: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+// 지수 카드 로딩 스켈레톤 (홈 첫 로딩 시 카드 자리 유지)
+export function IndexCardsSkeleton() {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {[0, 1].map((i) => (
+        <Card key={i}>
+          <CardContent className="flex flex-col gap-2 py-3">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-6 w-24" />
+            <Skeleton className="h-3 w-20" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
 }
 
 // 시장 지수 카드 (Phase 8, 토스 홈 지수 영역 벤치마킹)

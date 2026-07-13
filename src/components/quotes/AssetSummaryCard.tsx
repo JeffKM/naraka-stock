@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getJson } from "@/lib/api/client";
 import { formatMoney } from "@/lib/market";
 import { cn } from "@/lib/utils";
@@ -18,7 +19,17 @@ export function AssetSummaryCard() {
     retry: false,
   });
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col gap-2 py-3">
+          <Skeleton className="h-3 w-12" />
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-3 w-40" />
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (isError || !portfolio) {
     return (

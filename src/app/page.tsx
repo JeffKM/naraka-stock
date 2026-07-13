@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AssetSummaryCard } from "@/components/quotes/AssetSummaryCard";
-import { IndexCards } from "@/components/quotes/IndexCards";
+import { IndexCards, IndexCardsSkeleton } from "@/components/quotes/IndexCards";
 import { NewsHighlight } from "@/components/news/NewsHighlight";
 import { Sparkline } from "@/components/quotes/Sparkline";
 import { useQuotes } from "@/hooks/useQuotes";
@@ -52,7 +52,7 @@ export default function Home() {
         )}
       </div>
 
-      {data && <IndexCards indices={data.indices} />}
+      {isLoading ? <IndexCardsSkeleton /> : data && <IndexCards indices={data.indices} />}
 
       <AssetSummaryCard />
 

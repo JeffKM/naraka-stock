@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getJson } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 import type { NewsPageDto } from "@/components/news/NewsList";
@@ -21,11 +22,25 @@ const GRADE_ORDER: Record<NewsGrade, number> = { disclosure: 0, news: 1, rumor: 
 
 // 홈 뉴스 하이라이트 (Phase 8): 최신 뉴스 중 공시 우선 2건, 탭하면 뉴스 탭으로
 export function NewsHighlight() {
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["news", "all", 1],
     queryFn: () => getJson<NewsPageDto>("/api/news?page=1"),
     staleTime: 60_000,
   });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-3">
+          <Skeleton className="h-4 w-20" />
+          <div className="mt-2 flex flex-col gap-2">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-2/3" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (!data || data.items.length === 0) return null;
 
