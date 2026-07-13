@@ -23,6 +23,7 @@ export function UserSection() {
           id: number;
           nickname: string;
           cash: number;
+          isAdmin: boolean;
           isBanned: boolean;
         }>;
       }>(`/api/admin/users?q=${encodeURIComponent(search)}`),
@@ -67,6 +68,11 @@ export function UserSection() {
               <div>
                 <p className="font-medium">
                   {u.nickname}{" "}
+                  {u.isAdmin && (
+                    <Badge variant="secondary" className="px-1.5 text-[11px]">
+                      어드민
+                    </Badge>
+                  )}
                   {u.isBanned && (
                     <Badge variant="destructive" className="px-1.5 text-[11px]">
                       정지
@@ -75,13 +81,16 @@ export function UserSection() {
                 </p>
                 <p className="text-xs text-muted-foreground">현금 {formatMoney(u.cash)}</p>
               </div>
-              <Button
-                size="sm"
-                variant={u.isBanned ? "outline" : "destructive"}
-                onClick={() => toggleBan(u.id, !u.isBanned)}
-              >
-                {u.isBanned ? "해제" : "정지"}
-              </Button>
+              {/* 어드민 계정은 정지 대상이 아님 (서버에서도 차단) */}
+              {!u.isAdmin && (
+                <Button
+                  size="sm"
+                  variant={u.isBanned ? "outline" : "destructive"}
+                  onClick={() => toggleBan(u.id, !u.isBanned)}
+                >
+                  {u.isBanned ? "해제" : "정지"}
+                </Button>
+              )}
             </div>
           ))}
         </div>

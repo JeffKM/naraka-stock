@@ -541,6 +541,7 @@ export interface AdminUserInfo {
   id: number;
   nickname: string;
   cash: number;
+  isAdmin: boolean;
   isBanned: boolean;
   createdAt: string;
 }
@@ -549,7 +550,7 @@ export async function searchUsers(query: string): Promise<AdminUserInfo[]> {
   const supabase = getSupabaseAdmin();
   let builder = supabase
     .from("users")
-    .select("id, nickname, cash, is_banned, created_at")
+    .select("id, nickname, cash, is_admin, is_banned, created_at")
     .order("created_at", { ascending: false })
     .limit(30);
   if (query) {
@@ -561,6 +562,7 @@ export async function searchUsers(query: string): Promise<AdminUserInfo[]> {
     id: u.id,
     nickname: u.nickname,
     cash: u.cash,
+    isAdmin: u.is_admin,
     isBanned: u.is_banned,
     createdAt: u.created_at,
   }));
@@ -568,6 +570,17 @@ export async function searchUsers(query: string): Promise<AdminUserInfo[]> {
 
 export async function setUserBanned(userId: number, banned: boolean): Promise<void> {
   const supabase = getSupabaseAdmin();
+  // 어드민 계정은 정지 불가 — 어드민끼리 서로 정지시키는 사고 방지
+  const { data: target, error: findError } = await supabase
+    .from("users")
+    .select("is_admin")
+    .eq("id", userId)
+    .maybeSingle();
+  if (findError) throw findError;
+  if (!target) throw new ApiException("NOT_FOUND", "유저를 찾을 수 없습니다.");
+  if (target.is_admin) {
+    throw new ApiException("FORBIDDEN", "어드민 계정은 정지할 수 없습니다.");
+  }
   const { error } = await supabase.from("users").update({ is_banned: banned }).eq("id", userId);
   if (error) throw error;
 }
