@@ -11,6 +11,7 @@ import { IndexCards, IndexCardsSkeleton } from "@/components/quotes/IndexCards";
 import { NewsHighlight } from "@/components/news/NewsHighlight";
 import { PopularStocks } from "@/components/quotes/PopularStocks";
 import { Sparkline } from "@/components/quotes/Sparkline";
+import { usePriceFlash } from "@/hooks/usePriceFlash";
 import { usePriceWiggle } from "@/hooks/usePriceWiggle";
 import { useQuotes } from "@/hooks/useQuotes";
 import { cn } from "@/lib/utils";
@@ -57,9 +58,10 @@ function sortQuotes(quotes: StockQuote[], mode: SortMode): StockQuote[] {
   }
 }
 
-// 시세판 한 줄 — 장중엔 틱 사이 가격 미세 진동 (표시용, 상세 화면과 동일 연출)
+// 시세판 한 줄 — 장중엔 틱 사이 가격 미세 진동 + 등락 배경 플래시 (표시용, 상세 화면과 동일 연출)
 function QuoteRow({ quote: q, marketOpen }: { quote: StockQuote; marketOpen: boolean }) {
   const displayPrice = usePriceWiggle(q.price, marketOpen && !q.isHalted);
+  const flash = usePriceFlash(displayPrice);
   const up = q.change > 0;
   const down = q.change < 0;
   return (
@@ -82,7 +84,14 @@ function QuoteRow({ quote: q, marketOpen }: { quote: StockQuote; marketOpen: boo
       </div>
       <div className="flex items-center gap-3">
         <Sparkline points={q.spark} positive={up} neutral={!up && !down} />
-        <div className="text-right">
+        <div
+          key={flash.seq}
+          className={cn(
+            "-mx-1.5 rounded-md px-1.5 text-right",
+            flash.direction === "up" && "animate-flash-bull-bg",
+            flash.direction === "down" && "animate-flash-bear-bg"
+          )}
+        >
           <p
             className={cn(
               "font-semibold leading-tight tabular-nums",
@@ -125,7 +134,13 @@ export default function Home() {
         )}
       </div>
 
-      {isLoading ? <IndexCardsSkeleton /> : data && <IndexCards indices={data.indices} />}
+      {isLoading ? (
+        <IndexCardsSkeleton />
+      ) : (
+        data && (
+          <IndexCards indices={data.indices} marketOpen={data.marketState === "open"} />
+        )
+      )}
 
       <AssetSummaryCard />
 

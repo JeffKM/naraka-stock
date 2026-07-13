@@ -10,6 +10,7 @@ import { StockStats } from "@/components/quotes/StockStats";
 import { MyHoldingCard } from "@/components/trade/MyHoldingCard";
 import { StockComments } from "@/components/trade/StockComments";
 import { TradePanel } from "@/components/trade/TradePanel";
+import { usePriceFlash } from "@/hooks/usePriceFlash";
 import { usePriceWiggle } from "@/hooks/usePriceWiggle";
 import { useQuotes } from "@/hooks/useQuotes";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,8 @@ export default function StockDetailPage({
     quote?.price ?? 0,
     data?.marketState === "open" && !quote?.isHalted
   );
+  // 가격 변동 시 등락 방향 배경 플래시 (시세판과 동일 연출)
+  const flash = usePriceFlash(displayPrice);
 
   if (isLoading) {
     return (
@@ -60,7 +63,16 @@ export default function StockDetailPage({
           {quote.isLowerLimit && <Badge className="bg-bear">下</Badge>}
           {quote.isHalted && <Badge variant="destructive">VI 정지</Badge>}
         </div>
-        <p className={cn("mt-1 text-3xl font-bold tabular-nums", up && "text-bull", down && "text-bear")}>
+        <p
+          key={flash.seq}
+          className={cn(
+            "-mx-1.5 mt-1 inline-block rounded-md px-1.5 text-3xl font-bold tabular-nums",
+            up && "text-bull",
+            down && "text-bear",
+            flash.direction === "up" && "animate-flash-bull-bg",
+            flash.direction === "down" && "animate-flash-bear-bg"
+          )}
+        >
           {formatMoney(displayPrice)}
         </p>
         <p className={cn("text-sm", up && "text-bull", down && "text-bear")}>

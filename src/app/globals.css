@@ -223,6 +223,33 @@
   animation: flash-bear 1.6s ease-out;
 }
 
+/* 가격 등락 배경 플래시 (토스 벤치마킹) — 상승 연한 빨강, 하락 연한 파랑이 서서히 사라진다 */
+@keyframes flash-bull-bg {
+  0% {
+    background-color: color-mix(in oklab, var(--bull) 18%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes flash-bear-bg {
+  0% {
+    background-color: color-mix(in oklab, var(--bear) 18%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@utility animate-flash-bull-bg {
+  animation: flash-bull-bg 1s ease-out;
+}
+
+@utility animate-flash-bear-bg {
+  animation: flash-bear-bg 1s ease-out;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
