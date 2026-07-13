@@ -2,7 +2,14 @@ import "server-only";
 import { ApiException } from "@/lib/api/response";
 import { regenerateRemainingPath } from "@/lib/engine/randomWalk";
 import { createRng } from "@/lib/engine/rng";
-import { getKstParts, getTickIndex, addDays, isOpenDate, ticksPerDay } from "@/lib/market";
+import {
+  getKstParts,
+  getTickIndex,
+  addDays,
+  isOpenDate,
+  ticksPerDay,
+  TICK_INTERVAL_MINUTES,
+} from "@/lib/market";
 import { loadMarketConfig } from "@/lib/marketHours";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import {
@@ -139,7 +146,7 @@ export async function ensureVisitCodes(days: number): Promise<Array<{ date: stri
   return [...existing, ...missing].sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// ── T-604 서킷브레이커·깜짝 이벤트 ──────────────────────────────
+// ── T-604 서킷브레이커·시세 조정 ────────────────────────────────
 
 export async function setCircuitBreaker(minutes: number | null): Promise<{ until: string | null }> {
   const supabase = getSupabaseAdmin();
@@ -158,10 +165,12 @@ export async function setCircuitBreaker(minutes: number | null): Promise<{ until
   return { until };
 }
 
-// 깜짝 이벤트: 특정 종목의 남은 오늘 경로를 새 편향으로 재생성
+// 시세 조정: 특정 종목의 남은 오늘 경로를 새 편향으로 재생성.
+// durationMinutes를 주면 그 시간 동안만 편향이 걸리고 이후는 중립으로 이어진다.
 export async function triggerSurpriseEvent(
   stockCode: string,
-  bias: number
+  bias: number,
+  durationMinutes: number | null = null
 ): Promise<{ fromTick: number; replaced: number }> {
   const supabase = getSupabaseAdmin();
   const { date: today } = getKstParts();
@@ -211,7 +220,8 @@ export async function triggerSurpriseEvent(
     bias,
     stock.tier as StockTier,
     rng,
-    ticksPerDay(hours)
+    ticksPerDay(hours),
+    durationMinutes === null ? null : Math.round(durationMinutes / TICK_INTERVAL_MINUTES)
   );
 
   const { data: replaced, error: rpcError } = await supabase.rpc("replace_future_ticks", {

@@ -110,8 +110,9 @@ export function generateDailyPath(
   };
 }
 
-// 깜짝 이벤트용: 오늘 경로의 남은 구간(fromTick 이후)만 재생성 (T-604)
-// bias는 남은 시간 전체에 걸리는 드리프트로 작용한다. 상하한은 원래 기준가 유지.
+// 시세 조정용: 오늘 경로의 남은 구간(fromTick 이후)만 재생성 (T-604)
+// bias는 biasTicks 구간(null이면 남은 시간 전체)에 걸리는 드리프트로 작용하고,
+// 구간이 끝나면 중립(편향 0)으로 이어진다. 상하한은 원래 기준가 유지.
 export function regenerateRemainingPath(
   prevClose: number, // 오늘 상하한 기준 (직전 개장일 종가)
   currentPrice: number, // 현재 틱 가격 (여기서부터 이어간다)
@@ -119,21 +120,25 @@ export function regenerateRemainingPath(
   bias: number,
   tier: StockTier,
   rng: Rng,
-  totalTicks: number = TICKS_PER_DAY
+  totalTicks: number = TICKS_PER_DAY,
+  biasTicks: number | null = null // 편향이 걸리는 틱 수 (null = 남은 전체)
 ): Tick[] {
   const upperLimit = roundPrice(prevClose * (1 + PRICE_LIMIT_RATE));
   const lowerLimit = roundPrice(prevClose * (1 - PRICE_LIMIT_RATE));
   const remaining = totalTicks - 1 - fromTick;
   if (remaining <= 0) return [];
 
-  const driftPerTick = Math.log(1 + bias / 100) / remaining;
+  const windowTicks =
+    biasTicks === null ? remaining : Math.min(Math.max(biasTicks, 1), remaining);
+  const driftPerTick = Math.log(1 + bias / 100) / windowTicks;
   const sigma = TICK_SIGMA[tier] * Math.sqrt(TICKS_PER_DAY / totalTicks);
   const jumpProbability = JUMP_PROBABILITY[tier] * (TICKS_PER_DAY / totalTicks);
 
   const ticks: Tick[] = [];
   let price = currentPrice;
   for (let i = fromTick + 1; i < totalTicks; i++) {
-    price *= Math.exp(driftPerTick + sigma * nextGaussian(rng));
+    const drift = i - fromTick <= windowTicks ? driftPerTick : 0;
+    price *= Math.exp(drift + sigma * nextGaussian(rng));
     if (rng() < jumpProbability) {
       const size = JUMP_MIN + rng() * (JUMP_MAX - JUMP_MIN);
       price *= rng() < 0.5 ? 1 + size : 1 - size;
