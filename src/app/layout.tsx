@@ -5,6 +5,7 @@ import { Providers } from "@/components/Providers";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { FetchIndicator } from "@/components/layout/FetchIndicator";
 import { Header } from "@/components/layout/Header";
+import { HoldingAlertWatcher } from "@/components/layout/HoldingAlertWatcher";
 import { MarketHaltBanner } from "@/components/quotes/MarketHaltBanner";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -30,7 +31,8 @@ export const viewport: Viewport = {
   themeColor: "#241a18",
 };
 
-// 다크 테마 고정 (아기자기한 지옥 무드 — PRD §6.1)
+// 다크 테마 기본 (아기자기한 지옥 무드 — PRD §6.1), 설정 모달에서 라이트 전환 가능.
+// 테마 클래스는 next-themes가 html에 주입하므로 suppressHydrationWarning이 필요하다.
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -39,11 +41,13 @@ export default function RootLayout({
   return (
     <html
       lang="ko"
-      className={`${notoSansKr.variable} ${geistMono.variable} dark h-full antialiased`}
+      suppressHydrationWarning
+      className={`${notoSansKr.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-dvh flex-col">
         <Providers>
           <FetchIndicator />
+          <HoldingAlertWatcher />
           <Header />
           <MarketHaltBanner />
           <main className="mx-auto w-full max-w-lg flex-1 px-4 pb-24 pt-4">

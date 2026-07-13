@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { TradeSuccessOverlay, type TradeSuccessInfo } from "@/components/trade/TradeSuccessOverlay";
 import { getJson, postJson } from "@/lib/api/client";
 import { formatMoney } from "@/lib/market";
+import { playTradeSound } from "@/lib/sound";
 import type { Portfolio, StockQuote } from "@/types/domain";
 
 const SELL_FEE_RATE = 0.003; // 표시용 (실제 수수료는 서버 계산)
@@ -126,6 +127,7 @@ function useSubmitTrade(
       onOpenChange(false);
       reset();
       onSuccess({ side, stockName: quote.name, quantity, price: result.price });
+      playTradeSound(); // 체결 효과음 (볼륨은 설정 모달에서 조절)
       queryClient.invalidateQueries({ queryKey: ["portfolio"] });
       queryClient.invalidateQueries({ queryKey: ["me"] });
       queryClient.invalidateQueries({ queryKey: ["trades"] });
