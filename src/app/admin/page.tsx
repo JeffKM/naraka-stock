@@ -48,6 +48,8 @@ interface MarketSettingsDto {
   closedWeekdays: number[];
   holidayExceptions: string[];
   extraOpenDays: string[];
+  today: string; // 오늘 날짜 (KST)
+  todayOverride: { openHour: number; closeHour: number } | null;
 }
 
 const WEEKDAYS = [
@@ -249,8 +251,101 @@ function MarketSection() {
           장 시간을 바꾸면 <b>다음 22:00 배치가 만드는 경로부터</b> 새 틱 수로 생성됩니다.
           이미 생성된 오늘 경로는 그대로라, 장을 늘리면 남는 시간은 종가로 고정 표시됩니다.
         </p>
+
+        <TodayHoursBlock settings={settings} />
       </CardContent>
     </Card>
+  );
+}
+
+// 오늘 하루만 장 시간 변경 (자정 폐장 후 ~ 당일 개장 전에만 적용/해제 가능)
+function TodayHoursBlock({ settings }: { settings: MarketSettingsDto }) {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<{ openHour: number; closeHour: number } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const hours =
+    form ??
+    settings.todayOverride ?? {
+      openHour: settings.openHour,
+      closeHour: settings.closeHour,
+    };
+
+  async function request(init: RequestInit, successMessage: string) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/admin/market/today", init);
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error.message);
+      toast.success(successMessage);
+      setForm(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-market"] });
+      queryClient.invalidateQueries({ queryKey: ["quotes"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "실패");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const apply = () =>
+    request(
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(hours),
+      },
+      `오늘(${settings.today})만 ${hours.openHour}시~${hours.closeHour}시로 엽니다`
+    );
+  const clear = () => request({ method: "DELETE" }, "오늘 장 시간을 기본값으로 되돌렸습니다");
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-dashed p-3">
+      <p className="text-sm font-medium">
+        🌗 오늘({settings.today})만 장 시간 변경{" "}
+        {settings.todayOverride && (
+          <Badge variant="secondary">
+            적용 중 {settings.todayOverride.openHour}시~{settings.todayOverride.closeHour}시
+          </Badge>
+        )}
+      </p>
+      <div className="flex items-center gap-2">
+        <Input
+          type="number"
+          min={0}
+          max={23}
+          value={hours.openHour}
+          onChange={(e) => setForm({ ...hours, openHour: Number(e.target.value) })}
+          className="w-20"
+        />
+        <span className="text-sm text-muted-foreground">시 ~</span>
+        <Input
+          type="number"
+          min={1}
+          max={24}
+          value={hours.closeHour}
+          onChange={(e) => setForm({ ...hours, closeHour: Number(e.target.value) })}
+          className="w-20"
+        />
+        <span className="text-sm text-muted-foreground">시</span>
+        <Button size="sm" onClick={apply} disabled={busy}>
+          오늘만 적용
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={clear}
+          disabled={busy || !settings.todayOverride}
+        >
+          해제
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        자정 폐장 후 ~ 당일 개장 전에만 바꿀 수 있습니다. 바꾸지 않으면 위 기본 장
+        시간대로 열리고, 날짜가 지나면 자동으로 풀립니다.
+      </p>
+    </div>
   );
 }
 

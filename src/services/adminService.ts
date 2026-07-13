@@ -2,7 +2,7 @@ import "server-only";
 import { ApiException } from "@/lib/api/response";
 import { regenerateRemainingPath } from "@/lib/engine/randomWalk";
 import { createRng } from "@/lib/engine/rng";
-import { getKstParts, getTickIndex, addDays, ticksPerDay } from "@/lib/market";
+import { getKstParts, getTickIndex, addDays, isOpenDate, ticksPerDay } from "@/lib/market";
 import { loadMarketConfig } from "@/lib/marketHours";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import {
@@ -266,14 +266,24 @@ export interface MarketSettings {
   extraOpenDays: string[]; // 휴장 요일인데 여는 날
 }
 
-export async function getMarketSettings(): Promise<MarketSettings> {
-  const { hours, rules } = await loadMarketConfig();
+// 콘솔 조회용: 전역 기본값 + 오늘 하루 오버라이드 상태
+export interface MarketSettingsView extends MarketSettings {
+  today: string; // 오늘 날짜 (KST)
+  todayOverride: { openHour: number; closeHour: number } | null;
+}
+
+export async function getMarketSettings(): Promise<MarketSettingsView> {
+  const { defaultHours, todayOverride, rules } = await loadMarketConfig();
   return {
-    openHour: hours.openHour,
-    closeHour: hours.closeHour,
+    openHour: defaultHours.openHour,
+    closeHour: defaultHours.closeHour,
     closedWeekdays: rules.closedWeekdays ?? [],
     holidayExceptions: rules.holidayExceptions ?? [],
     extraOpenDays: rules.extraOpenDays ?? [],
+    today: getKstParts().date,
+    todayOverride: todayOverride
+      ? { openHour: todayOverride.openHour, closeHour: todayOverride.closeHour }
+      : null,
   };
 }
 
@@ -290,6 +300,58 @@ export async function updateMarketSettings(input: MarketSettings): Promise<void>
     { key: "extra_open_days", value: input.extraOpenDays },
   ];
   const { error } = await supabase.from("config").upsert(rows);
+  if (error) throw error;
+}
+
+// 당일 장 시간 오버라이드: 자정 폐장 후 ~ 당일 개장 전에만 설정할 수 있다.
+// 설정하지 않으면 기본 장 시간대로 흐르고, 날짜가 지나면 자동 무시된다.
+// 오늘 경로(틱)는 이미 기본 장 시간 기준으로 생성돼 있으므로, 늦게 열거나
+// 일찍 닫으면 경로 일부만 쓰이고, 더 일찍 열면 남는 구간은 종가 동결이다.
+export async function setTodayMarketHours(
+  openHour: number,
+  closeHour: number
+): Promise<{ date: string }> {
+  const supabase = getSupabaseAdmin();
+  const { hours, rules } = await loadMarketConfig();
+  const { date: today, hour } = getKstParts();
+
+  if (!isOpenDate(today, rules)) {
+    throw new ApiException("VALIDATION", "오늘은 휴장일이라 장 시간을 바꿀 수 없습니다.");
+  }
+  if (hour >= hours.openHour) {
+    throw new ApiException(
+      "VALIDATION",
+      "오늘 장이 이미 개장했습니다. 당일 장 시간은 개장 전에만 바꿀 수 있습니다."
+    );
+  }
+  if (openHour <= hour) {
+    throw new ApiException("VALIDATION", "개장 시간은 현재 시각 이후로만 정할 수 있습니다.");
+  }
+
+  const { error } = await supabase.from("config").upsert({
+    key: "market_hours_override",
+    value: { date: today, openHour, closeHour },
+  });
+  if (error) throw error;
+  return { date: today };
+}
+
+export async function clearTodayMarketHours(): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { hours, todayOverride } = await loadMarketConfig();
+
+  // 오늘자 유효 오버라이드는 개장 전에만 해제 가능 (설정과 동일 규칙).
+  // 지난 날짜의 잔재는 어차피 무시되므로 그냥 지운다.
+  if (todayOverride && getKstParts().hour >= hours.openHour) {
+    throw new ApiException(
+      "VALIDATION",
+      "오늘 장이 이미 개장했습니다. 당일 장 시간은 개장 전에만 되돌릴 수 있습니다."
+    );
+  }
+  const { error } = await supabase
+    .from("config")
+    .delete()
+    .eq("key", "market_hours_override");
   if (error) throw error;
 }
 
