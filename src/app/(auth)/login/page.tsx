@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { postJson } from "@/lib/api/client";
+import { hangulToQwerty, withHangulToQwerty } from "@/lib/hangulToQwerty";
 import { loginSchema, type LoginInput } from "@/lib/validation/auth";
 
 function LoginForm() {
@@ -24,7 +25,8 @@ function LoginForm() {
 
   async function onSubmit(values: LoginInput) {
     try {
-      await postJson("/api/auth/login", values);
+      // 한글 IME 잔여물 방지: 제출 직전에도 한 번 더 영문 변환
+      await postJson("/api/auth/login", { ...values, password: hangulToQwerty(values.password) });
       // 보호 라우트에서 넘어온 경우 원래 목적지로 (외부 URL 방지: 경로만 허용)
       const next = searchParams.get("next");
       router.push(next?.startsWith("/") ? next : "/");
@@ -55,12 +57,13 @@ function LoginForm() {
             </Field>
             <Field data-invalid={!!errors.password}>
               <FieldLabel htmlFor="password">비밀번호</FieldLabel>
+              {/* 한/영 전환을 깜빡해도 두벌식 자판 기준 영문으로 입력되게 변환 */}
               <Input
                 id="password"
                 type="password"
                 autoComplete="current-password"
                 aria-invalid={!!errors.password}
-                {...register("password")}
+                {...withHangulToQwerty(register("password"))}
               />
               <FieldError errors={[errors.password]} />
             </Field>

@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { postJson } from "@/lib/api/client";
+import { hangulToQwerty, withHangulToQwerty } from "@/lib/hangulToQwerty";
 import { signupSchema } from "@/lib/validation/auth";
 
 // 비밀번호 확인은 클라이언트 전용 검증 (이메일이 없어 분실 시 복구 불가 → 오타 방지)
@@ -36,7 +37,8 @@ export default function SignupPage() {
       await postJson("/api/auth/signup", {
         code: values.code,
         nickname: values.nickname,
-        password: values.password,
+        // 한글 IME 잔여물 방지: 제출 직전에도 한 번 더 영문 변환
+        password: hangulToQwerty(values.password),
       });
       toast.success("계좌 개설 완료! 1,000,000원이 지급되었습니다 👹");
       router.push("/");
@@ -80,13 +82,14 @@ export default function SignupPage() {
             </Field>
             <Field data-invalid={!!errors.password}>
               <FieldLabel htmlFor="password">비밀번호</FieldLabel>
+              {/* 한/영 전환을 깜빡해도 두벌식 자판 기준 영문으로 입력되게 변환 (로그인과 동일 규칙) */}
               <Input
                 id="password"
                 type="password"
                 placeholder="4자 이상"
                 autoComplete="new-password"
                 aria-invalid={!!errors.password}
-                {...register("password")}
+                {...withHangulToQwerty(register("password"))}
               />
               <FieldError errors={[errors.password]} />
             </Field>
@@ -97,7 +100,7 @@ export default function SignupPage() {
                 type="password"
                 autoComplete="new-password"
                 aria-invalid={!!errors.passwordConfirm}
-                {...register("passwordConfirm")}
+                {...withHangulToQwerty(register("passwordConfirm"))}
               />
               <FieldError errors={[errors.passwordConfirm]} />
             </Field>
