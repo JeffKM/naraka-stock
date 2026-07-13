@@ -254,7 +254,7 @@
    — 트레이딩 룸 전광판 무드: 희미한 모눈 격자 + 은은히 흐르는 시세 텍스트 잔상.
    카드(--card)가 위를 덮으므로 빈 배경 영역에서만 드러난다. */
 .market-grid-backdrop {
-  --grid-line: color-mix(in oklab, var(--foreground) 6%, transparent);
+  --grid-line: color-mix(in oklab, var(--foreground) 10%, transparent);
   background-image:
     linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
     linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
@@ -294,13 +294,13 @@
 }
 
 .market-drift-neutral {
-  color: color-mix(in oklab, var(--foreground) 14%, transparent);
+  color: color-mix(in oklab, var(--foreground) 24%, transparent);
 }
 .market-drift-bull {
-  color: color-mix(in oklab, var(--bull) 32%, transparent);
+  color: color-mix(in oklab, var(--bull) 45%, transparent);
 }
 .market-drift-bear {
-  color: color-mix(in oklab, var(--bear) 32%, transparent);
+  color: color-mix(in oklab, var(--bear) 45%, transparent);
 }
 
 /* 다크 전용 잔상 농도 — 웜 차콜 배경 위에서 또렷하되 콘텐츠를 방해하지 않는 선 */
