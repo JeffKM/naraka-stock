@@ -11,9 +11,11 @@ import { IndexCards, IndexCardsSkeleton } from "@/components/quotes/IndexCards";
 import { NewsHighlight } from "@/components/news/NewsHighlight";
 import { PopularStocks } from "@/components/quotes/PopularStocks";
 import { Sparkline } from "@/components/quotes/Sparkline";
+import { usePriceWiggle } from "@/hooks/usePriceWiggle";
 import { useQuotes } from "@/hooks/useQuotes";
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/market";
+import type { StockQuote } from "@/types/domain";
 
 const TIER_LABEL = { stable: "우량주", normal: "일반주", wild: "테마주" } as const;
 
@@ -32,6 +34,58 @@ function marketHoursLabel(market: {
 }
 
 type SortMode = "default" | "change";
+
+// 시세판 한 줄 — 장중엔 틱 사이 가격 미세 진동 (표시용, 상세 화면과 동일 연출)
+function QuoteRow({ quote: q, marketOpen }: { quote: StockQuote; marketOpen: boolean }) {
+  const displayPrice = usePriceWiggle(q.price, marketOpen && !q.isHalted);
+  const up = q.change > 0;
+  const down = q.change < 0;
+  return (
+    <Link
+      href={`/stocks/${q.code}`}
+      className="flex items-center justify-between py-3 transition-colors hover:bg-muted/40"
+    >
+      <div className="flex items-center gap-2">
+        <div>
+          <p className="font-medium leading-tight">{q.name}</p>
+          <p className="text-xs text-muted-foreground">{TIER_LABEL[q.tier]}</p>
+        </div>
+        {q.isUpperLimit && <Badge className="bg-bull px-1.5 text-xs">上</Badge>}
+        {q.isLowerLimit && <Badge className="bg-bear px-1.5 text-xs">下</Badge>}
+        {q.isHalted && (
+          <Badge variant="destructive" className="px-1.5 text-xs">
+            VI
+          </Badge>
+        )}
+      </div>
+      <div className="flex items-center gap-3">
+        <Sparkline points={q.spark} positive={up} neutral={!up && !down} />
+        <div className="text-right">
+          <p
+            className={cn(
+              "font-semibold leading-tight tabular-nums",
+              up && "text-bull",
+              down && "text-bear"
+            )}
+          >
+            {formatMoney(displayPrice)}
+          </p>
+          <p
+            className={cn(
+              "text-xs",
+              up && "text-bull",
+              down && "text-bear",
+              !up && !down && "text-muted-foreground"
+            )}
+          >
+            {up ? "▲" : down ? "▼" : "―"} {q.changePercent > 0 ? "+" : ""}
+            {q.changePercent}%
+          </p>
+        </div>
+      </div>
+    </Link>
+  );
+}
 
 // 시세판 홈 (T-401/Phase 8): 지수 + 내 자산 + 전 종목 전광판 + 뉴스 하이라이트
 export default function Home() {
@@ -90,56 +144,9 @@ export default function Home() {
                 <Skeleton className="h-5 w-24" />
               </div>
             ))}
-          {quotes?.map((q) => {
-            const up = q.change > 0;
-            const down = q.change < 0;
-            return (
-              <Link
-                key={q.code}
-                href={`/stocks/${q.code}`}
-                className="flex items-center justify-between py-3 transition-colors hover:bg-muted/40"
-              >
-                <div className="flex items-center gap-2">
-                  <div>
-                    <p className="font-medium leading-tight">{q.name}</p>
-                    <p className="text-xs text-muted-foreground">{TIER_LABEL[q.tier]}</p>
-                  </div>
-                  {q.isUpperLimit && <Badge className="bg-bull px-1.5 text-xs">上</Badge>}
-                  {q.isLowerLimit && <Badge className="bg-bear px-1.5 text-xs">下</Badge>}
-                  {q.isHalted && (
-                    <Badge variant="destructive" className="px-1.5 text-xs">
-                      VI
-                    </Badge>
-                  )}
-                </div>
-                <div className="flex items-center gap-3">
-                  <Sparkline points={q.spark} positive={up} neutral={!up && !down} />
-                  <div className="text-right">
-                    <p
-                      className={cn(
-                        "font-semibold leading-tight",
-                        up && "text-bull",
-                        down && "text-bear"
-                      )}
-                    >
-                      {formatMoney(q.price)}
-                    </p>
-                    <p
-                      className={cn(
-                        "text-xs",
-                        up && "text-bull",
-                        down && "text-bear",
-                        !up && !down && "text-muted-foreground"
-                      )}
-                    >
-                      {up ? "▲" : down ? "▼" : "―"} {q.changePercent > 0 ? "+" : ""}
-                      {q.changePercent}%
-                    </p>
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
+          {quotes?.map((q) => (
+            <QuoteRow key={q.code} quote={q} marketOpen={data?.marketState === "open"} />
+          ))}
         </CardContent>
       </Card>
 

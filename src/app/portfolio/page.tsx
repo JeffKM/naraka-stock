@@ -9,10 +9,49 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LiveTotalAssets } from "@/components/quotes/LiveTotalAssets";
+import { usePriceWiggle } from "@/hooks/usePriceWiggle";
+import { useQuotes } from "@/hooks/useQuotes";
 import { getJson, postJson } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/market";
 import type { Me, Portfolio } from "@/types/domain";
+
+// 보유 종목 한 줄 — 장중엔 평가액이 미세 진동 (표시용, 시세판과 동일 연출)
+function HoldingRow({ holding: h }: { holding: Portfolio["holdings"][number] }) {
+  const { data: quotesData } = useQuotes();
+  const liveValue = usePriceWiggle(h.value, quotesData?.marketState === "open");
+  const livePnl = h.pnl + (liveValue - h.value); // 평가액 진동만큼 손익도 함께
+  const cost = h.quantity * h.avgPrice;
+  const livePnlPercent = cost > 0 ? Math.round((livePnl / cost) * 10000) / 100 : 0;
+  return (
+    <Link
+      href={`/stocks/${h.stockCode}`}
+      className="flex items-center justify-between rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/50"
+    >
+      <div>
+        <p className="font-medium">{h.stockName}</p>
+        <p className="text-xs text-muted-foreground">
+          {h.quantity}주 · 평단 {formatMoney(h.avgPrice)}
+        </p>
+      </div>
+      <div className="text-right">
+        <p className="font-medium tabular-nums">{formatMoney(liveValue)}</p>
+        <p
+          className={cn(
+            "text-xs tabular-nums",
+            livePnl > 0 && "text-bull",
+            livePnl < 0 && "text-bear"
+          )}
+        >
+          {livePnl >= 0 ? "+" : ""}
+          {formatMoney(livePnl)} ({livePnlPercent >= 0 ? "+" : ""}
+          {livePnlPercent}%)
+        </p>
+      </div>
+    </Link>
+  );
+}
 
 // 내 지갑 (T-304): 총자산·현금·보유 종목 평가 + 방문 보너스 + 로그아웃
 export default function PortfolioPage() {
@@ -72,7 +111,11 @@ export default function PortfolioPage() {
             <Skeleton className="h-8 w-40" />
           ) : (
             <>
-              <p className="text-2xl font-bold">{formatMoney(portfolio.totalAssets)}</p>
+              <LiveTotalAssets
+                cash={portfolio.cash}
+                totalAssets={portfolio.totalAssets}
+                className="text-2xl font-bold"
+              />
               <div className="mt-2 flex justify-between text-sm text-muted-foreground">
                 <span>현금 {formatMoney(portfolio.cash)}</span>
                 <span
@@ -100,32 +143,7 @@ export default function PortfolioPage() {
             </p>
           )}
           {portfolio?.holdings.map((h) => (
-            <Link
-              key={h.stockCode}
-              href={`/stocks/${h.stockCode}`}
-              className="flex items-center justify-between rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/50"
-            >
-              <div>
-                <p className="font-medium">{h.stockName}</p>
-                <p className="text-xs text-muted-foreground">
-                  {h.quantity}주 · 평단 {formatMoney(h.avgPrice)}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="font-medium">{formatMoney(h.value)}</p>
-                <p
-                  className={cn(
-                    "text-xs",
-                    h.pnl > 0 && "text-bull",
-                    h.pnl < 0 && "text-bear"
-                  )}
-                >
-                  {h.pnl >= 0 ? "+" : ""}
-                  {formatMoney(h.pnl)} ({h.pnlPercent >= 0 ? "+" : ""}
-                  {h.pnlPercent}%)
-                </p>
-              </div>
-            </Link>
+            <HoldingRow key={h.stockCode} holding={h} />
           ))}
         </CardContent>
       </Card>
