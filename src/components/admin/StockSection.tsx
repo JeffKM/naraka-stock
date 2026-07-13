@@ -94,16 +94,16 @@ export function StockSection() {
                   </Badge>
                 </span>
                 {quote && (
-                  <span className="shrink-0 text-right text-sm tabular-nums">
-                    {formatMoney(quote.price)}{" "}
+                  <span className="flex shrink-0 items-center text-sm tabular-nums">
+                    <span className="text-right">{formatMoney(quote.price)}</span>
                     <span
-                      className={
+                      className={`w-16 text-right ${
                         quote.changePercent > 0
                           ? "text-bull"
                           : quote.changePercent < 0
                             ? "text-bear"
                             : "text-muted-foreground"
-                      }
+                      }`}
                     >
                       {quote.changePercent > 0 ? "+" : ""}
                       {quote.changePercent}%
