@@ -6,6 +6,7 @@ import { BottomNav } from "@/components/layout/BottomNav";
 import { FetchIndicator } from "@/components/layout/FetchIndicator";
 import { Header } from "@/components/layout/Header";
 import { HoldingAlertWatcher } from "@/components/layout/HoldingAlertWatcher";
+import { MarketGridBackdrop } from "@/components/layout/MarketGridBackdrop";
 import { MarketHaltBanner } from "@/components/quotes/MarketHaltBanner";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -45,6 +46,7 @@ export default function RootLayout({
       className={`${notoSansKr.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-dvh flex-col">
+        <MarketGridBackdrop />
         <Providers>
           <FetchIndicator />
           <HoldingAlertWatcher />

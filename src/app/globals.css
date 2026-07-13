@@ -250,6 +250,67 @@
   animation: flash-bear-bg 1s ease-out;
 }
 
+/* 글로벌 증시 그리드 배경 (MarketGridBackdrop)
+   — 트레이딩 룸 전광판 무드: 희미한 모눈 격자 + 은은히 흐르는 시세 텍스트 잔상.
+   카드(--card)가 위를 덮으므로 빈 배경 영역에서만 드러난다. */
+.market-grid-backdrop {
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in oklab, var(--foreground) 5%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--foreground) 5%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 28px 28px;
+  /* 가장자리로 갈수록 격자가 사라져 "화면 속 화면" 느낌을 준다 */
+  mask-image: radial-gradient(ellipse 90% 80% at 50% 35%, black 30%, transparent 95%);
+}
+
+/* 시세 잔상: 아래→위로 느리게 떠오르며 나타났다 사라진다.
+   opacity·transform만 사용해 컴포지터에서 처리 (리플로우 없음).
+   음수 delay + 서로 다른 duration으로 사이클을 어긋나게 한다. */
+@keyframes ticker-drift {
+  0% {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  62% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-30px);
+    opacity: 0;
+  }
+}
+
+.market-drift {
+  animation: ticker-drift var(--drift-duration, 12s) ease-in-out var(--drift-delay, 0s) infinite;
+  opacity: 0;
+}
+
+.market-drift-neutral {
+  color: color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+.market-drift-bull {
+  color: color-mix(in oklab, var(--bull) 26%, transparent);
+}
+.market-drift-bear {
+  color: color-mix(in oklab, var(--bear) 26%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .market-drift {
+    animation: none;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
