@@ -15,16 +15,18 @@ interface DriftItem {
 }
 
 // 실제 상장 종목(27종 개편 로스터) + 지수(NASPI/NASDAK) 코드를 그대로 사용해 세계관을 유지한다.
-// duration·delay 조합이 전부 달라 같은 순간에 같은 페이즈로 겹치는 항목이 없다.
+// 종목 슬롯 15개는 전부 서로 다른 코드로 우량·일반·테마 세 등급을 고루 노출하고,
+// 가격 표기는 2026-07-31 기준가 부근 값을 쓴다. 위치·duration·delay·톤 배분은
+// 기존 튜닝(잔상 24개, 농도)을 그대로 유지 — 조합이 전부 달라 페이즈가 겹치지 않는다.
 const DRIFT_ITEMS: DriftItem[] = [
   { text: "SPCO ▲30.0%", tone: "bull", top: "5%", left: "6%", duration: 13, delay: -2 },
   { text: "NASPI 1,042.55", tone: "neutral", top: "9%", left: "60%", duration: 17, delay: -9 },
   { text: "NRKM ▼5.6%", tone: "bear", top: "14%", left: "30%", duration: 12, delay: -6 },
   { text: "01101001", tone: "neutral", top: "19%", left: "8%", duration: 11, delay: -5 },
   { text: "NRKB ▼18.2%", tone: "bear", top: "23%", left: "72%", duration: 15, delay: -12 },
-  { text: "BID 24,450", tone: "neutral", top: "28%", left: "44%", duration: 14, delay: -1 },
+  { text: "OKHX 199,500", tone: "neutral", top: "28%", left: "44%", duration: 14, delay: -1 },
   { text: "MHEN ▲7.7%", tone: "bull", top: "33%", left: "10%", duration: 14, delay: -7 },
-  { text: "ASK 24,500", tone: "neutral", top: "37%", left: "66%", duration: 13, delay: -10 },
+  { text: "MAPL 171,000", tone: "neutral", top: "37%", left: "66%", duration: 13, delay: -10 },
   { text: "VOL 128,400", tone: "neutral", top: "42%", left: "36%", duration: 12, delay: -3 },
   { text: "OKCC ▲29.4%", tone: "bull", top: "46%", left: "78%", duration: 16, delay: -14 },
   { text: "NASDAK 987.10", tone: "neutral", top: "51%", left: "6%", duration: 16, delay: -11 },
@@ -35,12 +37,12 @@ const DRIFT_ITEMS: DriftItem[] = [
   { text: "MRSF ▲4.1%", tone: "bull", top: "73%", left: "56%", duration: 14, delay: -9 },
   { text: "NRKE 128,500", tone: "neutral", top: "77%", left: "34%", duration: 15, delay: -13 },
   { text: "MELL ▼17.8%", tone: "bear", top: "81%", left: "74%", duration: 12, delay: -4 },
-  { text: "MHEN 24,650", tone: "neutral", top: "85%", left: "8%", duration: 13, delay: -11 },
+  { text: "MIPA 54,350", tone: "neutral", top: "85%", left: "8%", duration: 13, delay: -11 },
   { text: "NASPI ▼6.8%", tone: "bear", top: "88%", left: "48%", duration: 17, delay: -5 },
   { text: "BNSK ▲0.9%", tone: "bull", top: "92%", left: "22%", duration: 12, delay: -3 },
   { text: "00101110", tone: "neutral", top: "95%", left: "64%", duration: 11, delay: -7 },
   { text: "NASDAK ▲18.9%", tone: "bull", top: "3%", left: "36%", duration: 15, delay: -10 },
-  { text: "NRKM 33,400", tone: "neutral", top: "12%", left: "84%", duration: 14, delay: -4 },
+  { text: "OKSL 118,900", tone: "neutral", top: "12%", left: "84%", duration: 14, delay: -4 },
 ];
 
 const TONE_CLASS: Record<DriftTone, string> = {
