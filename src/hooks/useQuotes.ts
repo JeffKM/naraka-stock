@@ -3,12 +3,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { getJson } from "@/lib/api/client";
 import { TICK_INTERVAL_MINUTES } from "@/lib/market";
-import type { MarketState, StockQuote } from "@/types/domain";
+import type { IndexQuote, MarketState, StockQuote } from "@/types/domain";
 
 export interface QuoteBoardDto {
   marketState: MarketState;
   asOf: string;
   haltedUntil: string | null;
+  indices: IndexQuote[];
   quotes: StockQuote[];
 }
 

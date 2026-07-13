@@ -3,12 +3,18 @@ import { getKstParts, getMarketState, getTickIndex } from "@/lib/market";
 import { loadMarketHours } from "@/lib/marketHours";
 import { PRICE_LIMIT_RATE } from "@/lib/engine/randomWalk";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import type { MarketState, StockQuote, StockTier } from "@/types/domain";
+import {
+  computeIndexQuotes,
+  loadIndices,
+  loadPrevIndexCloses,
+} from "@/services/indexService";
+import type { IndexQuote, MarketState, StockQuote, StockTier } from "@/types/domain";
 
 export interface QuoteBoard {
   marketState: MarketState;
   asOf: string; // 기준 시각 (ISO)
   haltedUntil: string | null; // 서킷브레이커 해제 시각 (발동 중일 때만)
+  indices: IndexQuote[]; // 나스피/나스닥 (Phase 8)
   quotes: StockQuote[];
 }
 
@@ -41,7 +47,7 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
 
   const { data: stocks, error: stocksError } = await supabase
     .from("stocks")
-    .select("code, name, tier")
+    .select("code, name, tier, shares_outstanding")
     .eq("listed", true)
     .order("code");
   if (stocksError) throw stocksError;
@@ -82,6 +88,7 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
 
   const prices: Record<string, { price: number; isHalted: boolean }> = {};
   const sparks: Record<string, number[]> = {};
+  const pathByStock: Record<string, Record<number, number>> = {}; // 지수 계산용 (틱 정렬)
   if (tickIndex !== null) {
     // 현재 틱까지의 오늘 경로 전체 (현재가 + 스파크라인을 한 번에)
     const { data: tickRows, error: tickError } = await supabase
@@ -93,11 +100,43 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
     if (tickError) throw tickError;
     for (const row of tickRows) {
       (sparks[row.stock_code] ??= []).push(row.price);
+      (pathByStock[row.stock_code] ??= {})[row.tick_index] = row.price;
       if (row.tick_index === tickIndex) {
         prices[row.stock_code] = { price: row.price, isHalted: row.is_halted };
       }
     }
   }
+
+  // 당일 누적 거래량 (참가자 체결 주 수 — 익명 집계, Phase 8)
+  const volumes: Record<string, number> = {};
+  {
+    const { data: tradeRows, error: tradeError } = await supabase
+      .from("trades")
+      .select("stock_code, quantity")
+      .gte("created_at", `${today}T00:00:00+09:00`);
+    if (tradeError) throw tradeError;
+    for (const row of tradeRows) {
+      volumes[row.stock_code] = (volumes[row.stock_code] ?? 0) + row.quantity;
+    }
+  }
+
+  // 시장 지수 (나스피/나스닥)
+  const [indexRows, prevIndexCloses] = await Promise.all([
+    loadIndices(),
+    loadPrevIndexCloses(today),
+  ]);
+  const indices = computeIndexQuotes({
+    indices: indexRows,
+    members: stocks.map((s) => ({
+      code: s.code,
+      tier: s.tier as StockTier,
+      sharesOutstanding: s.shares_outstanding,
+    })),
+    prevCloses,
+    pathByStock,
+    tickIndex,
+    prevIndexCloses,
+  });
 
   const quotes: StockQuote[] = stocks.map((stock) => {
     const prevClose = prevCloses[stock.code] ?? 0;
@@ -119,9 +158,13 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
       // 반올림 오차를 감안해 ±10원 이내면 상·하한 도달로 표시
       isUpperLimit: prevClose > 0 && price >= upperLimit - 10,
       isLowerLimit: prevClose > 0 && price <= lowerLimit + 10,
+      upperLimit,
+      lowerLimit,
+      marketCap: price * stock.shares_outstanding,
+      volume: volumes[stock.code] ?? 0,
       spark: sparks[stock.code] ?? [],
     };
   });
 
-  return { marketState: state, asOf: now.toISOString(), haltedUntil, quotes };
+  return { marketState: state, asOf: now.toISOString(), haltedUntil, indices, quotes };
 }

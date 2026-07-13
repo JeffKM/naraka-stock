@@ -93,6 +93,23 @@ export function formatMoney(amount: number): string {
   return `${amount.toLocaleString("ko-KR")}${CURRENCY_LABEL}`;
 }
 
+// 큰 금액 축약 표시 (시가총액 등): 6.4조 → "6조 4,000억원", 8160억 → "8,160억원"
+export function formatCompactMoney(amount: number): string {
+  const JO = 1_0000_0000_0000; // 1조
+  const EOK = 1_0000_0000; // 1억
+  if (amount >= JO) {
+    const jo = Math.floor(amount / JO);
+    const eok = Math.round((amount % JO) / EOK);
+    return eok > 0
+      ? `${jo}조 ${eok.toLocaleString("ko-KR")}억${CURRENCY_LABEL}`
+      : `${jo}조${CURRENCY_LABEL}`;
+  }
+  if (amount >= EOK) {
+    return `${Math.round(amount / EOK).toLocaleString("ko-KR")}억${CURRENCY_LABEL}`;
+  }
+  return formatMoney(amount);
+}
+
 // ---------------------------------------------------------------------------
 // 게임 날짜(YYYY-MM-DD) 단위 헬퍼 — 배치·시뮬레이션에서 사용
 // ---------------------------------------------------------------------------

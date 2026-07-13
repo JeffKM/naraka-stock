@@ -27,11 +27,47 @@ const CHART_COLORS = {
   area: "#c04a3e",
 };
 
-type Mode = "today" | "daily";
+// 라인(당일) / 분봉 캔들(5분 틱 집계) / 일봉 캔들
+type Mode = "line" | "m15" | "m30" | "m60" | "daily";
 
-// 종목 차트 (T-402): 당일 5분 라인 + 일봉 캔들 탭
+const MINUTES_BY_MODE: Record<Exclude<Mode, "line" | "daily">, number> = {
+  m15: 15,
+  m30: 30,
+  m60: 60,
+};
+
+interface IntradayCandle {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+// 5분 틱을 n분 봉으로 집계 (개장 15:00이 정시라 버킷 경계가 항상 맞아떨어진다)
+function aggregateCandles(
+  points: Array<{ time: number; price: number }>,
+  minutes: number
+): IntradayCandle[] {
+  const bucketSec = minutes * 60;
+  const candles: IntradayCandle[] = [];
+  for (const p of points) {
+    const start = Math.floor(p.time / bucketSec) * bucketSec;
+    const last = candles[candles.length - 1];
+    if (last && last.time === start) {
+      last.high = Math.max(last.high, p.price);
+      last.low = Math.min(last.low, p.price);
+      last.close = p.price;
+    } else {
+      candles.push({ time: start, open: p.price, high: p.price, low: p.price, close: p.price });
+    }
+  }
+  return candles;
+}
+
+// 종목 차트 (T-402/T-801): 당일 라인 + 분봉 캔들 + 일봉 캔들
 export function StockChart({ code }: { code: string }) {
-  const [mode, setMode] = useState<Mode>("today");
+  const [mode, setMode] = useState<Mode>("line");
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
 
@@ -56,28 +92,11 @@ export function StockChart({ code }: { code: string }) {
         horzLines: { color: CHART_COLORS.grid },
       },
       rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false, timeVisible: mode === "today" },
+      timeScale: { borderVisible: false, timeVisible: mode !== "daily" },
     });
     chartRef.current = chart;
 
-    if (mode === "daily") {
-      const series = chart.addSeries(CandlestickSeries, {
-        upColor: CHART_COLORS.up,
-        downColor: CHART_COLORS.down,
-        borderVisible: false,
-        wickUpColor: CHART_COLORS.up,
-        wickDownColor: CHART_COLORS.down,
-      });
-      series.setData(
-        data.daily.map((d) => ({
-          time: d.time,
-          open: d.open,
-          high: d.high,
-          low: d.low,
-          close: d.close,
-        }))
-      );
-    } else {
+    if (mode === "line") {
       const series = chart.addSeries(AreaSeries, {
         lineColor: CHART_COLORS.area,
         topColor: "rgba(192, 74, 62, 0.35)",
@@ -88,6 +107,32 @@ export function StockChart({ code }: { code: string }) {
         // lightweight-charts는 UTCTimestamp 초 단위를 받는다
         data.today.map((t) => ({ time: t.time as never, value: t.price }))
       );
+    } else {
+      const series = chart.addSeries(CandlestickSeries, {
+        upColor: CHART_COLORS.up,
+        downColor: CHART_COLORS.down,
+        borderVisible: false,
+        wickUpColor: CHART_COLORS.up,
+        wickDownColor: CHART_COLORS.down,
+      });
+      if (mode === "daily") {
+        series.setData(
+          data.daily.map((d) => ({
+            time: d.time,
+            open: d.open,
+            high: d.high,
+            low: d.low,
+            close: d.close,
+          }))
+        );
+      } else {
+        series.setData(
+          aggregateCandles(data.today, MINUTES_BY_MODE[mode]).map((c) => ({
+            ...c,
+            time: c.time as never,
+          }))
+        );
+      }
     }
     chart.timeScale().fitContent();
 
@@ -105,14 +150,17 @@ export function StockChart({ code }: { code: string }) {
     };
   }, [data, mode]);
 
-  const todayEmpty = mode === "today" && data && data.today.length === 0;
+  const todayEmpty = mode !== "daily" && data && data.today.length === 0;
 
   return (
     <Card>
       <CardContent className="flex flex-col gap-3 pt-4">
         <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
           <TabsList>
-            <TabsTrigger value="today">당일</TabsTrigger>
+            <TabsTrigger value="line">라인</TabsTrigger>
+            <TabsTrigger value="m15">15분</TabsTrigger>
+            <TabsTrigger value="m30">30분</TabsTrigger>
+            <TabsTrigger value="m60">1시간</TabsTrigger>
             <TabsTrigger value="daily">일봉</TabsTrigger>
           </TabsList>
         </Tabs>

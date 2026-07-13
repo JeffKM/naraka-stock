@@ -13,6 +13,7 @@ export interface Stock {
   tier: StockTier;
   description: string;
   listed: boolean;
+  sharesOutstanding: number; // 발행주식수 (시가총액 = 현재가 × 발행주식수)
 }
 
 // 시세판·종목 상세에서 쓰는 현재가 스냅샷
@@ -27,7 +28,21 @@ export interface StockQuote {
   isHalted: boolean; // VI 거래정지 중
   isUpperLimit: boolean; // 상한가 도달
   isLowerLimit: boolean; // 하한가 도달
+  upperLimit: number; // 오늘 상한가 (직전 종가 +30%)
+  lowerLimit: number; // 오늘 하한가 (직전 종가 -30%)
+  marketCap: number; // 시가총액 (현재가 × 발행주식수)
+  volume: number; // 당일 누적 거래량 (참가자 체결 주 수, 매수+매도)
   spark: number[]; // 오늘 개장~현재 틱의 가격 경로 (스파크라인용, 장외엔 빈 배열)
+}
+
+// 시장 지수 스냅샷 (나스피/나스닥 — 시총가중 체인, 기준 1,000pt)
+export interface IndexQuote {
+  code: string; // NASPI | NASDAK
+  name: string; // 나스피 | 나스닥
+  value: number; // 현재 지수 (소수 2자리)
+  change: number; // 전 개장일 종가 지수 대비 등락
+  changePercent: number;
+  spark: number[]; // 오늘 개장~현재 틱의 지수 경로
 }
 
 export interface Holding {

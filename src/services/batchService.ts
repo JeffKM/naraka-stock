@@ -10,6 +10,7 @@ import {
 } from "@/lib/news/generate";
 import { addDays, getKstParts, isOpenDate, type OpenDayRules } from "@/lib/market";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { recordIndexCloses } from "@/services/indexService";
 import type { StockTier } from "@/types/domain";
 
 // 일일 배치 (T-204): 매일 22:00 실행
@@ -155,6 +156,11 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
     })),
   });
   if (error) throw error;
+
+  // 지수 종가 기록 (틱 83 기준, upsert라 재실행 안전) — 정산일에만 의미 있음
+  if (todayOpen) {
+    await recordIndexCloses(today);
+  }
 
   return {
     today,

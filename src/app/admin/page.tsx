@@ -198,6 +198,7 @@ function StockSection() {
     tier: "normal",
     description: "",
     price: "",
+    shares: "",
   });
 
   const { data } = useQuery({
@@ -233,13 +234,14 @@ function StockSection() {
         tier: form.tier,
         description: form.description.trim(),
         initialPrice: Number(form.price),
+        sharesOutstanding: Number(form.shares),
       });
       toast.success(
         result.tradableNow
           ? "상장 완료! 지금 바로 거래 가능합니다"
           : "상장 완료! 다음 개장일부터 거래됩니다"
       );
-      setForm({ code: "", name: "", tier: "normal", description: "", price: "" });
+      setForm({ code: "", name: "", tier: "normal", description: "", price: "", shares: "" });
       queryClient.invalidateQueries({ queryKey: ["admin-stocks"] });
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
     } catch (error) {
@@ -248,7 +250,10 @@ function StockSection() {
   }
 
   const canSubmit =
-    form.code.trim() && form.name.trim() && Number(form.price) >= 100;
+    form.code.trim() &&
+    form.name.trim() &&
+    Number(form.price) >= 100 &&
+    Number(form.shares) >= 10_000;
 
   return (
     <Card>
@@ -310,6 +315,12 @@ function StockSection() {
               placeholder="상장가 (원)"
               value={form.price}
               onChange={(e) => setForm({ ...form, price: e.target.value })}
+            />
+            <Input
+              type="number"
+              placeholder="발행주식수"
+              value={form.shares}
+              onChange={(e) => setForm({ ...form, shares: e.target.value })}
             />
           </div>
           <Input

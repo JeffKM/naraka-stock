@@ -5,6 +5,11 @@ import { createRng } from "@/lib/engine/rng";
 import { getKstParts, getTickIndex, addDays } from "@/lib/market";
 import { loadMarketHours } from "@/lib/marketHours";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import {
+  adjustDivisorForListing,
+  adjustDivisorsForTierChange,
+  indexCodeOfTier,
+} from "@/services/indexService";
 import type { Stock, StockTier } from "@/types/domain";
 
 // 어드민 서비스 (T-602~T-605) — 모든 진입점은 route에서 requireAdmin을 통과한 뒤 호출된다.
@@ -255,10 +260,14 @@ export async function listStocks(): Promise<Stock[]> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("stocks")
-    .select("code, name, tier, description, listed")
+    .select("code, name, tier, description, listed, shares_outstanding")
     .order("code");
   if (error) throw error;
-  return data.map((s) => ({ ...s, tier: s.tier as StockTier }));
+  return data.map(({ shares_outstanding, ...s }) => ({
+    ...s,
+    tier: s.tier as StockTier,
+    sharesOutstanding: shares_outstanding,
+  }));
 }
 
 export interface CreateStockInput {
@@ -267,6 +276,7 @@ export interface CreateStockInput {
   tier: StockTier;
   description: string;
   initialPrice: number;
+  sharesOutstanding: number; // 발행주식수 (시총·지수 가중치)
 }
 
 // 신규 상장: 종목 등록 + 기준가 생성. 장중이면 남은 오늘 경로까지 만들어
@@ -283,6 +293,7 @@ export async function createStock(
     name: input.name,
     tier: input.tier,
     description: input.description,
+    shares_outstanding: input.sharesOutstanding,
   });
   if (insertError) {
     if (insertError.code === "23505") {
@@ -302,6 +313,9 @@ export async function createStock(
     bias: 0,
   });
   if (summaryError) throw summaryError;
+
+  // 지수 편입 보정: 새 종목 시총이 들어와도 지수 값이 튀지 않게 divisor 확대
+  await adjustDivisorForListing(input.code, today);
 
   // 장중 상장이면 현재 틱부터 오늘 남은 경로 생성 (상장가에서 출발, 중립 드리프트)
   const hours = await loadMarketHours();
@@ -334,18 +348,40 @@ export async function createStock(
   return { tradableNow: true };
 }
 
-// 등급 변경: 변동성·배당·이벤트 가중치는 다음 배치 경로부터 반영된다
+// 등급 변경: 변동성·배당·이벤트 가중치는 다음 배치 경로부터 반영된다.
+// 우량·일반 ↔ 테마 이동은 지수 소속(나스피↔나스닥)도 바뀌므로 divisor를 보정한다.
 export async function updateStockTier(code: string, tier: StockTier): Promise<void> {
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
+  const { data: before, error: beforeError } = await supabase
     .from("stocks")
-    .update({ tier })
+    .select("tier")
     .eq("code", code)
-    .select("code");
-  if (error) throw error;
-  if (!data || data.length === 0) {
+    .maybeSingle();
+  if (beforeError) throw beforeError;
+  if (!before) {
     throw new ApiException("NOT_FOUND", "없는 종목입니다.");
   }
+  const fromTier = before.tier as StockTier;
+  if (fromTier === tier) return;
+
+  // 지수의 마지막 종목이 빠져나가면 지수가 죽으므로 사전 차단
+  if (indexCodeOfTier(fromTier) !== indexCodeOfTier(tier)) {
+    const { count, error: countError } = await supabase
+      .from("stocks")
+      .select("code", { count: "exact", head: true })
+      .eq("listed", true)
+      .eq("tier", "wild");
+    if (countError) throw countError;
+    const wildCount = count ?? 0;
+    if (fromTier === "wild" && wildCount <= 1) {
+      throw new ApiException("VALIDATION", "나스닥(테마주)의 마지막 종목은 옮길 수 없습니다.");
+    }
+  }
+
+  const { error } = await supabase.from("stocks").update({ tier }).eq("code", code);
+  if (error) throw error;
+
+  await adjustDivisorsForTierChange(code, fromTier, tier, getKstParts().date);
 }
 
 // ── T-605 수동 뉴스·유저 관리 ───────────────────────────────────

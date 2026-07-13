@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NewsList } from "@/components/news/NewsList";
 import { StockChart } from "@/components/chart/StockChart";
+import { StockStats } from "@/components/quotes/StockStats";
+import { MyHoldingCard } from "@/components/trade/MyHoldingCard";
 import { TradePanel } from "@/components/trade/TradePanel";
 import { usePriceWiggle } from "@/hooks/usePriceWiggle";
 import { useQuotes } from "@/hooks/useQuotes";
@@ -69,7 +71,11 @@ export default function StockDetailPage({
 
       <StockChart code={quote.code} />
 
+      <MyHoldingCard quote={quote} />
+
       <TradePanel quote={quote} marketHalted={data?.marketState === "halted"} />
+
+      <StockStats quote={quote} />
 
       {/* 해당 종목 뉴스 (T-504) */}
       <Card>

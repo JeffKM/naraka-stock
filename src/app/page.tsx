@@ -1,9 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AssetSummaryCard } from "@/components/quotes/AssetSummaryCard";
+import { IndexCards } from "@/components/quotes/IndexCards";
+import { NewsHighlight } from "@/components/news/NewsHighlight";
 import { Sparkline } from "@/components/quotes/Sparkline";
 import { useQuotes } from "@/hooks/useQuotes";
 import { cn } from "@/lib/utils";
@@ -11,9 +16,18 @@ import { formatMoney } from "@/lib/market";
 
 const TIER_LABEL = { stable: "우량주", normal: "일반주", wild: "테마주" } as const;
 
-// 시세판 홈 (T-401): 전 종목 전광판
+type SortMode = "default" | "change";
+
+// 시세판 홈 (T-401/Phase 8): 지수 + 내 자산 + 전 종목 전광판 + 뉴스 하이라이트
 export default function Home() {
   const { data, isLoading } = useQuotes();
+  const [sort, setSort] = useState<SortMode>("default");
+
+  // 기본은 등록순(서버 code 정렬), 등락률순은 표시용 재정렬
+  const quotes =
+    sort === "change" && data
+      ? [...data.quotes].sort((a, b) => b.changePercent - a.changePercent)
+      : data?.quotes;
 
   return (
     <div className="flex flex-col gap-4">
@@ -22,6 +36,32 @@ export default function Home() {
         {data?.marketState === "holiday" && (
           <span className="text-sm text-muted-foreground">오늘은 휴장일입니다 🌙</span>
         )}
+      </div>
+
+      {data && <IndexCards indices={data.indices} />}
+
+      <AssetSummaryCard />
+
+      <div className="flex justify-end gap-1">
+        {(
+          [
+            { value: "default", label: "등록순" },
+            { value: "change", label: "등락률순" },
+          ] as const
+        ).map((option) => (
+          <Button
+            key={option.value}
+            variant="ghost"
+            size="sm"
+            onClick={() => setSort(option.value)}
+            className={cn(
+              "h-7 px-2 text-xs",
+              sort === option.value ? "text-foreground" : "text-muted-foreground"
+            )}
+          >
+            {option.label}
+          </Button>
+        ))}
       </div>
 
       <Card>
@@ -33,7 +73,7 @@ export default function Home() {
                 <Skeleton className="h-5 w-24" />
               </div>
             ))}
-          {data?.quotes.map((q) => {
+          {quotes?.map((q) => {
             const up = q.change > 0;
             const down = q.change < 0;
             return (
@@ -85,6 +125,8 @@ export default function Home() {
           })}
         </CardContent>
       </Card>
+
+      <NewsHighlight />
 
       <p className="text-center text-xs text-muted-foreground">
         시세는 5분마다 갱신됩니다 · 장 시간 수~일 15:00~22:00
