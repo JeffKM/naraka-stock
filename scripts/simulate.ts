@@ -17,16 +17,35 @@ const INITIAL_CASH = 1_000_000;
 const SELL_FEE_RATE = 0.003;
 const DIVIDEND_RATE = 0.01;
 
-// 등급·기준가는 운영 확정안 기준 (2026-07-12, migrations/20260713030000)
+// 등급·기준가는 운영 확정안 기준 (2026-07-14, migrations/20260714000000)
 const STOCKS: Array<{ code: string; tier: StockTier; initial: number }> = [
+  { code: "MLVD", tier: "stable", initial: 245000 },
+  { code: "OKHX", tier: "stable", initial: 198000 },
   { code: "NRKE", tier: "stable", initial: 128000 },
-  { code: "OKJA", tier: "stable", initial: 105000 },
-  { code: "NRKS", tier: "normal", initial: 62000 },
-  { code: "NRKM", tier: "normal", initial: 45000 },
-  { code: "MERU", tier: "normal", initial: 68000 },
-  { code: "BNZN", tier: "normal", initial: 38000 },
-  { code: "MIHO", tier: "wild", initial: 18000 },
-  { code: "NRKB", tier: "wild", initial: 6400 },
+  { code: "MAPL", tier: "stable", initial: 172000 },
+  { code: "ALBN", tier: "stable", initial: 152000 },
+  { code: "BNZN", tier: "stable", initial: 135000 },
+  { code: "OKSL", tier: "stable", initial: 118000 },
+  { code: "NOMH", tier: "stable", initial: 105000 },
+  { code: "MLMT", tier: "stable", initial: 102000 },
+  { code: "MRSF", tier: "normal", initial: 92000 },
+  { code: "OKCT", tier: "normal", initial: 84000 },
+  { code: "MRCL", tier: "normal", initial: 76000 },
+  { code: "BNOC", tier: "normal", initial: 68000 },
+  { code: "OKFX", tier: "normal", initial: 62000 },
+  { code: "MIPA", tier: "normal", initial: 54000 },
+  { code: "BNSK", tier: "normal", initial: 46000 },
+  { code: "MRFI", tier: "normal", initial: 39000 },
+  { code: "NRKM", tier: "normal", initial: 33000 },
+  { code: "MHEN", tier: "wild", initial: 24500 },
+  { code: "BBNN", tier: "wild", initial: 19800 },
+  { code: "MLTA", tier: "wild", initial: 17500 },
+  { code: "SPCO", tier: "wild", initial: 14800 },
+  { code: "NRKB", tier: "wild", initial: 11200 },
+  { code: "MHBT", tier: "wild", initial: 9400 },
+  { code: "MELL", tier: "wild", initial: 7600 },
+  { code: "BNAS", tier: "wild", initial: 6200 },
+  { code: "OKCC", tier: "wild", initial: 4900 },
 ];
 
 // 개장일 목록
@@ -126,7 +145,7 @@ interface Strategy {
 
 const STRATEGIES: Strategy[] = [
   {
-    // 존버: 첫날 8종목 균등 분산 매수 후 방치 (배당 수령)
+    // 존버: 첫날 전 종목 균등 분산 매수 후 방치 (배당 수령)
     name: "존버(분산)",
     run: (market) => {
       const p: Portfolio = { cash: INITIAL_CASH, qty: {} };
@@ -146,7 +165,7 @@ const STRATEGIES: Strategy[] = [
     },
   },
   {
-    // 안정주 존버: 안정주 2종에 몰빵 (배당 파밍)
+    // 안정주 존버: 안정주 전체 균등 매수 (배당 파밍)
     name: "존버(안정주)",
     run: (market) => {
       const p: Portfolio = { cash: INITIAL_CASH, qty: {} };
