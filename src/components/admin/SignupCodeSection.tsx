@@ -6,12 +6,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { getJson, postJson } from "@/lib/api/client";
+import { deleteJson, getJson, postJson } from "@/lib/api/client";
 
 export function SignupCodeSection() {
   const queryClient = useQueryClient();
   const [count, setCount] = useState("20");
   const [newCodes, setNewCodes] = useState<string[]>([]);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
 
   const { data } = useQuery({
     queryKey: ["admin-signup-codes"],
@@ -31,6 +32,26 @@ export function SignupCodeSection() {
       queryClient.invalidateQueries({ queryKey: ["admin-signup-codes"] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "생성 실패");
+    }
+  }
+
+  async function discardUnused() {
+    // 첫 클릭은 확인 대기, 두 번째 클릭에 실제 삭제
+    if (!confirmingDiscard) {
+      setConfirmingDiscard(true);
+      setTimeout(() => setConfirmingDiscard(false), 4000);
+      return;
+    }
+    setConfirmingDiscard(false);
+    try {
+      const { deleted } = await deleteJson<{ deleted: number }>(
+        "/api/admin/signup-codes",
+      );
+      setNewCodes([]);
+      toast.success(`미사용 코드 ${deleted}개를 버렸습니다`);
+      queryClient.invalidateQueries({ queryKey: ["admin-signup-codes"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "삭제 실패");
     }
   }
 
@@ -70,16 +91,25 @@ export function SignupCodeSection() {
               <p className="text-xs text-muted-foreground">
                 미사용 코드 전체 (오래된 순 — 위에서부터 사용)
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  navigator.clipboard.writeText(data.unusedCodes.join("\n"));
-                  toast.success("미사용 코드를 복사했습니다");
-                }}
-              >
-                전체 복사
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(data.unusedCodes.join("\n"));
+                    toast.success("미사용 코드를 복사했습니다");
+                  }}
+                >
+                  전체 복사
+                </Button>
+                <Button
+                  variant={confirmingDiscard ? "destructive" : "outline"}
+                  size="sm"
+                  onClick={discardUnused}
+                >
+                  {confirmingDiscard ? "정말 버릴까요?" : "전체 버리기"}
+                </Button>
+              </div>
             </div>
             <textarea
               readOnly

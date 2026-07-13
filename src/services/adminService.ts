@@ -80,6 +80,17 @@ export async function createSignupCodes(count: number): Promise<string[]> {
   return codes;
 }
 
+export async function deleteUnusedSignupCodes(): Promise<number> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("signup_codes")
+    .delete()
+    .is("used_by", null)
+    .select("code");
+  if (error) throw error;
+  return data.length;
+}
+
 export async function listSignupCodes(): Promise<{
   unused: number;
   used: number;

@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { apiError, apiOk, handleApiError } from "@/lib/api/response";
 import { requireAdmin } from "@/lib/auth/guards";
-import { createSignupCodes, listSignupCodes } from "@/services/adminService";
+import {
+  createSignupCodes,
+  deleteUnusedSignupCodes,
+  listSignupCodes,
+} from "@/services/adminService";
 
 export async function GET() {
   try {
@@ -22,6 +26,15 @@ export async function POST(request: Request) {
       return apiError("VALIDATION", "생성 개수는 1~200 사이여야 합니다.");
     }
     return apiOk({ codes: await createSignupCodes(parsed.data.count) });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+export async function DELETE() {
+  try {
+    await requireAdmin();
+    return apiOk({ deleted: await deleteUnusedSignupCodes() });
   } catch (error) {
     return handleApiError(error);
   }

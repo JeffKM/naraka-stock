@@ -23,3 +23,8 @@ export async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   return parseResponse<T>(res);
 }
+
+export async function deleteJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, { method: "DELETE" });
+  return parseResponse<T>(res);
+}
