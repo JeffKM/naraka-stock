@@ -33,7 +33,29 @@ function marketHoursLabel(market: {
   return `${time} (${closed} 휴장)`;
 }
 
-type SortMode = "default" | "change";
+type SortMode = "marketCap" | "volume" | "up" | "down";
+
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: "marketCap", label: "시가총액" },
+  { value: "volume", label: "거래량" },
+  { value: "up", label: "급상승" },
+  { value: "down", label: "급하락" },
+];
+
+// 표시용 재정렬 — 체결·가격 로직과 무관 (서버 데이터는 code 정렬)
+function sortQuotes(quotes: StockQuote[], mode: SortMode): StockQuote[] {
+  const sorted = [...quotes];
+  switch (mode) {
+    case "marketCap":
+      return sorted.sort((a, b) => b.marketCap - a.marketCap);
+    case "volume":
+      return sorted.sort((a, b) => b.volume - a.volume);
+    case "up":
+      return sorted.sort((a, b) => b.changePercent - a.changePercent);
+    case "down":
+      return sorted.sort((a, b) => a.changePercent - b.changePercent);
+  }
+}
 
 // 시세판 한 줄 — 장중엔 틱 사이 가격 미세 진동 (표시용, 상세 화면과 동일 연출)
 function QuoteRow({ quote: q, marketOpen }: { quote: StockQuote; marketOpen: boolean }) {
@@ -90,13 +112,9 @@ function QuoteRow({ quote: q, marketOpen }: { quote: StockQuote; marketOpen: boo
 // 시세판 홈 (T-401/Phase 8): 지수 + 내 자산 + 전 종목 전광판 + 뉴스 하이라이트
 export default function Home() {
   const { data, isLoading } = useQuotes();
-  const [sort, setSort] = useState<SortMode>("default");
+  const [sort, setSort] = useState<SortMode>("marketCap");
 
-  // 기본은 등록순(서버 code 정렬), 등락률순은 표시용 재정렬
-  const quotes =
-    sort === "change" && data
-      ? [...data.quotes].sort((a, b) => b.changePercent - a.changePercent)
-      : data?.quotes;
+  const quotes = data ? sortQuotes(data.quotes, sort) : undefined;
 
   return (
     <div className="flex flex-col gap-4">
@@ -114,12 +132,7 @@ export default function Home() {
       <PopularStocks />
 
       <div className="flex justify-end gap-1">
-        {(
-          [
-            { value: "default", label: "등록순" },
-            { value: "change", label: "등락률순" },
-          ] as const
-        ).map((option) => (
+        {SORT_OPTIONS.map((option) => (
           <Button
             key={option.value}
             variant="ghost"
@@ -127,7 +140,9 @@ export default function Home() {
             onClick={() => setSort(option.value)}
             className={cn(
               "h-7 px-2 text-xs",
-              sort === option.value ? "text-foreground" : "text-muted-foreground"
+              sort === option.value
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground"
             )}
           >
             {option.label}
