@@ -9,6 +9,7 @@ export interface QuoteBoardDto {
   marketState: MarketState;
   asOf: string;
   haltedUntil: string | null;
+  market: { openHour: number; closeHour: number; closedWeekdays: number[] };
   indices: IndexQuote[];
   quotes: StockQuote[];
 }

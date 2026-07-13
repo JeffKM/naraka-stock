@@ -16,6 +16,20 @@ import { formatMoney } from "@/lib/market";
 
 const TIER_LABEL = { stable: "우량주", normal: "일반주", wild: "테마주" } as const;
 
+const WEEKDAY_LABEL = ["", "월", "화", "수", "목", "금", "토", "일"];
+
+// 장 운영 안내 문구: "매일 12:00~22:00" / "수~일 15:00~22:00 (월·화 휴장)" 등
+function marketHoursLabel(market: {
+  openHour: number;
+  closeHour: number;
+  closedWeekdays: number[];
+}): string {
+  const time = `${market.openHour}:00~${market.closeHour}:00`;
+  if (market.closedWeekdays.length === 0) return `매일 ${time}`;
+  const closed = market.closedWeekdays.map((d) => WEEKDAY_LABEL[d]).join("·");
+  return `${time} (${closed} 휴장)`;
+}
+
 type SortMode = "default" | "change";
 
 // 시세판 홈 (T-401/Phase 8): 지수 + 내 자산 + 전 종목 전광판 + 뉴스 하이라이트
@@ -129,7 +143,7 @@ export default function Home() {
       <NewsHighlight />
 
       <p className="text-center text-xs text-muted-foreground">
-        시세는 5분마다 갱신됩니다 · 장 시간 수~일 15:00~22:00
+        시세는 5분마다 갱신됩니다{data?.market ? ` · 장 시간 ${marketHoursLabel(data.market)}` : ""}
       </p>
     </div>
   );

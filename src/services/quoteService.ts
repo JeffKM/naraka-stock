@@ -1,6 +1,6 @@
 import "server-only";
-import { getKstParts, getMarketState, getTickIndex } from "@/lib/market";
-import { loadMarketHours } from "@/lib/marketHours";
+import { getKstParts, getMarketState, getTickIndex, ticksPerDay } from "@/lib/market";
+import { loadMarketConfig } from "@/lib/marketHours";
 import { PRICE_LIMIT_RATE } from "@/lib/engine/randomWalk";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import {
@@ -14,6 +14,7 @@ export interface QuoteBoard {
   marketState: MarketState;
   asOf: string; // 기준 시각 (ISO)
   haltedUntil: string | null; // 서킷브레이커 해제 시각 (발동 중일 때만)
+  market: { openHour: number; closeHour: number; closedWeekdays: number[] }; // 장 운영 안내용
   indices: IndexQuote[]; // 나스피/나스닥 (Phase 8)
   quotes: StockQuote[];
 }
@@ -24,8 +25,8 @@ export interface QuoteBoard {
 // - 개장 전·휴장일: 직전 개장일 종가 (등락률 0)
 export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard> {
   const supabase = getSupabaseAdmin();
-  const hours = await loadMarketHours(); // config 기반 장 시간 (임시 개장 대응)
-  let state: MarketState = getMarketState(now, hours);
+  const { hours, rules } = await loadMarketConfig(); // 어드민이 조절하는 장 시간·휴장 규칙
+  let state: MarketState = getMarketState(now, hours, rules);
   const { date: today, hour } = getKstParts(now);
 
   // 서킷브레이커 (어드민 수동 발동, T-405/T-604) — 장중에만 의미 있음
@@ -78,12 +79,12 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
     }
   }
 
-  // 현재 참조할 틱 인덱스: 장중이면 현재 틱, 마감 후면 83, 그 외 null
+  // 현재 참조할 틱 인덱스: 장중이면 현재 틱, 마감 후면 마지막 틱, 그 외 null
   let tickIndex: number | null = null;
   if (state === "open" || state === "halted") {
-    tickIndex = getTickIndex(now, hours); // CB 중에도 가격은 현재 틱에서 동결 표시
+    tickIndex = getTickIndex(now, hours, rules); // CB 중에도 가격은 현재 틱에서 동결 표시
   } else if (state === "closed" && hour >= hours.closeHour) {
-    tickIndex = 83; // 오늘 장 마감 직후 → 오늘 종가
+    tickIndex = ticksPerDay(hours) - 1; // 오늘 장 마감 직후 → 오늘 종가
   }
 
   const prices: Record<string, { price: number; isHalted: boolean }> = {};
@@ -101,9 +102,12 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
     for (const row of tickRows) {
       (sparks[row.stock_code] ??= []).push(row.price);
       (pathByStock[row.stock_code] ??= {})[row.tick_index] = row.price;
-      if (row.tick_index === tickIndex) {
-        prices[row.stock_code] = { price: row.price, isHalted: row.is_halted };
-      }
+      // 마지막 틱(오름차순 마지막 행)을 현재가로 쓴다 — 장 시간이 운영 중
+      // 늘어나 오늘 경로가 현재 틱보다 짧아도 종가에서 동결 표시된다
+      prices[row.stock_code] = {
+        price: row.price,
+        isHalted: row.tick_index === tickIndex && row.is_halted,
+      };
     }
   }
 
@@ -166,5 +170,16 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
     };
   });
 
-  return { marketState: state, asOf: now.toISOString(), haltedUntil, indices, quotes };
+  return {
+    marketState: state,
+    asOf: now.toISOString(),
+    haltedUntil,
+    market: {
+      openHour: hours.openHour,
+      closeHour: hours.closeHour,
+      closedWeekdays: rules.closedWeekdays ?? [],
+    },
+    indices,
+    quotes,
+  };
 }

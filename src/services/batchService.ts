@@ -8,9 +8,18 @@ import {
   type DailyMove,
   type GeneratedNews,
 } from "@/lib/news/generate";
-import { addDays, getKstParts, isOpenDate, type OpenDayRules } from "@/lib/market";
+import {
+  addDays,
+  getKstParts,
+  isOpenDate,
+  ticksPerDay,
+  MARKET_CLOSE_HOUR,
+  MARKET_OPEN_HOUR,
+  type OpenDayRules,
+} from "@/lib/market";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { recordIndexCloses } from "@/services/indexService";
+import { loadDayLastTicks } from "@/services/tickService";
 import type { StockTier } from "@/types/domain";
 
 // 일일 배치 (T-204): 매일 22:00 실행
@@ -34,6 +43,7 @@ interface ConfigMap {
   eventEnd: string;
   dividendPercent: number;
   rules: OpenDayRules;
+  ticksPerDay: number; // 장 시간에서 파생 (12~22시면 120틱)
 }
 
 async function loadConfig(): Promise<ConfigMap> {
@@ -46,9 +56,14 @@ async function loadConfig(): Promise<ConfigMap> {
     eventEnd: map.event_end,
     dividendPercent: Number(map.dividend_percent ?? 1),
     rules: {
+      closedWeekdays: map.closed_weekdays ?? undefined,
       holidayExceptions: map.holiday_exceptions ?? [],
       extraOpenDays: map.extra_open_days ?? [],
     },
+    ticksPerDay: ticksPerDay({
+      openHour: Number(map.market_open_hour ?? MARKET_OPEN_HOUR),
+      closeHour: Number(map.market_close_hour ?? MARKET_CLOSE_HOUR),
+    }),
   };
 }
 
@@ -98,7 +113,8 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
         prevClose,
         realizeBias(biases[stock.code], rng),
         stock.tier as StockTier,
-        rng
+        rng,
+        config.ticksPerDay
       );
       summaries.push({
         stock_code: stock.code,
@@ -157,7 +173,7 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
   });
   if (error) throw error;
 
-  // 지수 종가 기록 (틱 83 기준, upsert라 재실행 안전) — 정산일에만 의미 있음
+  // 지수 종가 기록 (마지막 틱 기준, upsert라 재실행 안전) — 정산일에만 의미 있음
   if (todayOpen) {
     await recordIndexCloses(today);
   }
@@ -173,20 +189,15 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
   };
 }
 
-// 오늘의 실제 등락 (공시 생성용): 종가(틱83) vs 직전 개장일 종가
+// 오늘의 실제 등락 (공시 생성용): 종가(마지막 틱) vs 직전 개장일 종가
 async function loadTodayMoves(
   today: string,
   stocks: Array<{ code: string; name: string }>
 ): Promise<DailyMove[]> {
   const supabase = getSupabaseAdmin();
 
-  const { data: closesRows, error: closesError } = await supabase
-    .from("daily_ticks")
-    .select("stock_code, price")
-    .eq("date", today)
-    .eq("tick_index", 83);
-  if (closesError) throw closesError;
-  if (closesRows.length === 0) return []; // 오늘 틱 없음 (리허설 첫날 등)
+  const lastTicks = await loadDayLastTicks(today);
+  if (Object.keys(lastTicks).length === 0) return []; // 오늘 틱 없음 (리허설 첫날 등)
 
   const { data: prevRows, error: prevError } = await supabase
     .from("daily_summary")
@@ -200,7 +211,9 @@ async function loadTodayMoves(
     if (!(row.stock_code in prevCloses)) prevCloses[row.stock_code] = row.close;
   }
 
-  const todayCloses = Object.fromEntries(closesRows.map((r) => [r.stock_code, r.price]));
+  const todayCloses = Object.fromEntries(
+    Object.entries(lastTicks).map(([code, t]) => [code, t.price])
+  );
 
   return stocks.flatMap((stock) => {
     const close = todayCloses[stock.code];
@@ -231,14 +244,11 @@ async function loadPrevCloses(
 
   if (todayOpen) {
     // 오늘 개장일: 오늘 경로의 마지막 틱이 오늘 종가
-    const { data, error } = await supabase
-      .from("daily_ticks")
-      .select("stock_code, price")
-      .eq("date", today)
-      .eq("tick_index", 83);
-    if (error) throw error;
-    if (data.length > 0) {
-      return Object.fromEntries(data.map((r) => [r.stock_code, r.price]));
+    const lastTicks = await loadDayLastTicks(today);
+    if (Object.keys(lastTicks).length > 0) {
+      return Object.fromEntries(
+        Object.entries(lastTicks).map(([code, t]) => [code, t.price])
+      );
     }
     // 오늘 틱이 없으면(개장 첫날 전 리허설 등) 최근 요약으로 폴백
   }

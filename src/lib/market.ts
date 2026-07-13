@@ -1,16 +1,17 @@
 // 장 운영 시간·틱 계산 유틸 (KST 기준 순수 함수)
 //
-// 기본 규칙 (PRD §2): 개장일(수~일) 15:00~22:00, 월·화 휴장, 5분 틱 84개.
-// DB config의 예외일(holiday_exceptions / extra_open_days)은 서버 로직에서
-// 이 함수들의 결과 위에 덧씌운다 (Phase 2에서 연결).
+// 기본 규칙 (PRD §2 초안: 수~일 15:00~22:00)에서 출발하되, 실제 운영값은
+// 전부 DB config(market_open_hour / market_close_hour / closed_weekdays /
+// holiday_exceptions / extra_open_days)로 어드민이 조절한다.
+// 하루 틱 수도 장 시간에서 파생된다 — ticksPerDay(hours).
 
 import type { MarketState } from "@/types/domain";
 
 export const MARKET_OPEN_HOUR = 15;
 export const MARKET_CLOSE_HOUR = 22;
 export const TICK_INTERVAL_MINUTES = 5;
-export const TICKS_PER_DAY = 84; // (22 - 15) * 60 / 5
-export const CLOSED_WEEKDAYS = [1, 2]; // ISO 요일: 1=월, 2=화 (나라카 휴무일)
+export const TICKS_PER_DAY = 84; // 기본 장 시간 기준 — 엔진 밸런스의 기준 틱 수
+export const CLOSED_WEEKDAYS = [1, 2]; // 기본값 (config.closed_weekdays로 오버라이드)
 
 export const CURRENCY_LABEL = "원"; // 화폐 명칭 (사장님 확정 2026-07-11)
 
@@ -59,32 +60,39 @@ export const DEFAULT_MARKET_HOURS: MarketHours = {
   closeHour: MARKET_CLOSE_HOUR,
 };
 
-// 개장일 여부 (요일 기반 기본 규칙)
-export function isOpenDay(now: Date = new Date()): boolean {
-  return !CLOSED_WEEKDAYS.includes(getKstParts(now).isoWeekday);
+// 장 시간 기준 하루 틱 수 (12~22시면 120틱)
+export function ticksPerDay(hours: MarketHours = DEFAULT_MARKET_HOURS): number {
+  return ((hours.closeHour - hours.openHour) * 60) / TICK_INTERVAL_MINUTES;
+}
+
+// 개장일 여부 (요일 규칙 + 예외일)
+export function isOpenDay(now: Date = new Date(), rules: OpenDayRules = {}): boolean {
+  return isOpenDate(getKstParts(now).date, rules);
 }
 
 // 현재 장 상태 (서킷브레이커는 DB 상태라 여기서 판정하지 않는다)
 export function getMarketState(
   now: Date = new Date(),
-  hours: MarketHours = DEFAULT_MARKET_HOURS
+  hours: MarketHours = DEFAULT_MARKET_HOURS,
+  rules: OpenDayRules = {}
 ): Exclude<MarketState, "halted"> {
-  if (!isOpenDay(now)) return "holiday";
+  if (!isOpenDay(now, rules)) return "holiday";
   const { hour } = getKstParts(now);
   return hour >= hours.openHour && hour < hours.closeHour ? "open" : "closed";
 }
 
-// 현재 시각의 틱 인덱스 (0~83). 장외 시간이면 null.
+// 현재 시각의 틱 인덱스 (0 ~ ticksPerDay-1). 장외 시간이면 null.
 export function getTickIndex(
   now: Date = new Date(),
-  hours: MarketHours = DEFAULT_MARKET_HOURS
+  hours: MarketHours = DEFAULT_MARKET_HOURS,
+  rules: OpenDayRules = {}
 ): number | null {
-  if (getMarketState(now, hours) !== "open") return null;
+  if (getMarketState(now, hours, rules) !== "open") return null;
   const { hour, minute } = getKstParts(now);
   const minutesSinceOpen = (hour - hours.openHour) * 60 + minute;
   return Math.min(
     Math.floor(minutesSinceOpen / TICK_INTERVAL_MINUTES),
-    TICKS_PER_DAY - 1
+    ticksPerDay(hours) - 1
   );
 }
 
@@ -115,8 +123,9 @@ export function formatCompactMoney(amount: number): string {
 // ---------------------------------------------------------------------------
 
 export interface OpenDayRules {
+  closedWeekdays?: number[]; // 정기 휴장 요일 (ISO 1=월~7=일, 기본 [1,2])
   holidayExceptions?: string[]; // 임시 휴장일
-  extraOpenDays?: string[]; // 월·화인데 여는 날
+  extraOpenDays?: string[]; // 휴장 요일인데 여는 날
 }
 
 export function isoWeekdayOfDate(dateStr: string): number {
@@ -134,5 +143,5 @@ export function addDays(dateStr: string, days: number): string {
 export function isOpenDate(dateStr: string, rules: OpenDayRules = {}): boolean {
   if (rules.extraOpenDays?.includes(dateStr)) return true;
   if (rules.holidayExceptions?.includes(dateStr)) return false;
-  return !CLOSED_WEEKDAYS.includes(isoWeekdayOfDate(dateStr));
+  return !(rules.closedWeekdays ?? CLOSED_WEEKDAYS).includes(isoWeekdayOfDate(dateStr));
 }

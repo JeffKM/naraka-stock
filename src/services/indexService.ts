@@ -1,6 +1,7 @@
 import "server-only";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { ApiException } from "@/lib/api/response";
+import { loadDayLastTicks } from "@/services/tickService";
 import type { IndexQuote, StockTier } from "@/types/domain";
 
 // 시장 지수 (Phase 8): 나스피/나스닥 — 시총가중 체인
@@ -213,19 +214,16 @@ export async function adjustDivisorsForTierChange(
   }
 }
 
-// 일일 배치 정산: 오늘 지수 종가 기록 (종가 = 틱 83 가격 기준, 멱등 upsert)
+// 일일 배치 정산: 오늘 지수 종가 기록 (종가 = 마지막 틱 가격, 멱등 upsert)
 export async function recordIndexCloses(date: string): Promise<number> {
   const supabase = getSupabaseAdmin();
 
-  const { data: closeRows, error: closeError } = await supabase
-    .from("daily_ticks")
-    .select("stock_code, price")
-    .eq("date", date)
-    .eq("tick_index", 83);
-  if (closeError) throw closeError;
-  if (!closeRows || closeRows.length === 0) return 0; // 오늘 틱 없음 (휴장·리허설 첫날)
+  const lastTicks = await loadDayLastTicks(date);
+  if (Object.keys(lastTicks).length === 0) return 0; // 오늘 틱 없음 (휴장·리허설 첫날)
 
-  const tickCloses = Object.fromEntries(closeRows.map((r) => [r.stock_code, r.price]));
+  const tickCloses = Object.fromEntries(
+    Object.entries(lastTicks).map(([code, t]) => [code, t.price])
+  );
   const [indices, members, fallbackCloses] = await Promise.all([
     loadIndices(),
     loadMembers(),

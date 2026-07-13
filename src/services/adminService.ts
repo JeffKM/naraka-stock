@@ -2,8 +2,8 @@ import "server-only";
 import { ApiException } from "@/lib/api/response";
 import { regenerateRemainingPath } from "@/lib/engine/randomWalk";
 import { createRng } from "@/lib/engine/rng";
-import { getKstParts, getTickIndex, addDays } from "@/lib/market";
-import { loadMarketHours } from "@/lib/marketHours";
+import { getKstParts, getTickIndex, addDays, ticksPerDay } from "@/lib/market";
+import { loadMarketConfig } from "@/lib/marketHours";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import {
   adjustDivisorForListing,
@@ -164,7 +164,8 @@ export async function triggerSurpriseEvent(
 ): Promise<{ fromTick: number; replaced: number }> {
   const supabase = getSupabaseAdmin();
   const { date: today } = getKstParts();
-  const currentTick = getTickIndex();
+  const { hours, rules } = await loadMarketConfig();
+  const currentTick = getTickIndex(new Date(), hours, rules);
   if (currentTick === null) {
     throw new ApiException("MARKET_CLOSED", "장중에만 발동할 수 있습니다.");
   }
@@ -208,7 +209,8 @@ export async function triggerSurpriseEvent(
     currentTick,
     bias,
     stock.tier as StockTier,
-    rng
+    rng,
+    ticksPerDay(hours)
   );
 
   const { data: replaced, error: rpcError } = await supabase.rpc("replace_future_ticks", {
@@ -252,6 +254,43 @@ export async function resetRehearsalData(): Promise<ResetResult> {
   });
   if (error) throw error;
   return data as ResetResult;
+}
+
+// ── 장 운영 설정 (개장 시간·휴장 요일·예외일) ───────────────────
+
+export interface MarketSettings {
+  openHour: number;
+  closeHour: number;
+  closedWeekdays: number[]; // ISO 1=월 ~ 7=일
+  holidayExceptions: string[]; // 임시 휴장일 (YYYY-MM-DD)
+  extraOpenDays: string[]; // 휴장 요일인데 여는 날
+}
+
+export async function getMarketSettings(): Promise<MarketSettings> {
+  const { hours, rules } = await loadMarketConfig();
+  return {
+    openHour: hours.openHour,
+    closeHour: hours.closeHour,
+    closedWeekdays: rules.closedWeekdays ?? [],
+    holidayExceptions: rules.holidayExceptions ?? [],
+    extraOpenDays: rules.extraOpenDays ?? [],
+  };
+}
+
+// 장 시간 변경은 익일 배치 경로부터 완전 반영된다. 이미 생성된 오늘 경로는
+// 틱 수가 그대로라, 장이 길어지면 종가 동결 구간이 생긴다 (quotes가 마지막
+// 틱으로 폴백). 짧아지면 남은 틱은 그냥 안 쓰인다.
+export async function updateMarketSettings(input: MarketSettings): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const rows = [
+    { key: "market_open_hour", value: input.openHour },
+    { key: "market_close_hour", value: input.closeHour },
+    { key: "closed_weekdays", value: input.closedWeekdays },
+    { key: "holiday_exceptions", value: input.holidayExceptions },
+    { key: "extra_open_days", value: input.extraOpenDays },
+  ];
+  const { error } = await supabase.from("config").upsert(rows);
+  if (error) throw error;
 }
 
 // ── 종목 관리 (신규 상장·등급 변경) ─────────────────────────────
@@ -318,8 +357,8 @@ export async function createStock(
   await adjustDivisorForListing(input.code, today);
 
   // 장중 상장이면 현재 틱부터 오늘 남은 경로 생성 (상장가에서 출발, 중립 드리프트)
-  const hours = await loadMarketHours();
-  const currentTick = getTickIndex(new Date(), hours);
+  const { hours, rules } = await loadMarketConfig();
+  const currentTick = getTickIndex(new Date(), hours, rules);
   if (currentTick === null) {
     return { tradableNow: false };
   }
@@ -331,7 +370,8 @@ export async function createStock(
     currentTick - 1, // 현재 틱부터 생성
     0,
     input.tier,
-    rng
+    rng,
+    ticksPerDay(hours)
   );
   const { error: rpcError } = await supabase.rpc("replace_future_ticks", {
     p_stock_code: input.code,
