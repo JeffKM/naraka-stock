@@ -22,7 +22,7 @@ export default function AdminPage() {
 
   if (isLoading) return null;
   if (!me?.isAdmin) {
-    return <p className="py-16 text-center text-muted-foreground">접근 권한이 없습니다 👺</p>;
+    return <p className="py-16 text-center text-muted-foreground">접근 권한이 없습니다</p>;
   }
 
   return (
