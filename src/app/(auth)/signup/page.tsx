@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -26,6 +27,7 @@ type FormValues = z.infer<typeof formSchema>;
 
 export default function SignupPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const {
     register,
     handleSubmit,
@@ -40,6 +42,8 @@ export default function SignupPage() {
         // 한글 IME 잔여물 방지: 제출 직전에도 한 번 더 영문 변환
         password: hangulToQwerty(values.password),
       });
+      // 가입은 자동 로그인이므로 캐시된 비로그인 상태(me 등)를 비워 헤더가 즉시 갱신되게 한다
+      queryClient.clear();
       toast.success("계좌 개설 완료! 1,000,000원이 지급되었습니다 👹");
       router.push("/");
       router.refresh();

@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -17,6 +18,7 @@ import { loginSchema, type LoginInput } from "@/lib/validation/auth";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const {
     register,
     handleSubmit,
@@ -27,6 +29,8 @@ function LoginForm() {
     try {
       // 한글 IME 잔여물 방지: 제출 직전에도 한 번 더 영문 변환
       await postJson("/api/auth/login", { ...values, password: hangulToQwerty(values.password) });
+      // 로그인 전 캐시된 비로그인 상태(me 등)를 비워 헤더 버튼·잔고가 즉시 갱신되게 한다
+      queryClient.clear();
       // 보호 라우트에서 넘어온 경우 원래 목적지로 (외부 URL 방지: 경로만 허용)
       const next = searchParams.get("next");
       router.push(next?.startsWith("/") ? next : "/");
