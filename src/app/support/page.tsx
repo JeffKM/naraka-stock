@@ -11,9 +11,9 @@ import { getJson, postJson } from "@/lib/api/client";
 import type { SupportCategory, SupportPost } from "@/types/domain";
 
 const CATEGORIES: Array<{ value: SupportCategory; label: string }> = [
-  { value: "bug", label: "🐛 버그 신고" },
-  { value: "inquiry", label: "❓ 문의" },
-  { value: "suggestion", label: "💡 건의" },
+  { value: "bug", label: "버그 신고" },
+  { value: "inquiry", label: "문의" },
+  { value: "suggestion", label: "건의" },
 ];
 
 const CATEGORY_LABEL = Object.fromEntries(CATEGORIES.map((c) => [c.value, c.label]));
@@ -45,7 +45,7 @@ export default function SupportPage() {
     setSubmitting(true);
     try {
       await postJson("/api/support", { category, content: content.trim() });
-      toast.success("접수 완료! 확인하는 대로 답변을 남겨드릴게요 👹");
+      toast.success("접수 완료! 확인하는 대로 답변을 남겨드릴게요.");
       setContent("");
       queryClient.invalidateQueries({ queryKey: ["support"] });
     } catch (error) {
@@ -121,7 +121,7 @@ export default function SupportPage() {
               <p className="whitespace-pre-wrap text-sm">{post.content}</p>
               {post.reply && (
                 <div className="rounded-lg border border-primary/30 bg-primary/5 p-2.5">
-                  <p className="mb-1 text-xs font-medium text-primary">👹 나라카 답변</p>
+                  <p className="mb-1 text-xs font-medium text-primary">나라카 답변</p>
                   <p className="whitespace-pre-wrap text-sm">{post.reply}</p>
                 </div>
               )}

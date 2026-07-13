@@ -869,9 +869,9 @@ function ManualNewsSection() {
 }
 
 const SUPPORT_CATEGORY_LABEL: Record<string, string> = {
-  bug: "🐛 버그",
-  inquiry: "❓ 문의",
-  suggestion: "💡 건의",
+  bug: "버그",
+  inquiry: "문의",
+  suggestion: "건의",
 };
 
 // 고객센터 문의 관리: 미처리 문의 확인 → 답변 저장/완료 처리
@@ -900,7 +900,7 @@ function SupportSection() {
       <CardContent className="flex flex-col divide-y divide-border/60">
         {data?.posts.length === 0 && (
           <p className="py-4 text-center text-sm text-muted-foreground">
-            {showDone ? "문의가 없습니다" : "미처리 문의가 없습니다 🎉"}
+            {showDone ? "문의가 없습니다" : "미처리 문의가 없습니다"}
           </p>
         )}
         {data?.posts.map((post) => (
