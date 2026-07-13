@@ -166,7 +166,8 @@ export async function setCircuitBreaker(minutes: number | null): Promise<{ until
 }
 
 // 시세 조정: 특정 종목의 남은 오늘 경로를 새 편향으로 재생성.
-// durationMinutes를 주면 그 시간 동안만 편향이 걸리고 이후는 중립으로 이어진다.
+// durationMinutes를 주면 그 시간 동안만 편향이 걸리고, 이후는 그날 배치가
+// 추첨했던 원래 편향의 드리프트로 복귀한다 (뉴스 예고와 흐름이 어긋나지 않게).
 export async function triggerSurpriseEvent(
   stockCode: string,
   bias: number,
@@ -211,6 +212,16 @@ export async function triggerSurpriseEvent(
   if (prevError) throw prevError;
   const prevClose = prevRows[0]?.close ?? currentRow.price;
 
+  // 창 종료 후 복귀할 편향: 그날 배치가 추첨한 값 (없으면 중립)
+  const { data: todayRow, error: todayError } = await supabase
+    .from("daily_summary")
+    .select("bias")
+    .eq("stock_code", stockCode)
+    .eq("date", today)
+    .maybeSingle();
+  if (todayError) throw todayError;
+  const resumeBias = todayRow?.bias ?? 0;
+
   // 어드민 발동은 예측 불가여야 하므로 시각 기반 시드
   const rng = createRng(Date.now() % 0xffffffff);
   const ticks = regenerateRemainingPath(
@@ -221,7 +232,8 @@ export async function triggerSurpriseEvent(
     stock.tier as StockTier,
     rng,
     ticksPerDay(hours),
-    durationMinutes === null ? null : Math.round(durationMinutes / TICK_INTERVAL_MINUTES)
+    durationMinutes === null ? null : Math.round(durationMinutes / TICK_INTERVAL_MINUTES),
+    resumeBias
   );
 
   const { data: replaced, error: rpcError } = await supabase.rpc("replace_future_ticks", {

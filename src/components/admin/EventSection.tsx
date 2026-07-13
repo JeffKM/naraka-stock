@@ -109,7 +109,7 @@ export function EventSection() {
         </div>
         <p className="text-xs text-muted-foreground">
           시세 조정은 지정 시간 동안 편향을 걸어 오늘 남은 경로를 다시 뽑습니다. 시간이
-          지나면 중립 흐름으로 이어집니다 (장중에만 가능)
+          지나면 그날 추첨된 원래 편향 흐름으로 복귀합니다 (장중에만 가능)
         </p>
       </CardContent>
     </Card>
