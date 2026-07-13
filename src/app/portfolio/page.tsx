@@ -152,6 +152,10 @@ export default function PortfolioPage() {
         </CardContent>
       </Card>
 
+      <Button variant="outline" asChild>
+        <Link href="/support">👹 고객센터 — 버그·문의 남기기</Link>
+      </Button>
+
       <Button variant="outline" onClick={logout}>
         로그아웃
       </Button>

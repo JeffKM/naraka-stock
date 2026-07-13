@@ -7,7 +7,7 @@ import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth/token";
 //
 // 어드민(사장님) 계정은 방문자 페이지가 필요 없으므로 항상 /admin으로 보낸다.
 
-const PROTECTED_PREFIXES = ["/portfolio", "/history", "/admin"];
+const PROTECTED_PREFIXES = ["/portfolio", "/history", "/support", "/admin"];
 const AUTH_PAGES = ["/login", "/signup"];
 
 export async function proxy(request: NextRequest) {

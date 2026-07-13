@@ -106,3 +106,22 @@ export interface RankingEntry {
   nickname: string;
   totalAssets: number; // 현금 + 보유주식 평가액 (원)
 }
+
+// 고객센터 게시글
+export type SupportCategory = "bug" | "inquiry" | "suggestion";
+export type SupportStatus = "open" | "done";
+
+export interface SupportPost {
+  id: number;
+  category: SupportCategory;
+  content: string;
+  status: SupportStatus;
+  reply: string | null; // 운영자 답변
+  repliedAt: string | null;
+  createdAt: string;
+}
+
+// 운영자 콘솔용 (작성자 닉네임 포함)
+export interface AdminSupportPost extends SupportPost {
+  nickname: string;
+}
