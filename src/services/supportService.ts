@@ -74,9 +74,9 @@ export async function listMySupportPosts(userId: number): Promise<SupportPost[]>
   return data.map(toPost);
 }
 
-// 운영자: 전체 목록 (status 지정 시 해당 상태만)
+// 운영자: 전체 목록 (status 지정 시 해당 상태만, "pending"은 답변완료 이전 전부)
 export async function listSupportPosts(
-  status: SupportStatus | null
+  status: SupportStatus | "pending" | null
 ): Promise<AdminSupportPost[]> {
   const supabase = getSupabaseAdmin();
   let builder = supabase
@@ -84,7 +84,9 @@ export async function listSupportPosts(
     .select("id, category, content, status, reply, replied_at, created_at, users(nickname)")
     .order("created_at", { ascending: false })
     .limit(100);
-  if (status) {
+  if (status === "pending") {
+    builder = builder.neq("status", "done");
+  } else if (status) {
     builder = builder.eq("status", status);
   }
   const { data, error } = await builder;

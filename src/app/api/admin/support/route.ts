@@ -3,14 +3,16 @@ import { requireAdmin } from "@/lib/auth/guards";
 import { supportAnswerSchema } from "@/lib/validation/support";
 import { answerSupportPost, listSupportPosts } from "@/services/supportService";
 
-// 문의 전체 목록 (?status=open|done 필터)
+// 문의 전체 목록 (?status=open|reviewing|done|pending 필터 — pending은 답변완료 이전 전부)
 export async function GET(request: Request) {
   try {
     await requireAdmin();
     const status = new URL(request.url).searchParams.get("status");
     return apiOk({
       posts: await listSupportPosts(
-        status === "open" || status === "done" ? status : null
+        status === "open" || status === "reviewing" || status === "done" || status === "pending"
+          ? status
+          : null
       ),
     });
   } catch (error) {

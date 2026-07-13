@@ -110,10 +110,14 @@ export default function SupportPage() {
                 <span className="flex items-center gap-2 text-xs text-muted-foreground">
                   {formatTime(post.createdAt)}
                   {post.status === "done" ? (
-                    <Badge className="px-1.5 text-[11px]">처리완료</Badge>
+                    <Badge className="px-1.5 text-[11px]">답변완료</Badge>
+                  ) : post.status === "reviewing" ? (
+                    <Badge variant="outline" className="px-1.5 text-[11px] text-primary">
+                      검토중
+                    </Badge>
                   ) : (
                     <Badge variant="secondary" className="px-1.5 text-[11px]">
-                      접수됨
+                      접수완료
                     </Badge>
                   )}
                 </span>

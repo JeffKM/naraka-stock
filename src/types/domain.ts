@@ -109,7 +109,8 @@ export interface RankingEntry {
 
 // 고객센터 게시글
 export type SupportCategory = "bug" | "inquiry" | "suggestion";
-export type SupportStatus = "open" | "done";
+// open 접수완료 / reviewing 검토중 / done 답변완료
+export type SupportStatus = "open" | "reviewing" | "done";
 
 export interface SupportPost {
   id: number;

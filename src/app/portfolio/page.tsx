@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TradeHistoryCard } from "@/components/portfolio/TradeHistoryCard";
 import { LiveTotalAssets } from "@/components/quotes/LiveTotalAssets";
 import { usePriceWiggle } from "@/hooks/usePriceWiggle";
 import { useQuotes } from "@/hooks/useQuotes";
@@ -170,9 +171,7 @@ export default function PortfolioPage() {
         </CardContent>
       </Card>
 
-      <Button variant="outline" asChild>
-        <Link href="/support">고객센터 — 버그·문의 남기기</Link>
-      </Button>
+      <TradeHistoryCard />
 
       <Button variant="outline" onClick={logout}>
         로그아웃

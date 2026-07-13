@@ -882,7 +882,7 @@ function SupportSection() {
     queryKey: ["admin-support", showDone],
     queryFn: () =>
       getJson<{ posts: AdminSupportPost[] }>(
-        `/api/admin/support${showDone ? "" : "?status=open"}`
+        `/api/admin/support${showDone ? "" : "?status=pending"}`
       ),
     refetchInterval: 60_000,
   });
@@ -916,7 +916,10 @@ function SupportPostItem({ post }: { post: AdminSupportPost }) {
   const [reply, setReply] = useState(post.reply ?? "");
   const [busy, setBusy] = useState(false);
 
-  async function update(body: { reply?: string; status?: "open" | "done" }, message: string) {
+  async function update(
+    body: { reply?: string; status?: "open" | "reviewing" | "done" },
+    message: string
+  ) {
     if (busy) return;
     setBusy(true);
     try {
@@ -953,9 +956,17 @@ function SupportPostItem({ post }: { post: AdminSupportPost }) {
         </span>
         <span className="flex items-center gap-2 text-xs text-muted-foreground">
           {time}
-          {post.status === "done" && (
+          {post.status === "done" ? (
             <Badge variant="secondary" className="px-1.5 text-[11px]">
-              완료
+              답변완료
+            </Badge>
+          ) : post.status === "reviewing" ? (
+            <Badge variant="outline" className="px-1.5 text-[11px] text-primary">
+              검토중
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="px-1.5 text-[11px]">
+              접수완료
             </Badge>
           )}
         </span>
@@ -976,7 +987,17 @@ function SupportPostItem({ post }: { post: AdminSupportPost }) {
         >
           답변하고 완료
         </Button>
-        {post.status === "open" ? (
+        {post.status === "open" && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            onClick={() => update({ status: "reviewing" }, "검토중으로 표시")}
+          >
+            검토중으로
+          </Button>
+        )}
+        {post.status !== "done" ? (
           <Button
             size="sm"
             variant="outline"
@@ -990,9 +1011,9 @@ function SupportPostItem({ post }: { post: AdminSupportPost }) {
             size="sm"
             variant="outline"
             disabled={busy}
-            onClick={() => update({ status: "open" }, "미처리로 되돌림")}
+            onClick={() => update({ status: "open" }, "접수완료로 되돌림")}
           >
-            미처리로
+            접수 상태로
           </Button>
         )}
       </div>

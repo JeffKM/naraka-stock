@@ -14,7 +14,7 @@ export const supportPostSchema = z.object({
 export const supportAnswerSchema = z.object({
   id: z.number().int(),
   reply: z.string().trim().max(1000, "답변은 1,000자 이하로 입력해주세요").optional(),
-  status: z.enum(["open", "done"]).optional(),
+  status: z.enum(["open", "reviewing", "done"]).optional(),
 });
 
 export type SupportPostInput = z.infer<typeof supportPostSchema>;
