@@ -16,7 +16,9 @@ export function SignupCodeSection() {
   const { data } = useQuery({
     queryKey: ["admin-signup-codes"],
     queryFn: () =>
-      getJson<{ unused: number; used: number }>("/api/admin/signup-codes"),
+      getJson<{ unused: number; used: number; unusedCodes: string[] }>(
+        "/api/admin/signup-codes",
+      ),
   });
 
   async function generate() {
@@ -53,11 +55,38 @@ export function SignupCodeSection() {
           <Button onClick={generate}>묶음 생성</Button>
         </div>
         {newCodes.length > 0 && (
-          <textarea
-            readOnly
-            className="h-32 w-full rounded-lg border bg-muted/40 p-2 font-mono text-xs"
-            value={newCodes.join("\n")}
-          />
+          <div className="flex flex-col gap-1">
+            <p className="text-xs text-muted-foreground">방금 생성된 코드</p>
+            <textarea
+              readOnly
+              className="h-32 w-full rounded-lg border bg-muted/40 p-2 font-mono text-xs"
+              value={newCodes.join("\n")}
+            />
+          </div>
+        )}
+        {data && data.unusedCodes.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                미사용 코드 전체 (오래된 순 — 위에서부터 사용)
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(data.unusedCodes.join("\n"));
+                  toast.success("미사용 코드를 복사했습니다");
+                }}
+              >
+                전체 복사
+              </Button>
+            </div>
+            <textarea
+              readOnly
+              className="h-48 w-full rounded-lg border bg-muted/40 p-2 font-mono text-xs"
+              value={data.unusedCodes.join("\n")}
+            />
+          </div>
         )}
       </CardContent>
     </Card>

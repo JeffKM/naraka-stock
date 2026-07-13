@@ -80,37 +80,27 @@ export async function createSignupCodes(count: number): Promise<string[]> {
   return codes;
 }
 
-export interface SignupCodeInfo {
-  code: string;
-  usedBy: string | null;
-  createdAt: string;
-}
-
 export async function listSignupCodes(): Promise<{
   unused: number;
   used: number;
-  recent: SignupCodeInfo[];
+  unusedCodes: string[];
 }> {
   const supabase = getSupabaseAdmin();
-  const [unused, used, recent] = await Promise.all([
-    supabase.from("signup_codes").select("code", { count: "exact", head: true }).is("used_by", null),
+  const [used, unusedList] = await Promise.all([
     supabase.from("signup_codes").select("code", { count: "exact", head: true }).not("used_by", "is", null),
+    // 오래된 코드부터 소진하도록 생성 순 정렬
     supabase
       .from("signup_codes")
-      .select("code, created_at, users(nickname)")
-      .order("created_at", { ascending: false })
-      .limit(50),
+      .select("code", { count: "exact" })
+      .is("used_by", null)
+      .order("created_at", { ascending: true }),
   ]);
-  if (recent.error) throw recent.error;
+  if (unusedList.error) throw unusedList.error;
 
   return {
-    unused: unused.count ?? 0,
+    unused: unusedList.count ?? unusedList.data.length,
     used: used.count ?? 0,
-    recent: recent.data.map((c) => ({
-      code: c.code,
-      usedBy: (c.users as unknown as { nickname: string } | null)?.nickname ?? null,
-      createdAt: c.created_at,
-    })),
+    unusedCodes: unusedList.data.map((c) => c.code),
   };
 }
 
