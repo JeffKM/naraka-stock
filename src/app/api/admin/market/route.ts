@@ -27,7 +27,7 @@ const settingsSchema = z
     message: "마감 시간은 개장 시간보다 늦어야 합니다",
   });
 
-// 장 운영 설정 변경 — 장 시간은 익일 배치 경로부터 완전 반영
+// 장 운영 설정 변경 — 오늘 경로는 즉시 재조정, 익일부터는 배치가 새 틱 수로 생성
 export async function PATCH(request: Request) {
   try {
     await requireAdmin();
@@ -35,13 +35,13 @@ export async function PATCH(request: Request) {
     if (!parsed.success) {
       return apiError("VALIDATION", parsed.error.issues[0].message);
     }
-    await updateMarketSettings({
+    const { reconciled } = await updateMarketSettings({
       ...parsed.data,
       closedWeekdays: [...new Set(parsed.data.closedWeekdays)].sort(),
       holidayExceptions: [...new Set(parsed.data.holidayExceptions)].sort(),
       extraOpenDays: [...new Set(parsed.data.extraOpenDays)].sort(),
     });
-    return apiOk({ ok: true });
+    return apiOk({ ok: true, reconciled });
   } catch (error) {
     return handleApiError(error);
   }

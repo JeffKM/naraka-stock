@@ -1,9 +1,11 @@
 import "server-only";
 import { ApiException } from "@/lib/api/response";
-import { regenerateRemainingPath } from "@/lib/engine/randomWalk";
+import { realizeBias } from "@/lib/engine/bias";
+import { generateDailyPath, regenerateRemainingPath, type Tick } from "@/lib/engine/randomWalk";
 import { createRng } from "@/lib/engine/rng";
 import {
   getKstParts,
+  getMarketState,
   getTickIndex,
   addDays,
   isOpenDate,
@@ -310,10 +312,147 @@ export async function getMarketSettings(): Promise<MarketSettingsView> {
   };
 }
 
-// 장 시간 변경은 익일 배치 경로부터 완전 반영된다. 이미 생성된 오늘 경로는
-// 틱 수가 그대로라, 장이 길어지면 종가 동결 구간이 생긴다 (quotes가 마지막
-// 틱으로 폴백). 짧아지면 남은 틱은 그냥 안 쓰인다.
-export async function updateMarketSettings(input: MarketSettings): Promise<void> {
+// 오늘 경로 재조정 결과 (장 시간 변경 직후 호출)
+export interface ReconcileResult {
+  adjustedStocks: number; // 경로가 재생성·연장·절단된 종목 수
+  totalTicks: number; // 새 장 시간 기준 하루 틱 수
+}
+
+// 장 시간이 바뀌면 이미 생성된 오늘 경로의 틱 수가 맞지 않는다.
+// (장 연장 → 남는 시간 종가 동결 / 단축 → 초과 틱 방치 → 정산 종가 오염)
+// 새 장 시간 기준으로 오늘 경로를 즉시 재조정한다:
+// - 개장 전: 하루 전체를 새 틱 수로 재생성 (잠정 요약 OHLC도 갱신)
+// - 장중: 지나간 틱은 보존. 동결 구간(경로 밖에서 마지막 틱 폴백으로 표시·체결된
+//   시간대)은 그 가격 그대로 평평하게 채우고, 이후 구간만 새로 만든다
+// - 폐장 후: 새 마감보다 뒤에 남은 초과 틱만 잘라낸다 (정산 정확성)
+export async function reconcileTodayTicks(): Promise<ReconcileResult | null> {
+  const supabase = getSupabaseAdmin();
+  const { hours, rules } = await loadMarketConfig();
+  const now = new Date();
+  const { date: today, hour } = getKstParts(now);
+  if (!isOpenDate(today, rules)) return null;
+
+  const totalTicks = ticksPerDay(hours);
+
+  // 오늘 경로 전체 로드 (종목 8~10개 × 최대 288틱 — 메모리 처리에 무리 없음)
+  const { data: tickRows, error: tickError } = await supabase
+    .from("daily_ticks")
+    .select("stock_code, tick_index, price")
+    .eq("date", today)
+    .order("tick_index", { ascending: true });
+  if (tickError) throw tickError;
+  if (!tickRows || tickRows.length === 0) return null; // 오늘 경로 없음 (배치 전)
+
+  const byStock = new Map<string, Array<{ tick_index: number; price: number }>>();
+  for (const row of tickRows) {
+    const list = byStock.get(row.stock_code) ?? [];
+    list.push(row);
+    byStock.set(row.stock_code, list);
+  }
+
+  const [stocksRes, prevRes, todayRes] = await Promise.all([
+    supabase.from("stocks").select("code, tier").eq("listed", true),
+    supabase
+      .from("daily_summary")
+      .select("stock_code, date, close")
+      .lt("date", today)
+      .order("date", { ascending: false }),
+    supabase.from("daily_summary").select("stock_code, bias").eq("date", today),
+  ]);
+  if (stocksRes.error) throw stocksRes.error;
+  if (prevRes.error) throw prevRes.error;
+  if (todayRes.error) throw todayRes.error;
+
+  const prevCloses: Record<string, number> = {};
+  for (const row of prevRes.data) {
+    if (!(row.stock_code in prevCloses)) prevCloses[row.stock_code] = row.close;
+  }
+  const biases: Record<string, number> = Object.fromEntries(
+    todayRes.data.map((r) => [r.stock_code, r.bias])
+  );
+
+  const state = getMarketState(now, hours, rules);
+  const rng = createRng(Date.now() % 0xffffffff);
+  let adjustedStocks = 0;
+
+  for (const stock of stocksRes.data) {
+    const ticks = byStock.get(stock.code);
+    if (!ticks || ticks.length === 0) continue; // 장중 신규 상장 등은 createStock이 처리
+    const lastIndex = ticks[ticks.length - 1].tick_index;
+    const tier = stock.tier as StockTier;
+    const bias = biases[stock.code] ?? 0;
+    const prevClose = prevCloses[stock.code] ?? ticks[0].price;
+
+    let fromTick: number;
+    let newTicks: Tick[];
+
+    if (state === "open") {
+      if (lastIndex === totalTicks - 1) continue; // 이미 새 틱 수와 일치
+      const currentTick = getTickIndex(now, hours, rules) ?? 0;
+      const anchor = Math.min(currentTick, lastIndex);
+      const anchorPrice = ticks[Math.min(anchor, ticks.length - 1)].price;
+      // 동결 구간(경로 끝 ~ 현재)은 표시·체결됐던 마지막 틱 가격 그대로 채운다
+      const flat: Tick[] = [];
+      for (let i = lastIndex + 1; i <= Math.min(currentTick, totalTicks - 1); i++) {
+        flat.push({ tickIndex: i, price: anchorPrice, isHalted: false });
+      }
+      fromTick = anchor;
+      newTicks = [
+        ...flat,
+        // 편향 창 1틱(사실상 무편향) 후 그날 추첨 편향의 드리프트로 흐른다
+        ...regenerateRemainingPath(
+          prevClose,
+          anchorPrice,
+          Math.max(currentTick, anchor),
+          0,
+          tier,
+          rng,
+          totalTicks,
+          1,
+          bias
+        ),
+      ];
+    } else if (hour < hours.openHour) {
+      // 개장 전: 하루 전체 재생성 + 잠정 요약 OHLC 갱신
+      if (lastIndex === totalTicks - 1) continue;
+      const path = generateDailyPath(prevClose, realizeBias(bias, rng), tier, rng, totalTicks);
+      fromTick = -1;
+      newTicks = path.ticks;
+      const { error: summaryError } = await supabase
+        .from("daily_summary")
+        .update({ open: path.open, high: path.high, low: path.low, close: path.close })
+        .eq("stock_code", stock.code)
+        .eq("date", today);
+      if (summaryError) throw summaryError;
+    } else {
+      // 폐장 후: 새 마감 이후로 남은 초과 틱 절단 (마지막 틱 = 종가 보정)
+      if (lastIndex <= totalTicks - 1) continue;
+      fromTick = totalTicks - 1;
+      newTicks = [];
+    }
+
+    const { error: rpcError } = await supabase.rpc("replace_future_ticks", {
+      p_stock_code: stock.code,
+      p_date: today,
+      p_from_tick: fromTick,
+      p_ticks: newTicks.map((t) => ({
+        tick_index: t.tickIndex,
+        price: t.price,
+        is_halted: t.isHalted,
+      })),
+    });
+    if (rpcError) throw rpcError;
+    adjustedStocks++;
+  }
+
+  return adjustedStocks > 0 ? { adjustedStocks, totalTicks } : null;
+}
+
+// 장 시간 변경 시 익일 배치 경로는 자동으로 새 틱 수로 생성되고,
+// 이미 생성된 오늘 경로는 reconcileTodayTicks가 즉시 재조정한다.
+export async function updateMarketSettings(
+  input: MarketSettings
+): Promise<{ reconciled: ReconcileResult | null }> {
   const supabase = getSupabaseAdmin();
   const rows = [
     { key: "market_open_hour", value: input.openHour },
@@ -324,16 +463,16 @@ export async function updateMarketSettings(input: MarketSettings): Promise<void>
   ];
   const { error } = await supabase.from("config").upsert(rows);
   if (error) throw error;
+  return { reconciled: await reconcileTodayTicks() };
 }
 
 // 당일 장 시간 오버라이드: 자정 폐장 후 ~ 당일 개장 전에만 설정할 수 있다.
 // 설정하지 않으면 기본 장 시간대로 흐르고, 날짜가 지나면 자동 무시된다.
-// 오늘 경로(틱)는 이미 기본 장 시간 기준으로 생성돼 있으므로, 늦게 열거나
-// 일찍 닫으면 경로 일부만 쓰이고, 더 일찍 열면 남는 구간은 종가 동결이다.
+// 오늘 경로는 기본 장 시간 기준으로 생성돼 있으므로 즉시 새 틱 수로 재생성한다.
 export async function setTodayMarketHours(
   openHour: number,
   closeHour: number
-): Promise<{ date: string }> {
+): Promise<{ date: string; reconciled: ReconcileResult | null }> {
   const supabase = getSupabaseAdmin();
   const { hours, rules } = await loadMarketConfig();
   const { date: today, hour } = getKstParts();
@@ -356,10 +495,12 @@ export async function setTodayMarketHours(
     value: { date: today, openHour, closeHour },
   });
   if (error) throw error;
-  return { date: today };
+  return { date: today, reconciled: await reconcileTodayTicks() };
 }
 
-export async function clearTodayMarketHours(): Promise<void> {
+export async function clearTodayMarketHours(): Promise<{
+  reconciled: ReconcileResult | null;
+}> {
   const supabase = getSupabaseAdmin();
   const { hours, todayOverride } = await loadMarketConfig();
 
@@ -376,6 +517,7 @@ export async function clearTodayMarketHours(): Promise<void> {
     .delete()
     .eq("key", "market_hours_override");
   if (error) throw error;
+  return { reconciled: await reconcileTodayTicks() };
 }
 
 // ── 종목 관리 (신규 상장·등급 변경) ─────────────────────────────

@@ -7,42 +7,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { postJson } from "@/lib/api/client";
-import { useQuotes } from "@/hooks/useQuotes";
 
-// 시세 조정 적용 시간 선택지 (30분 단위, ""는 남은 시간 전체)
-const DURATION_OPTIONS = [30, 60, 90, 120, 150, 180] as const;
-
+// 시장 이벤트: 전 종목 거래 정지 (서킷브레이커).
+// 종목별 시세 조정은 종목 관리에서 종목을 눌러 발동한다.
 export function EventSection() {
-  const { data: quotes } = useQuotes();
   const queryClient = useQueryClient();
   const [cbMinutes, setCbMinutes] = useState("10");
-  const [stock, setStock] = useState("OKJA");
-  const [bias, setBias] = useState("-30");
-  const [duration, setDuration] = useState("");
 
   async function circuitBreaker(minutes: number | null) {
     try {
       await postJson("/api/admin/circuit-breaker", { minutes });
       toast.success(minutes ? `서킷브레이커 ${minutes}분 발동` : "서킷브레이커 해제");
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "실패");
-    }
-  }
-
-  async function steerPrice() {
-    try {
-      const durationMinutes = duration === "" ? null : Number(duration);
-      const result = await postJson<{ fromTick: number; replaced: number }>(
-        "/api/admin/surprise",
-        { stockCode: stock, bias: Number(bias), durationMinutes }
-      );
-      const range = durationMinutes ? `${durationMinutes}분간` : "남은 시간 전체";
-      toast.success(
-        `${stock} 시세 조정 (${range}, 틱 ${result.fromTick} 이후 ${result.replaced}개 재생성)`
-      );
-      queryClient.invalidateQueries({ queryKey: ["quotes"] });
-      queryClient.invalidateQueries({ queryKey: ["chart", stock] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "실패");
     }
@@ -74,42 +50,9 @@ export function EventSection() {
             해제
           </Button>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <select
-            value={stock}
-            onChange={(e) => setStock(e.target.value)}
-            className="rounded-lg border bg-background px-2 text-sm"
-          >
-            {quotes?.quotes.map((q) => (
-              <option key={q.code} value={q.code}>
-                {q.name}
-              </option>
-            ))}
-          </select>
-          <Input
-            type="number"
-            value={bias}
-            onChange={(e) => setBias(e.target.value)}
-            className="w-20"
-            placeholder="편향"
-          />
-          <select
-            value={duration}
-            onChange={(e) => setDuration(e.target.value)}
-            className="rounded-lg border bg-background px-2 text-sm"
-          >
-            <option value="">남은 시간 전체</option>
-            {DURATION_OPTIONS.map((m) => (
-              <option key={m} value={m}>
-                {m}분
-              </option>
-            ))}
-          </select>
-          <Button onClick={steerPrice}>시세 조정</Button>
-        </div>
         <p className="text-xs text-muted-foreground">
-          시세 조정은 지정 시간 동안 편향을 걸어 오늘 남은 경로를 다시 뽑습니다. 시간이
-          지나면 그날 추첨된 원래 편향 흐름으로 복귀합니다 (장중에만 가능)
+          전 종목 거래가 지정 시간 동안 정지됩니다. 종목별 시세 조정은 위 종목
+          관리에서 종목을 눌러 발동하세요.
         </p>
       </CardContent>
     </Card>

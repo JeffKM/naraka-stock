@@ -26,12 +26,12 @@ export async function PATCH(request: Request) {
   }
 }
 
-// 오늘 오버라이드 해제 → 기본 장 시간으로 복귀
+// 오늘 오버라이드 해제 → 기본 장 시간으로 복귀 (오늘 경로도 기본 틱 수로 재조정)
 export async function DELETE() {
   try {
     await requireAdmin();
-    await clearTodayMarketHours();
-    return apiOk({ ok: true });
+    const { reconciled } = await clearTodayMarketHours();
+    return apiOk({ ok: true, reconciled });
   } catch (error) {
     return handleApiError(error);
   }

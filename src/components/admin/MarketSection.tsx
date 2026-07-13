@@ -19,6 +19,18 @@ interface MarketSettingsDto {
   todayOverride: { openHour: number; closeHour: number } | null;
 }
 
+// 장 시간 변경 시 서버가 오늘 경로를 재조정한 결과 (없으면 null)
+interface ReconcileDto {
+  adjustedStocks: number;
+  totalTicks: number;
+}
+
+function reconcileSuffix(reconciled: ReconcileDto | null | undefined): string {
+  return reconciled
+    ? ` — 오늘 경로를 ${reconciled.totalTicks}틱으로 재조정했습니다 (${reconciled.adjustedStocks}종목)`
+    : "";
+}
+
 const WEEKDAYS = [
   { value: 1, label: "월" },
   { value: 2, label: "화" },
@@ -67,10 +79,11 @@ export function MarketSection() {
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error.message);
-      toast.success("저장 완료 — 장 시간 변경은 다음 배치 경로부터 완전 반영됩니다");
+      toast.success(`저장 완료${reconcileSuffix(json.data?.reconciled)}`);
       setForm(null);
       queryClient.invalidateQueries({ queryKey: ["admin-market"] });
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["chart"] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "저장 실패");
     } finally {
@@ -215,8 +228,9 @@ export function MarketSection() {
           {saving ? "저장 중..." : "저장"}
         </Button>
         <p className="text-xs text-muted-foreground">
-          장 시간을 바꾸면 <b>다음 22:00 배치가 만드는 경로부터</b> 새 틱 수로 생성됩니다.
-          이미 생성된 오늘 경로는 그대로라, 장을 늘리면 남는 시간은 종가로 고정 표시됩니다.
+          장 시간을 바꾸면 <b>오늘 경로도 즉시 새 틱 수로 재조정</b>됩니다. 장중에는
+          지나간 가격을 그대로 두고 남은 구간만 다시 만들며, 익일부터는 배치가 새 틱
+          수로 생성합니다.
         </p>
 
         <TodayHoursBlock settings={settings} />
@@ -245,10 +259,11 @@ function TodayHoursBlock({ settings }: { settings: MarketSettingsDto }) {
       const res = await fetch("/api/admin/market/today", init);
       const json = await res.json();
       if (!json.success) throw new Error(json.error.message);
-      toast.success(successMessage);
+      toast.success(`${successMessage}${reconcileSuffix(json.data?.reconciled)}`);
       setForm(null);
       queryClient.invalidateQueries({ queryKey: ["admin-market"] });
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["chart"] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "실패");
     } finally {
