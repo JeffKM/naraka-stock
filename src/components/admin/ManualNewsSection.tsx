@@ -55,9 +55,9 @@ export function ManualNewsSection() {
             onChange={(e) => setGrade(e.target.value as typeof grade)}
             className="rounded-lg border bg-background px-2 text-sm"
           >
-            <option value="news">📢 뉴스</option>
-            <option value="rumor">💬 찌라시</option>
-            <option value="disclosure">📰 공시</option>
+            <option value="news">뉴스</option>
+            <option value="rumor">찌라시</option>
+            <option value="disclosure">공시</option>
           </select>
         </div>
         <Input placeholder="제목" value={title} onChange={(e) => setTitle(e.target.value)} />

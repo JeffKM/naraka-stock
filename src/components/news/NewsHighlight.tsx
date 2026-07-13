@@ -12,9 +12,9 @@ import type { NewsPageDto } from "@/components/news/NewsList";
 import type { NewsGrade } from "@/types/domain";
 
 const GRADE_META: Record<NewsGrade, { label: string; className: string }> = {
-  disclosure: { label: "📰 공시", className: "bg-secondary text-secondary-foreground" },
-  news: { label: "📢 뉴스", className: "bg-primary text-primary-foreground" },
-  rumor: { label: "💬 찌라시", className: "border border-border bg-transparent text-muted-foreground" },
+  disclosure: { label: "공시", className: "bg-secondary text-secondary-foreground" },
+  news: { label: "뉴스", className: "bg-primary text-primary-foreground" },
+  rumor: { label: "찌라시", className: "border border-border bg-transparent text-muted-foreground" },
 };
 
 // 등급 우선순위: 공시 > 정식 뉴스 > 찌라시 (신뢰도 순)

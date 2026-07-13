@@ -103,7 +103,7 @@ export default function Home() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">시세판</h1>
         {data?.marketState === "holiday" && (
-          <span className="text-sm text-muted-foreground">오늘은 휴장일입니다 🌙</span>
+          <span className="text-sm text-muted-foreground">오늘은 휴장일입니다</span>
         )}
       </div>
 

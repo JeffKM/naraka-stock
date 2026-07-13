@@ -15,9 +15,9 @@ export interface NewsPageDto {
 }
 
 const GRADE_META: Record<NewsGrade, { label: string; className: string }> = {
-  disclosure: { label: "📰 공시", className: "bg-secondary text-secondary-foreground" },
-  news: { label: "📢 뉴스", className: "bg-primary text-primary-foreground" },
-  rumor: { label: "💬 찌라시", className: "border border-border bg-transparent text-muted-foreground" },
+  disclosure: { label: "공시", className: "bg-secondary text-secondary-foreground" },
+  news: { label: "뉴스", className: "bg-primary text-primary-foreground" },
+  rumor: { label: "찌라시", className: "border border-border bg-transparent text-muted-foreground" },
 };
 
 function formatDate(date: string): string {
@@ -65,7 +65,7 @@ export function NewsList({
     if (page === 1) {
       return (
         <p className="py-8 text-center text-sm text-muted-foreground">
-          아직 소식이 없습니다 👻
+          아직 소식이 없습니다
         </p>
       );
     }

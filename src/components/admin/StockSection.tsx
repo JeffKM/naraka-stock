@@ -108,7 +108,7 @@ export function StockSection() {
         </div>
 
         <div className="flex flex-col gap-2 rounded-lg border border-dashed p-3">
-          <p className="text-sm font-medium">✨ 신규 상장</p>
+          <p className="text-sm font-medium">신규 상장</p>
           <div className="flex gap-2">
             <Input
               placeholder="코드 (예: DKBI)"

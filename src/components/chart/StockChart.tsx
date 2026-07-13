@@ -167,7 +167,7 @@ export function StockChart({ code }: { code: string }) {
         {isLoading && <Skeleton className="h-[220px] w-full" />}
         {todayEmpty && (
           <div className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
-            아직 오늘 장이 열리지 않았습니다 🌙
+            아직 오늘 장이 열리지 않았습니다
           </div>
         )}
         <div ref={containerRef} className={todayEmpty || isLoading ? "hidden" : ""} />

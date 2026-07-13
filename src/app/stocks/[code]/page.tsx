@@ -44,7 +44,7 @@ export default function StockDetailPage({
   }
 
   if (!quote) {
-    return <p className="py-12 text-center text-muted-foreground">없는 종목입니다 👻</p>;
+    return <p className="py-12 text-center text-muted-foreground">없는 종목입니다</p>;
   }
 
   const up = quote.change > 0;

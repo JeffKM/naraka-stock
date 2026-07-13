@@ -52,7 +52,7 @@ export default function NewsPage() {
       </Card>
 
       <p className="text-center text-xs text-muted-foreground">
-        📢 정식 뉴스도 가끔 틀리고, 💬 찌라시는 절반만 믿으세요
+        정식 뉴스도 가끔 틀리고, 찌라시는 절반만 믿으세요
       </p>
     </div>
   );

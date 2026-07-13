@@ -17,8 +17,6 @@ export function RankingSection() {
     refetchInterval: 60_000,
   });
 
-  const medals = ["🥇", "🥈", "🥉"];
-
   return (
     <Card>
       <CardHeader>
@@ -37,7 +35,7 @@ export function RankingSection() {
           <div key={entry.rank} className="flex items-center justify-between py-2">
             <span>
               <span className="mr-2 inline-block w-7 text-center font-bold">
-                {medals[entry.rank - 1] ?? entry.rank}
+                {entry.rank}
               </span>
               {entry.nickname}
             </span>

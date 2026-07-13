@@ -270,7 +270,7 @@ function TodayHoursBlock({ settings }: { settings: MarketSettingsDto }) {
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-dashed p-3">
       <p className="text-sm font-medium">
-        🌗 오늘({settings.today})만 장 시간 변경{" "}
+        오늘({settings.today})만 장 시간 변경{" "}
         {settings.todayOverride && (
           <Badge variant="secondary">
             적용 중 {settings.todayOverride.openHour}시~{settings.todayOverride.closeHour}시

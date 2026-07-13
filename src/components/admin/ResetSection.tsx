@@ -39,7 +39,7 @@ export function ResetSection() {
     <Card className="border-destructive/40">
       <CardHeader>
         <CardTitle className="text-base text-destructive">
-          ⚠️ 리허설 데이터 초기화
+          리허설 데이터 초기화
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
