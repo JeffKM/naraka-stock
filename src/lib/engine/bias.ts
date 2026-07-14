@@ -1,6 +1,7 @@
 // 일일 편향(bias) 추첨 (T-202, PRD §10)
 //
-// - 매일 2~4개 종목에 이벤트 배정, 잡주(wild)는 배정 확률 2배
+// - 매일 종목 수의 약 15%(±1)에 이벤트 배정 — 로스터 규모에 비례 스케일
+//   (27종 기준 3~5개). 잡주(wild)는 배정 확률 2배
 // - 크기: ±10 (40%) / ±20 (35%) / ±30 (25%)
 // - 방향: 상승 55% / 하락 45% (시장 약우상향)
 
@@ -21,6 +22,9 @@ const MAGNITUDE_TABLE: Array<{ value: number; weight: number }> = [
 ];
 
 const UP_PROBABILITY = 0.55;
+
+// 이벤트 종목 수: 로스터 규모에 비례 (종목 수 × 15%), ±1 균등 흔들림
+const EVENT_RATIO = 0.15;
 
 function pickWeighted<T>(rng: Rng, table: Array<{ value: T; weight: number }>): T {
   const total = table.reduce((sum, row) => sum + row.weight, 0);
@@ -53,8 +57,9 @@ export function realizeBias(bias: number, rng: Rng): number {
 export function drawDailyBiases(stocks: BiasTarget[], rng: Rng): BiasMap {
   const biases: BiasMap = Object.fromEntries(stocks.map((s) => [s.code, 0]));
 
-  // 이벤트 종목 수: 2~4개 균등 추첨
-  const eventCount = 2 + Math.floor(rng() * 3);
+  // 이벤트 종목 수: 종목 수 × 15%를 기준으로 ±1 (최소 1, 최대 종목 수)
+  const base = Math.round(stocks.length * EVENT_RATIO);
+  const eventCount = Math.max(1, Math.min(stocks.length, base - 1 + Math.floor(rng() * 3)));
 
   // 잡주 가중 2배 추첨 (중복 없이)
   const pool = stocks.map((s) => ({ value: s.code, weight: s.tier === "wild" ? 2 : 1 }));

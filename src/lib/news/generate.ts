@@ -2,8 +2,8 @@
 //
 // 발행 정책 (사장님 확정 2026-07-14):
 // - 정식뉴스(90%): 자동. 익일 사전생성 경로의 "실제 움직임"을 설명하는 뉴스로,
-//   가장 가파른 움직임이 나오는 틱 시각에 published_at을 스탬프해 장중 시간차로
-//   노출된다 (움직임과 동시 = 설명형). 10%는 반대 방향 오보.
+//   움직임이 대부분 끝난 뒤(장 후반) published_at을 스탬프해 장중 시간차로 노출된다
+//   (사후 설명 = 따라 사도 이득 없음, tailNewsTick 참고). 10%는 반대 방향 오보.
 // - 찌라시(55%): 자동 생성하지 않는다. 어드민이 콘솔에서 직접 흘리고(수동), 그에
 //   맞춰 시세를 조정한다.
 // - 공시(오늘자, 100%): 실제 등락 ±5% 이상 또는 상·하한가만 발행. 폐장 시각에 노출.
@@ -74,19 +74,33 @@ function magnitudeLevel(absPct: number, scale: number = 1): 0 | 10 | 20 | 30 {
   return 0;
 }
 
-// 경로에서 가장 가파른 구간의 틱 인덱스 (뉴스가 "터지는" 순간)
-function steepestTickIndex(ticks: { tickIndex: number; price: number }[]): number {
-  if (ticks.length <= STEEP_WINDOW) return ticks[ticks.length - 1]?.tickIndex ?? 0;
-  let bestIdx = ticks[STEEP_WINDOW].tickIndex;
+// 경로에서 가장 가파른 구간의 배열 인덱스 (움직임이 "터지는" 순간)
+function steepestArrayIndex(ticks: { tickIndex: number; price: number }[]): number {
+  if (ticks.length <= STEEP_WINDOW) return ticks.length - 1;
+  let bestIdx = STEEP_WINDOW;
   let bestAbs = -1;
   for (let i = STEEP_WINDOW; i < ticks.length; i++) {
     const delta = Math.abs(ticks[i].price - ticks[i - STEEP_WINDOW].price);
     if (delta > bestAbs) {
       bestAbs = delta;
-      bestIdx = ticks[i].tickIndex;
+      bestIdx = i;
     }
   }
   return bestIdx;
+}
+
+// 정식뉴스 노출 틱 = "움직임이 대부분 끝난 뒤" (사후 설명, 뉴스추종 이득 제거).
+//   steepest 지점 이후 & 장 후반(TAIL_MIN_RATIO) 이후 중 더 늦은 쪽에 스탬프한다.
+//   - steepest 이후: 뉴스가 움직임보다 먼저 뜨는 사고 방지 (항상 사후)
+//   - 후반 이후: 움직임이 일찍 끝난 날에도 따라 살 남은 드리프트를 없앰
+//   시뮬레이션 검증(2026-07-14): 뉴스추종 중앙값 1.01배(본전). middle 배치는
+//   오히려 1.28배로 역효과라 반드시 후반부로 민다.
+const TAIL_MIN_RATIO = 0.85;
+function tailNewsTick(ticks: { tickIndex: number; price: number }[]): number {
+  const last = ticks.length - 1;
+  if (last <= 0) return ticks[last]?.tickIndex ?? 0;
+  const idx = Math.max(steepestArrayIndex(ticks), Math.floor(last * TAIL_MIN_RATIO));
+  return ticks[idx].tickIndex;
 }
 
 // 익일 정식뉴스 — 사전 경로의 실제 움직임을 설명하는 뉴스 (장중 시간차 노출)
@@ -131,7 +145,7 @@ export function generateRegularNews(
     const actualDir = dayChangePct >= 0 ? 1 : -1;
     const shownDir = rng() < NEWS_ACCURACY ? actualDir : -actualDir; // 10% 오보
     const template = pickUnused(rng, templates[levelOf(shownDir * magnitude)], used);
-    const tick = steepestTickIndex(path.ticks); // 움직임과 동시에 터진다
+    const tick = tailNewsTick(path.ticks); // 움직임이 대부분 끝난 뒤 노출 (사후 설명)
     result.push({
       date,
       stockCode: path.code,
