@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { BadgeCheck } from "lucide-react";
@@ -52,6 +53,7 @@ function authorOf(n: NewsItem): {
   name: string;
   handle: string;
   avatar: string;
+  logo?: string;
   outletSlug?: string;
 } {
   // 공시: 해당 종목의 공식 계정 (시장 전체 공지는 거래소 계정)
@@ -72,6 +74,7 @@ function authorOf(n: NewsItem): {
       name: outlet.name,
       handle: outlet.handle,
       avatar: outlet.avatar,
+      logo: outlet.logo,
       outletSlug: outlet.slug,
     };
   }
@@ -155,15 +158,27 @@ export function NewsList({
                 : "rounded-xl border border-border bg-card px-4 py-3.5 transition-colors hover:border-border/80 hover:bg-muted/20"
             )}
           >
-            {/* 아바타 */}
-            <div
-              className={cn(
-                "flex size-10 shrink-0 select-none items-center justify-center rounded-full text-xs font-bold",
-                meta.avatarClass
-              )}
-            >
-              {author.avatar}
-            </div>
+            {/* 아바타 — 정식 뉴스는 매체 로고, 그 외(공시·찌라시)는 텍스트 배지 */}
+            {author.logo ? (
+              <div className="flex size-10 shrink-0 select-none items-center justify-center overflow-hidden rounded-full border border-border bg-muted">
+                <Image
+                  src={author.logo}
+                  alt={author.name}
+                  width={40}
+                  height={40}
+                  className="size-8 object-contain"
+                />
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  "flex size-10 shrink-0 select-none items-center justify-center rounded-full text-xs font-bold",
+                  meta.avatarClass
+                )}
+              >
+                {author.avatar}
+              </div>
+            )}
 
             <div className="min-w-0 flex-1">
               {/* 헤더: 이름 · 인증 · 핸들 · 날짜 */}

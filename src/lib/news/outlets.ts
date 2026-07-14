@@ -7,17 +7,18 @@ export interface NewsOutlet {
   slug: string; // URL·필터용 안정 식별자
   name: string;
   handle: string;
-  avatar: string;
+  avatar: string; // 로고 로드 실패 시 폴백 텍스트
+  logo: string; // 원형 배지용 로고 이미지 경로 (public/news-outlets/{slug}.png)
 }
 
 export const NEWS_OUTLETS: NewsOutlet[] = [
-  { slug: "daily", name: "나라카 데일리", handle: "@naraka_daily", avatar: "데일" },
-  { slug: "biz", name: "나라카경제", handle: "@naraka_biz", avatar: "경제" },
-  { slug: "journal", name: "나라카 저널", handle: "@naraka_journal", avatar: "저널" },
-  { slug: "herald", name: "나라카 헤럴드", handle: "@naraka_herald", avatar: "헤럴" },
-  { slug: "times", name: "나라카타임스", handle: "@naraka_times", avatar: "타임" },
-  { slug: "bc", name: "나라카방송", handle: "@naraka_bc", avatar: "방송" },
-  { slug: "post", name: "나라카포스트", handle: "@naraka_post", avatar: "포스" },
+  { slug: "daily", name: "나라카 데일리", handle: "@naraka_daily", avatar: "데일", logo: "/news-outlets/daily.png" },
+  { slug: "biz", name: "나라카경제", handle: "@naraka_biz", avatar: "경제", logo: "/news-outlets/biz.png" },
+  { slug: "journal", name: "나라카 저널", handle: "@naraka_journal", avatar: "저널", logo: "/news-outlets/journal.png" },
+  { slug: "herald", name: "나라카 헤럴드", handle: "@naraka_herald", avatar: "헤럴", logo: "/news-outlets/herald.png" },
+  { slug: "times", name: "나라카타임스", handle: "@naraka_times", avatar: "타임", logo: "/news-outlets/times.png" },
+  { slug: "bc", name: "나라카방송", handle: "@naraka_bc", avatar: "방송", logo: "/news-outlets/bc.png" },
+  { slug: "post", name: "나라카포스트", handle: "@naraka_post", avatar: "포스", logo: "/news-outlets/post.png" },
 ];
 
 // 게시물 id → 배정 매체 (정식 뉴스 전용)

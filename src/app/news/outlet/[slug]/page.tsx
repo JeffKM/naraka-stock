@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { use, useState } from "react";
 import { ArrowLeft, BadgeCheck } from "lucide-react";
@@ -34,8 +35,14 @@ export default function NewsOutletPage({
           소식통
         </Link>
         <div className="flex items-center gap-3">
-          <div className="flex size-12 shrink-0 select-none items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-            {outlet.avatar}
+          <div className="flex size-12 shrink-0 select-none items-center justify-center overflow-hidden rounded-full border border-border bg-muted">
+            <Image
+              src={outlet.logo}
+              alt={outlet.name}
+              width={48}
+              height={48}
+              className="size-10 object-contain"
+            />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
