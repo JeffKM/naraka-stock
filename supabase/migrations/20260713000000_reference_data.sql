@@ -39,7 +39,7 @@ insert into config (key, value) values
   ('extra_open_days', '[]'),
   ('initial_cash', '1000000'),
   ('visit_bonus', '100000'),
-  ('sell_fee_bp', '30'),
+  ('sell_fee_bp', '50'),
   ('price_limit_percent', '30'),
   ('dividend_percent', '1'),
   ('currency_label', '"원"')
