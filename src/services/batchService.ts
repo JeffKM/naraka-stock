@@ -7,6 +7,7 @@ import {
   generateHintNews,
   type DailyMove,
   type GeneratedNews,
+  type UsedTitles,
 } from "@/lib/news/generate";
 import {
   addDays,
@@ -135,12 +136,16 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
     }
 
     // 내일자 힌트 뉴스 (추첨 bias 기준 — 실현치 아님, T-502)
+    // 이미 발행한 템플릿은 재사용하지 않는다 (생성 대상일 자신의 뉴스는 재실행 시
+    // 교체되므로 이력에서 제외 — 배치 멱등성 유지)
+    const usedTitles = await loadUsedHintTitles(tomorrowDate);
     news.push(
       ...generateHintNews(
         stocks.map((s) => s.code),
         biases,
         tomorrowDate,
-        rng
+        rng,
+        usedTitles
       )
     );
   }
@@ -187,6 +192,27 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
     newsInserted: result.newsInserted,
     biases,
   };
+}
+
+// 종목별로 이미 발행에 쓴 힌트 템플릿 제목 (재사용 금지 추첨용)
+// 생성 대상일(targetDate)의 뉴스는 배치 재실행 시 삭제 후 교체되므로 제외한다
+async function loadUsedHintTitles(targetDate: string): Promise<UsedTitles> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("news")
+    .select("stock_code, title")
+    .eq("is_auto", true)
+    .in("grade", ["news", "rumor"])
+    .neq("date", targetDate)
+    .not("stock_code", "is", null);
+  if (error) throw error;
+
+  const used: Record<string, Set<string>> = {};
+  for (const row of data) {
+    const code = row.stock_code as string;
+    (used[code] ??= new Set()).add(row.title);
+  }
+  return used;
 }
 
 // 오늘의 실제 등락 (공시 생성용): 종가(마지막 틱) vs 직전 개장일 종가
