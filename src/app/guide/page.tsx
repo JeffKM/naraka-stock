@@ -4,7 +4,6 @@ import {
   CoinsIcon,
   GiftIcon,
   MessagesSquareIcon,
-  NewspaperIcon,
   OctagonMinusIcon,
   RepeatIcon,
   SparklesIcon,
@@ -58,16 +57,6 @@ const RULES: Rule[] = [
     icon: TimerIcon,
     title: "지정가 예약주문",
     body: "원하는 가격을 미리 지정해 두면, 장중 그 가격에 닿았을 때 자동으로 체결됩니다. 예약은 그날 장 마감에 사라지고 한 번에 최대 10건까지 걸 수 있어요. ±30% 등락 범위를 벗어난 가격은 접수되지 않습니다.",
-  },
-  {
-    icon: NewspaperIcon,
-    title: "뉴스 읽는 법",
-    body: [
-      "공시는 이미 일어난 사실이라 100% 정확해요.",
-      "정식 뉴스는 그 종목이 왜 움직이는지 설명해 주지만, 10% 정도는 방향이 어긋날 수 있어요.",
-      "찌라시는 근거 없는 소문이라 절반 남짓(약 55%)만 맞습니다.",
-      "재료가 있어도 시장이 꼭 그대로 움직이진 않으니 과신은 금물!",
-    ],
   },
   {
     icon: CoinsIcon,
