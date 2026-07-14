@@ -14,6 +14,8 @@ export type ApiErrorCode =
   | "CODE_INVALID" // 가입·방문 코드 무효
   | "CODE_ALREADY_USED" // 코드 중복 사용
   | "NICKNAME_TAKEN" // 닉네임 중복
+  | "REQUEST_DUPLICATE" // 가입요청 중복 접수 (승인 대기 중)
+  | "REQUEST_INVALID" // 이미 처리된 가입요청
   | "BANNED" // 정지 계정
   | "INTERNAL"; // 서버 내부 오류
 

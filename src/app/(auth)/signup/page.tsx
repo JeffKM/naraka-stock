@@ -36,13 +36,22 @@ export default function SignupPage() {
 
   async function onSubmit(values: FormValues) {
     try {
-      await postJson("/api/auth/signup", {
-        code: values.code,
-        nickname: values.nickname,
-        // 한글 IME 잔여물 방지: 제출 직전에도 한 번 더 영문 변환
-        password: hangulToQwerty(values.password),
-      });
-      // 가입은 자동 로그인이므로 캐시된 비로그인 상태(me 등)를 비워 헤더가 즉시 갱신되게 한다
+      const result = await postJson<{ status: "active" | "pending" }>(
+        "/api/auth/signup",
+        {
+          code: values.code,
+          nickname: values.nickname,
+          // 한글 IME 잔여물 방지: 제출 직전에도 한 번 더 영문 변환
+          password: hangulToQwerty(values.password),
+        }
+      );
+      // 손님 코드는 매장 승인 대기 상태로 접수된다. 자동 로그인 없이 로그인 페이지로 안내한다.
+      if (result.status === "pending") {
+        toast.success("가입 요청이 접수되었습니다. 매장 승인 후 로그인해주세요");
+        router.push("/login");
+        return;
+      }
+      // 어드민 코드는 자동 로그인이므로 캐시된 비로그인 상태(me 등)를 비워 헤더가 즉시 갱신되게 한다
       queryClient.clear();
       toast.success("계좌 개설 완료! 1,000,000원이 지급되었습니다");
       router.push("/");

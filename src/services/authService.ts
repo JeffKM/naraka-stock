@@ -14,12 +14,20 @@ function mapDbError(message: string): ApiException | null {
   if (message.includes("NICKNAME_TAKEN")) {
     return new ApiException("NICKNAME_TAKEN", "이미 사용 중인 닉네임입니다.");
   }
+  if (message.includes("REQUEST_DUPLICATE")) {
+    return new ApiException(
+      "REQUEST_DUPLICATE",
+      "이미 접수된 가입 요청입니다. 매장 승인을 기다려주세요."
+    );
+  }
   return null;
 }
 
 export interface AuthResult {
   nickname: string;
   isAdmin: boolean;
+  // active: 계정 생성·자동 로그인 완료, pending: 가입요청 접수(승인 대기, 세션 없음)
+  status: "active" | "pending";
 }
 
 // 가입 (T-101): 코드 검증→유저 생성→코드 소멸은 DB 함수 단일 트랜잭션
@@ -41,11 +49,23 @@ export async function signup(input: SignupInput): Promise<AuthResult> {
     throw mapDbError(error.message) ?? error;
   }
 
-  // signup_user는 { id, is_admin }을 반환한다. 어드민 발급코드로 가입하면 곧바로
-  // 어드민 계정이 되므로 세션·응답에 그대로 반영한다.
-  const { id: userId, is_admin: isAdmin } = data as { id: number; is_admin: boolean };
-  await createSession({ uid: userId, nickname: input.nickname, isAdmin });
-  return { nickname: input.nickname, isAdmin };
+  // signup_user는 status로 분기 결과를 알려준다.
+  //   - pending: 손님 코드 → 가입요청만 접수됨. 세션을 만들지 않고 매장 승인을 기다린다.
+  //   - active: 어드민 코드 → 계정 생성 완료. 종전대로 자동 로그인한다.
+  const result = data as
+    | { status: "pending" }
+    | { status: "active"; id: number; is_admin: boolean };
+
+  if (result.status === "pending") {
+    return { nickname: input.nickname, isAdmin: false, status: "pending" };
+  }
+
+  await createSession({
+    uid: result.id,
+    nickname: input.nickname,
+    isAdmin: result.is_admin,
+  });
+  return { nickname: input.nickname, isAdmin: result.is_admin, status: "active" };
 }
 
 // 로그인 (T-102): 계정 존재 여부를 노출하지 않도록 실패 메시지는 하나로 통일
@@ -77,5 +97,5 @@ export async function login(input: LoginInput): Promise<AuthResult> {
     nickname: user.nickname,
     isAdmin: user.is_admin,
   });
-  return { nickname: user.nickname, isAdmin: user.is_admin };
+  return { nickname: user.nickname, isAdmin: user.is_admin, status: "active" };
 }

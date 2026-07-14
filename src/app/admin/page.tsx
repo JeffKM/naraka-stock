@@ -11,12 +11,13 @@ import { MarketSection } from "@/components/admin/MarketSection";
 import { RankingSection } from "@/components/admin/RankingSection";
 import { ResetSection } from "@/components/admin/ResetSection";
 import { SignupCodeSection } from "@/components/admin/SignupCodeSection";
+import { SignupRequestSection } from "@/components/admin/SignupRequestSection";
 import { StockSection } from "@/components/admin/StockSection";
 import { SupportSection } from "@/components/admin/SupportSection";
 import { UserSection } from "@/components/admin/UserSection";
 import { VisitCodeSection } from "@/components/admin/VisitCodeSection";
 import { getJson } from "@/lib/api/client";
-import type { AdminSupportPost, Me } from "@/types/domain";
+import type { AdminSignupRequest, AdminSupportPost, Me } from "@/types/domain";
 
 const TAB_VALUES = ["status", "ops", "users", "manage", "support"] as const;
 type AdminTab = (typeof TAB_VALUES)[number];
@@ -63,6 +64,16 @@ export default function AdminPage() {
   });
   const pendingCount = pendingSupport?.posts.length ?? 0;
 
+  // 유저 탭 뱃지용 대기 가입요청 수 — SignupRequestSection과 캐시 공유
+  const { data: signupRequests } = useQuery({
+    queryKey: ["admin-signup-requests"],
+    queryFn: () =>
+      getJson<{ requests: AdminSignupRequest[] }>("/api/admin/signup-requests"),
+    refetchInterval: 60_000,
+    enabled: !!me?.isAdmin,
+  });
+  const requestCount = signupRequests?.requests.length ?? 0;
+
   if (isLoading) return null;
   if (!me?.isAdmin) {
     return <p className="py-16 text-center text-muted-foreground">접근 권한이 없습니다</p>;
@@ -76,7 +87,14 @@ export default function AdminPage() {
         <TabsList className="w-full">
           <TabsTrigger value="status">현황</TabsTrigger>
           <TabsTrigger value="ops">운영</TabsTrigger>
-          <TabsTrigger value="users">유저</TabsTrigger>
+          <TabsTrigger value="users">
+            유저
+            {requestCount > 0 && (
+              <Badge className="h-4 min-w-4 px-1 text-[10px] tabular-nums">
+                {requestCount}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="manage">관리</TabsTrigger>
           <TabsTrigger value="support">
             문의
@@ -99,6 +117,7 @@ export default function AdminPage() {
         </TabsContent>
 
         <TabsContent value="users" className="flex flex-col gap-4">
+          <SignupRequestSection />
           <SignupCodeSection />
           <VisitCodeSection />
           <UserSection />
