@@ -94,7 +94,8 @@ update users set is_admin = true where nickname = '<사장님닉네임>';
 - [ ] 배치 후: 익일 틱 생성 + 공시(폐장 시각) + 정식뉴스(장중 시간차) 노출 확인
 - [ ] 07-31(금) 폐장 배치가 08-01 경로를 만드는지 확인 ← **개장 전 마지막 관문**
 - [ ] 서킷브레이커·깜짝 이벤트 발동 테스트 (장중)
-- [ ] 리허설 데이터 초기화: `delete from trades; delete from holdings; delete from visit_claims;`
+- [ ] **지정가 예약주문 점검** → 별도 체크리스트 `docs/rehearsal-limit-orders.md` (핵심: 실시간 소급 체결·폐장 정산)
+- [ ] 리허설 데이터 초기화: `delete from orders; delete from trades; delete from holdings; delete from visit_claims;`
   `update users set cash = 1000000 where is_admin = false;` (또는 테스트 계정 삭제)
   `delete from daily_ticks where date < '2026-08-01'; delete from daily_summary where date < '2026-07-31'; delete from news;`
   `update signup_codes set used_by = null, used_at = null where ...;` — 필요 시 선별 초기화
