@@ -21,7 +21,7 @@ import {
   adjustDivisorsForTierChange,
   indexCodeOfTier,
 } from "@/services/indexService";
-import type { Stock, StockTier } from "@/types/domain";
+import type { AdminSignupRequest, Stock, StockTier } from "@/types/domain";
 
 // 어드민 서비스 (T-602~T-605) — 모든 진입점은 route에서 requireAdmin을 통과한 뒤 호출된다.
 
@@ -101,6 +101,67 @@ export async function createSignupCodes(
     .insert(codes.map((code) => ({ code, is_admin: isAdmin })));
   if (error) throw error;
   return codes;
+}
+
+// ── 손님 가입요청 승인 (T-106) ──────────────────────────────────
+// 손님 코드로 들어온 가입요청은 여기서 승인/거절한다. 유저 생성·코드 소모는
+// approve_signup_request DB 함수가 단일 트랜잭션으로 처리한다.
+
+export async function listSignupRequests(): Promise<AdminSignupRequest[]> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("signup_requests")
+    .select("id, nickname, code, created_at")
+    .eq("status", "pending")
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data.map((r) => ({
+    id: r.id,
+    nickname: r.nickname,
+    code: r.code,
+    createdAt: r.created_at,
+  }));
+}
+
+export async function approveSignupRequest(
+  requestId: number,
+  adminId: number
+): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.rpc("approve_signup_request", {
+    p_request_id: requestId,
+    p_admin_id: adminId,
+  });
+  if (!error) return;
+  if (error.message.includes("REQUEST_INVALID")) {
+    throw new ApiException("REQUEST_INVALID", "이미 처리된 요청입니다.");
+  }
+  if (error.message.includes("NICKNAME_TAKEN")) {
+    throw new ApiException(
+      "NICKNAME_TAKEN",
+      "이미 사용 중인 닉네임이라 승인할 수 없습니다."
+    );
+  }
+  if (error.message.includes("CODE_INVALID")) {
+    throw new ApiException("CODE_INVALID", "이미 사용된 가입 코드입니다.");
+  }
+  throw error;
+}
+
+export async function rejectSignupRequest(
+  requestId: number,
+  adminId: number
+): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.rpc("reject_signup_request", {
+    p_request_id: requestId,
+    p_admin_id: adminId,
+  });
+  if (!error) return;
+  if (error.message.includes("REQUEST_INVALID")) {
+    throw new ApiException("REQUEST_INVALID", "이미 처리된 요청입니다.");
+  }
+  throw error;
 }
 
 export async function deleteUnusedSignupCodes(): Promise<number> {

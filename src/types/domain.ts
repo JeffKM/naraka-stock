@@ -148,3 +148,11 @@ export interface SupportPost {
 export interface AdminSupportPost extends SupportPost {
   nickname: string;
 }
+
+// 손님 가입요청 (어드민 승인 대기) — 운영자 콘솔용
+export interface AdminSignupRequest {
+  id: number;
+  nickname: string;
+  code: string;
+  createdAt: string;
+}
