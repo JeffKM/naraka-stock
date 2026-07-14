@@ -127,12 +127,11 @@ export default function Home() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">시세판</h1>
-        {data?.marketState === "holiday" && (
+      {data?.marketState === "holiday" && (
+        <div className="flex justify-end">
           <span className="text-sm text-muted-foreground">오늘은 휴장일입니다</span>
-        )}
-      </div>
+        </div>
+      )}
 
       {isLoading ? (
         <IndexCardsSkeleton />
