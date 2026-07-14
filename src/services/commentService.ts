@@ -72,6 +72,26 @@ export async function createComment(
   if (error) throw error;
 }
 
+// 본인 댓글만 수정할 수 있다
+export async function updateComment(
+  userId: number,
+  commentId: number,
+  content: string
+): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("stock_comments")
+    .update({ content })
+    .eq("id", commentId)
+    .eq("user_id", userId)
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    throw new ApiException("NOT_FOUND", "수정할 수 없는 댓글입니다.");
+  }
+}
+
 // 본인 댓글만 삭제할 수 있다
 export async function deleteComment(userId: number, commentId: number): Promise<void> {
   const supabase = getSupabaseAdmin();

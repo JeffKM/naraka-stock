@@ -19,6 +19,15 @@ export async function postJson<T>(url: string, body?: unknown): Promise<T> {
   return parseResponse<T>(res);
 }
 
+export async function patchJson<T>(url: string, body?: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return parseResponse<T>(res);
+}
+
 export async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   return parseResponse<T>(res);
