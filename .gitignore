@@ -40,3 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 !.env.example
+
+# 소개 자료 (대용량 바이너리 — 리포에 넣지 않고 로컬/별도 보관)
+/페이지-소개서/

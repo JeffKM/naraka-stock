@@ -889,3 +889,36 @@ export async function setUserBanned(userId: number, banned: boolean): Promise<vo
   const { error } = await supabase.from("users").update({ is_banned: banned }).eq("id", userId);
   if (error) throw error;
 }
+
+// 어드민 현금 지급(양수)/회수(음수). 잔고 검증·갱신·감사 로그를 DB 함수가
+// 단일 트랜잭션으로 처리한다. 조정 후 잔고를 반환한다.
+export async function adjustUserCash(
+  userId: number,
+  adminId: number,
+  amount: number,
+  reason: string
+): Promise<{ cash: number }> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase.rpc("admin_adjust_cash", {
+    p_user_id: userId,
+    p_admin_id: adminId,
+    p_amount: amount,
+    p_reason: reason,
+  });
+  if (error) {
+    if (error.message.includes("USER_NOT_FOUND")) {
+      throw new ApiException("NOT_FOUND", "유저를 찾을 수 없습니다.");
+    }
+    if (error.message.includes("TARGET_ADMIN")) {
+      throw new ApiException("FORBIDDEN", "어드민 계정은 조정할 수 없습니다.");
+    }
+    if (error.message.includes("INSUFFICIENT_CASH")) {
+      throw new ApiException("VALIDATION", "보유 현금보다 많이 회수할 수 없습니다.");
+    }
+    if (error.message.includes("AMOUNT_ZERO")) {
+      throw new ApiException("VALIDATION", "0원은 조정할 수 없습니다.");
+    }
+    throw error;
+  }
+  return { cash: data as number };
+}
