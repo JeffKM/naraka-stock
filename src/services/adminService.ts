@@ -816,9 +816,10 @@ export async function updateStockTier(code: string, tier: StockTier): Promise<vo
 
 // ── T-605 수동 뉴스·유저 관리 ───────────────────────────────────
 
+// 수동 뉴스는 항상 찌라시(rumor)로 발행한다. 공시·정식뉴스는 배치가 자동 생성한다.
 export interface ManualNewsInput {
   stockCode: string | null;
-  grade: "disclosure" | "news" | "rumor";
+  source: string; // 기자·매체명 (예: "옥자", "나라카 숲")
   title: string;
   body: string;
 }
@@ -831,15 +832,61 @@ export async function publishNews(input: ManualNewsInput): Promise<{ id: number 
     .insert({
       date: today,
       stock_code: input.stockCode,
-      grade: input.grade,
+      grade: "rumor",
       title: input.title,
       body: input.body,
+      source: input.source,
       is_auto: false,
     })
     .select("id")
     .single();
   if (error) throw error;
   return { id: data.id };
+}
+
+export interface ManualNewsListItem {
+  id: number;
+  date: string;
+  stockCode: string | null;
+  stockName: string | null;
+  source: string | null;
+  title: string;
+  publishedAt: string;
+}
+
+// 수동 발행 뉴스(is_auto=false) 목록 — 최신순. 발행 후 관리·삭제용.
+export async function listManualNews(): Promise<ManualNewsListItem[]> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("news")
+    .select("id, date, stock_code, source, title, published_at, stocks(name)")
+    .eq("is_auto", false)
+    .order("published_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return (data ?? []).map((n) => ({
+    id: n.id,
+    date: n.date,
+    stockCode: n.stock_code,
+    stockName: (n.stocks as unknown as { name: string } | null)?.name ?? null,
+    source: n.source,
+    title: n.title,
+    publishedAt: n.published_at,
+  }));
+}
+
+// 수동 뉴스 단건 삭제 — is_auto=false 행만 지운다(배치 생성 뉴스 오삭제 방지).
+export async function deleteManualNews(id: number): Promise<{ deleted: number }> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("news")
+    .delete()
+    .eq("id", id)
+    .eq("is_auto", false)
+    .select("id");
+  if (error) throw error;
+  return { deleted: data?.length ?? 0 };
 }
 
 export interface AdminUserInfo {
