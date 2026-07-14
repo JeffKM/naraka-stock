@@ -20,7 +20,7 @@ import { formatMoney, formatQty } from "@/lib/market";
 import { playTradeSound } from "@/lib/sound";
 import type { Portfolio, StockQuote } from "@/types/domain";
 
-const SELL_FEE_RATE = 0.003; // 표시용 (실제 수수료는 서버 계산)
+const SELL_FEE_RATE = 0.005; // 표시용 (실제 수수료는 서버 계산)
 
 interface TradePanelProps {
   quote: StockQuote;
@@ -371,7 +371,7 @@ function SellDialog({
               <span className="font-medium">{formatMoney(gross)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">수수료 (0.3%)</span>
+              <span className="text-muted-foreground">수수료 (0.5%)</span>
               <span className="font-medium">-{formatMoney(fee)}</span>
             </div>
             <div className="mt-1 flex justify-between border-t pt-1 font-medium">

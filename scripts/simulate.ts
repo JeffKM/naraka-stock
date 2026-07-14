@@ -15,7 +15,7 @@ import type { StockTier } from "../src/types/domain";
 const EVENT_START = "2026-08-01";
 const EVENT_END = "2026-08-30";
 const INITIAL_CASH = 1_000_000;
-const SELL_FEE_RATE = 0.003;
+const SELL_FEE_RATE = 0.005;
 const DIVIDEND_RATE = 0.01;
 
 // 등급·기준가는 운영 확정안 기준 (2026-07-14, migrations/20260714000000)
