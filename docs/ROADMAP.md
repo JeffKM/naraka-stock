@@ -65,7 +65,7 @@
 - [x] **T-603** 가입 코드 묶음 생성(1~200, 혼동 문자 제외)·현황, 방문 코드 14일 자동 생성
 - [x] **T-604** 서킷브레이커 발동/해제 + 깜짝 이벤트(남은 경로 재생성, `replace_future_ticks` 원자 교체, 장중 한정)
 - [x] **T-605** 수동 뉴스 발행(is_auto=false로 배치와 분리), 유저 검색·정지/해제(자기 정지 차단)
-- [x] **T-606** 권한 가드: 전 어드민 API `requireAdmin`, proxy `/admin` 보호 (⚠️ 최초 어드민 승격은 SQL 수동: `update users set is_admin=true where nickname='...'`)
+- [x] **T-606** 권한 가드: 전 어드민 API `requireAdmin`, proxy `/admin` 보호 (⚠️ 최초 어드민 승격은 SQL 수동: `update users set is_admin=true where nickname='...'`. 이후 추가 어드민은 콘솔의 어드민 코드(ADM-) 발급으로 가입)
 
 ## Phase 7 — 운영 준비 (1/3)
 

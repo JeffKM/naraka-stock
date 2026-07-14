@@ -49,7 +49,8 @@ export async function getDashboard(): Promise<AdminDashboard> {
     supabase
       .from("signup_codes")
       .select("code", { count: "exact", head: true })
-      .is("used_by", null),
+      .is("used_by", null)
+      .eq("is_admin", false),
     supabase
       .from("visit_claims")
       .select("user_id", { count: "exact", head: true })
@@ -81,25 +82,35 @@ function randomCode(prefix: string, length: number): string {
   return `${prefix}-${code}`;
 }
 
-export async function createSignupCodes(count: number): Promise<string[]> {
-  if (count < 1 || count > 200) {
-    throw new ApiException("VALIDATION", "1~200개까지 생성할 수 있습니다.");
+// isAdmin=true면 그 코드로 가입한 계정이 곧바로 어드민이 된다 (사장님 계정 발급용).
+// 손님 코드(NRK-)와 접두어(ADM-)를 달리해 손에서도 구분되게 한다.
+export async function createSignupCodes(
+  count: number,
+  isAdmin = false
+): Promise<string[]> {
+  const max = isAdmin ? 20 : 200;
+  if (count < 1 || count > max) {
+    throw new ApiException("VALIDATION", `1~${max}개까지 생성할 수 있습니다.`);
   }
   const supabase = getSupabaseAdmin();
-  const codes = Array.from({ length: count }, () => randomCode("NRK", 6));
+  const codes = Array.from({ length: count }, () =>
+    randomCode(isAdmin ? "ADM" : "NRK", 6)
+  );
   const { error } = await supabase
     .from("signup_codes")
-    .insert(codes.map((code) => ({ code })));
+    .insert(codes.map((code) => ({ code, is_admin: isAdmin })));
   if (error) throw error;
   return codes;
 }
 
 export async function deleteUnusedSignupCodes(): Promise<number> {
   const supabase = getSupabaseAdmin();
+  // 어드민 코드는 실수로 함께 폐기되지 않도록 손님 코드만 버린다
   const { data, error } = await supabase
     .from("signup_codes")
     .delete()
     .is("used_by", null)
+    .eq("is_admin", false)
     .select("code");
   if (error) throw error;
   return data.length;
@@ -109,23 +120,36 @@ export async function listSignupCodes(): Promise<{
   unused: number;
   used: number;
   unusedCodes: string[];
+  adminUnused: number;
+  adminUnusedCodes: string[];
 }> {
   const supabase = getSupabaseAdmin();
-  const [used, unusedList] = await Promise.all([
+  const [used, customerList, adminList] = await Promise.all([
     supabase.from("signup_codes").select("code", { count: "exact", head: true }).not("used_by", "is", null),
-    // 오래된 코드부터 소진하도록 생성 순 정렬
+    // 손님 코드: 오래된 코드부터 소진하도록 생성 순 정렬
     supabase
       .from("signup_codes")
       .select("code", { count: "exact" })
       .is("used_by", null)
+      .eq("is_admin", false)
+      .order("created_at", { ascending: true }),
+    // 어드민 코드는 손님 코드 목록에 섞이지 않게 분리해 조회한다
+    supabase
+      .from("signup_codes")
+      .select("code", { count: "exact" })
+      .is("used_by", null)
+      .eq("is_admin", true)
       .order("created_at", { ascending: true }),
   ]);
-  if (unusedList.error) throw unusedList.error;
+  if (customerList.error) throw customerList.error;
+  if (adminList.error) throw adminList.error;
 
   return {
-    unused: unusedList.count ?? unusedList.data.length,
+    unused: customerList.count ?? customerList.data.length,
     used: used.count ?? 0,
-    unusedCodes: unusedList.data.map((c) => c.code),
+    unusedCodes: customerList.data.map((c) => c.code),
+    adminUnused: adminList.count ?? adminList.data.length,
+    adminUnusedCodes: adminList.data.map((c) => c.code),
   };
 }
 
