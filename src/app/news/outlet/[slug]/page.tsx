@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { ArrowLeft, BadgeCheck } from "lucide-react";
 import { NewsList } from "@/components/news/NewsList";
 import { outletBySlug } from "@/lib/news/outlets";
@@ -16,6 +16,11 @@ export default function NewsOutletPage({
   const { slug } = use(params);
   const outlet = outletBySlug(slug);
   const [pages, setPages] = useState(1);
+
+  // 탭 타이틀 = "나라카증권 | 매체명" (client 페이지라 document.title로 지정)
+  useEffect(() => {
+    if (outlet) document.title = `나라카증권 | ${outlet.name}`;
+  }, [outlet]);
 
   if (!outlet) {
     return (

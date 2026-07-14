@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,6 +35,14 @@ export default function StockDetailPage({
   );
   // 가격 변동 시 등락 방향 배경 플래시 (시세판과 동일 연출)
   const flash = usePriceFlash(displayPrice);
+
+  // 탭 타이틀 = "체결가 ±등락률% | 종목명" — 체결가 기준(표시용 진동 제외), 값이 바뀔 때만 갱신
+  const docTitle = quote
+    ? `${formatMoney(quote.price)} ${quote.changePercent > 0 ? "+" : ""}${quote.changePercent}% | ${quote.name}`
+    : null;
+  useEffect(() => {
+    if (docTitle) document.title = docTitle;
+  }, [docTitle]);
 
   if (isLoading) {
     return (
