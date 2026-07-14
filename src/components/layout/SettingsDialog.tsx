@@ -1,11 +1,20 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import Link from "next/link";
 import { useTheme } from "next-themes";
-import { BellIcon, SettingsIcon, Volume2Icon, VolumeXIcon } from "lucide-react";
+import {
+  BellIcon,
+  BookOpenIcon,
+  ChevronRightIcon,
+  SettingsIcon,
+  Volume2Icon,
+  VolumeXIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -168,6 +177,25 @@ export function SettingsDialog() {
               aria-label="보유 종목 변동 알림"
             />
           </section>
+
+          <Separator />
+
+          {/* 게임 방법 (가이드 페이지로 이동) — 링크 클릭 시 모달을 닫으며 이동 */}
+          <DialogClose asChild>
+            <Button
+              asChild
+              variant="ghost"
+              className="-mx-2 h-auto justify-between px-2 py-2"
+            >
+              <Link href="/guide">
+                <span className="flex items-center gap-2 text-sm font-semibold">
+                  <BookOpenIcon className="size-4" />
+                  게임 방법
+                </span>
+                <ChevronRightIcon className="size-4 text-muted-foreground" />
+              </Link>
+            </Button>
+          </DialogClose>
         </div>
       </DialogContent>
     </Dialog>
