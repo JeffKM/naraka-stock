@@ -3,6 +3,7 @@ import { apiError, apiOk, handleApiError } from "@/lib/api/response";
 import { requireUser } from "@/lib/auth/guards";
 import { getSession } from "@/lib/auth/session";
 import {
+  adminDeleteComment,
   createComment,
   deleteComment,
   listComments,
@@ -18,6 +19,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
     const session = await getSession();
     return apiOk({
       comments: await listComments(code.toUpperCase(), session?.uid ?? null),
+      // UI 삭제 버튼 노출용 힌트 — 실제 삭제 권한은 DELETE 핸들러가 DB로 재검증한다
+      viewerIsAdmin: session?.isAdmin ?? false,
     });
   } catch (error) {
     return handleApiError(error);
@@ -68,7 +71,7 @@ export async function PATCH(request: Request) {
   }
 }
 
-// 본인 댓글 삭제 (?id=)
+// 댓글 삭제 (?id=) — 본인 것만, 단 어드민은 어떤 댓글이든 삭제 가능
 export async function DELETE(request: Request) {
   try {
     const user = await requireUser();
@@ -76,7 +79,11 @@ export async function DELETE(request: Request) {
     if (!Number.isInteger(id) || id <= 0) {
       return apiError("VALIDATION", "삭제할 댓글 id가 필요합니다.");
     }
-    await deleteComment(user.id, id);
+    if (user.isAdmin) {
+      await adminDeleteComment(id);
+    } else {
+      await deleteComment(user.id, id);
+    }
     return apiOk({ ok: true });
   } catch (error) {
     return handleApiError(error);

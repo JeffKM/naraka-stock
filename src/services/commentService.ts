@@ -107,3 +107,18 @@ export async function deleteComment(userId: number, commentId: number): Promise<
     throw new ApiException("NOT_FOUND", "삭제할 수 없는 댓글입니다.");
   }
 }
+
+// 어드민은 작성자와 무관하게 어떤 댓글이든 삭제할 수 있다 (부적절한 글 관리용)
+export async function adminDeleteComment(commentId: number): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("stock_comments")
+    .delete()
+    .eq("id", commentId)
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    throw new ApiException("NOT_FOUND", "삭제할 수 없는 댓글입니다.");
+  }
+}

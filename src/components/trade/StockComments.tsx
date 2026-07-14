@@ -44,9 +44,13 @@ export function StockComments({ stockCode }: { stockCode: string }) {
   const { data } = useQuery({
     queryKey: ["comments", stockCode],
     queryFn: () =>
-      getJson<{ comments: StockComment[] }>(`/api/stocks/${stockCode}/comments`),
+      getJson<{ comments: StockComment[]; viewerIsAdmin: boolean }>(
+        `/api/stocks/${stockCode}/comments`
+      ),
     refetchInterval: 10_000,
   });
+
+  const isAdmin = data?.viewerIsAdmin ?? false;
 
   async function submit() {
     const trimmed = content.trim();
@@ -88,8 +92,12 @@ export function StockComments({ stockCode }: { stockCode: string }) {
     }
   }
 
-  async function remove(id: number) {
-    if (!window.confirm("이 댓글을 삭제할까요?")) return;
+  async function remove(c: StockComment) {
+    const message = c.mine
+      ? "이 댓글을 삭제할까요?"
+      : `'${c.nickname}'님의 댓글을 삭제할까요? (관리자 권한)`;
+    if (!window.confirm(message)) return;
+    const id = c.id;
     try {
       const res = await fetch(`/api/stocks/${stockCode}/comments?id=${id}`, {
         method: "DELETE",
@@ -156,7 +164,7 @@ export function StockComments({ stockCode }: { stockCode: string }) {
                   <p className="mt-0.5 break-words text-sm">{c.content}</p>
                 )}
               </div>
-              {c.mine &&
+              {(c.mine || isAdmin) &&
                 (editingId === c.id ? (
                   <div className="mt-1 flex shrink-0 gap-1.5">
                     <button
@@ -177,17 +185,22 @@ export function StockComments({ stockCode }: { stockCode: string }) {
                   </div>
                 ) : (
                   <div className="mt-1 flex shrink-0 gap-1.5">
+                    {/* 수정은 본인 댓글만, 삭제는 본인 또는 어드민 */}
+                    {c.mine && (
+                      <button
+                        onClick={() => startEdit(c)}
+                        aria-label="내 댓글 수정"
+                        className="text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
+                    )}
                     <button
-                      onClick={() => startEdit(c)}
-                      aria-label="내 댓글 수정"
-                      className="text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      <Pencil className="size-3.5" />
-                    </button>
-                    <button
-                      onClick={() => remove(c.id)}
-                      aria-label="내 댓글 삭제"
-                      className="text-muted-foreground transition-colors hover:text-foreground"
+                      onClick={() => remove(c)}
+                      aria-label={c.mine ? "내 댓글 삭제" : "댓글 삭제 (관리자)"}
+                      className={`text-muted-foreground transition-colors ${
+                        c.mine ? "hover:text-foreground" : "hover:text-destructive"
+                      }`}
                     >
                       <X className="size-3.5" />
                     </button>
