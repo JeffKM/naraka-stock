@@ -74,6 +74,46 @@ export async function listMySupportPosts(userId: number): Promise<SupportPost[]>
   return data.map(toPost);
 }
 
+// 본인 문의만 수정 — 운영자가 손대기 전(open) 상태에서만. 검토중/답변완료는 잠근다.
+export async function updateMySupportPost(
+  userId: number,
+  id: number,
+  content: string
+): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("support_posts")
+    .update({ content })
+    .eq("id", id)
+    .eq("user_id", userId)
+    .eq("status", "open")
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    throw new ApiException(
+      "NOT_FOUND",
+      "수정할 수 없는 문의입니다. 이미 확인 중이거나 답변된 문의는 수정할 수 없어요."
+    );
+  }
+}
+
+// 본인 문의만 삭제 — 상태 무관(답변 후에도 자유롭게 삭제 가능).
+export async function deleteMySupportPost(userId: number, id: number): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("support_posts")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId)
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
+    throw new ApiException("NOT_FOUND", "삭제할 수 없는 문의입니다.");
+  }
+}
+
 // 운영자: 전체 목록 (status 지정 시 해당 상태만, "pending"은 답변완료 이전 전부)
 export async function listSupportPosts(
   status: SupportStatus | "pending" | null

@@ -2,7 +2,12 @@ import { z } from "zod";
 import { apiError, apiOk, handleApiError } from "@/lib/api/response";
 import { requireUser } from "@/lib/auth/guards";
 import { getSession } from "@/lib/auth/session";
-import { createComment, deleteComment, listComments } from "@/services/commentService";
+import {
+  createComment,
+  deleteComment,
+  listComments,
+  updateComment,
+} from "@/services/commentService";
 
 type RouteContext = { params: Promise<{ code: string }> };
 
@@ -19,12 +24,17 @@ export async function GET(_request: Request, { params }: RouteContext) {
   }
 }
 
-const createSchema = z.object({
-  content: z
-    .string()
-    .trim()
-    .min(1, "내용을 입력해주세요")
-    .max(200, "댓글은 200자 이하로 입력해주세요"),
+const contentField = z
+  .string()
+  .trim()
+  .min(1, "내용을 입력해주세요")
+  .max(200, "댓글은 200자 이하로 입력해주세요");
+
+const createSchema = z.object({ content: contentField });
+
+const updateSchema = z.object({
+  id: z.number().int().positive(),
+  content: contentField,
 });
 
 // 댓글 작성
@@ -37,6 +47,21 @@ export async function POST(request: Request, { params }: RouteContext) {
       return apiError("VALIDATION", parsed.error.issues[0].message);
     }
     await createComment(user.id, code.toUpperCase(), parsed.data.content);
+    return apiOk({ ok: true });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+// 본인 댓글 수정
+export async function PATCH(request: Request) {
+  try {
+    const user = await requireUser();
+    const parsed = updateSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return apiError("VALIDATION", parsed.error.issues[0].message);
+    }
+    await updateComment(user.id, parsed.data.id, parsed.data.content);
     return apiOk({ ok: true });
   } catch (error) {
     return handleApiError(error);

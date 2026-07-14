@@ -2,12 +2,12 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { X } from "lucide-react";
+import { Check, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { getJson, postJson } from "@/lib/api/client";
+import { getJson, patchJson, postJson } from "@/lib/api/client";
 
 interface StockComment {
   id: number;
@@ -37,6 +37,9 @@ export function StockComments({ stockCode }: { stockCode: string }) {
   const queryClient = useQueryClient();
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const { data } = useQuery({
     queryKey: ["comments", stockCode],
@@ -60,7 +63,33 @@ export function StockComments({ stockCode }: { stockCode: string }) {
     }
   }
 
+  function startEdit(c: StockComment) {
+    setEditingId(c.id);
+    setEditContent(c.content);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditContent("");
+  }
+
+  async function saveEdit(id: number) {
+    const trimmed = editContent.trim();
+    if (!trimmed || saving) return;
+    setSaving(true);
+    try {
+      await patchJson(`/api/stocks/${stockCode}/comments`, { id, content: trimmed });
+      cancelEdit();
+      queryClient.invalidateQueries({ queryKey: ["comments", stockCode] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "수정에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function remove(id: number) {
+    if (!window.confirm("이 댓글을 삭제할까요?")) return;
     try {
       const res = await fetch(`/api/stocks/${stockCode}/comments?id=${id}`, {
         method: "DELETE",
@@ -105,22 +134,65 @@ export function StockComments({ stockCode }: { stockCode: string }) {
           )}
           {data?.comments.map((c) => (
             <div key={c.id} className="flex items-start justify-between gap-2 py-2.5">
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-xs text-muted-foreground">
                   <span className="font-medium text-foreground">{c.nickname}</span>{" "}
                   · {relativeTime(c.createdAt)}
                 </p>
-                <p className="mt-0.5 break-words text-sm">{c.content}</p>
+                {editingId === c.id ? (
+                  <div className="mt-1 flex gap-2">
+                    <Input
+                      value={editContent}
+                      maxLength={200}
+                      autoFocus
+                      onChange={(e) => setEditContent(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.nativeEvent.isComposing) saveEdit(c.id);
+                        if (e.key === "Escape") cancelEdit();
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <p className="mt-0.5 break-words text-sm">{c.content}</p>
+                )}
               </div>
-              {c.mine && (
-                <button
-                  onClick={() => remove(c.id)}
-                  aria-label="내 댓글 삭제"
-                  className="mt-1 shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <X className="size-3.5" />
-                </button>
-              )}
+              {c.mine &&
+                (editingId === c.id ? (
+                  <div className="mt-1 flex shrink-0 gap-1.5">
+                    <button
+                      onClick={() => saveEdit(c.id)}
+                      disabled={saving || !editContent.trim()}
+                      aria-label="댓글 수정 저장"
+                      className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+                    >
+                      <Check className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      aria-label="수정 취소"
+                      className="text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-1 flex shrink-0 gap-1.5">
+                    <button
+                      onClick={() => startEdit(c)}
+                      aria-label="내 댓글 수정"
+                      className="text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => remove(c.id)}
+                      aria-label="내 댓글 삭제"
+                      className="text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
             </div>
           ))}
         </div>
