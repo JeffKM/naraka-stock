@@ -166,16 +166,28 @@ function StockDialog({
     setBusy(true);
     try {
       const durationMinutes = duration === "" ? null : Number(duration);
-      const result = await postJson<{ fromTick: number; replaced: number }>(
-        "/api/admin/surprise",
-        { stockCode: stock.code, bias: Number(bias), durationMinutes }
-      );
+      const result = await postJson<{
+        fromTick: number;
+        replaced: number;
+        newsVoided: number;
+        newsAdded: number;
+      }>("/api/admin/surprise", {
+        stockCode: stock.code,
+        bias: Number(bias),
+        durationMinutes,
+      });
       const range = durationMinutes ? `${durationMinutes}분간` : "남은 시간 전체";
+      // 뉴스 정합화 결과: 무효화(예약 뉴스 삭제) / 재생성(꼬리 구간 새 뉴스)
+      const newsNote =
+        result.newsVoided || result.newsAdded
+          ? `, 뉴스 −${result.newsVoided}/+${result.newsAdded}`
+          : "";
       toast.success(
-        `${stock.name} 시세 조정 (${range}, 틱 ${result.fromTick} 이후 ${result.replaced}개 재생성)`
+        `${stock.name} 시세 조정 (${range}, 틱 ${result.fromTick} 이후 ${result.replaced}개 재생성${newsNote})`
       );
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
       queryClient.invalidateQueries({ queryKey: ["chart", stock.code] });
+      queryClient.invalidateQueries({ queryKey: ["news"] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "실패");
     } finally {
