@@ -10,7 +10,7 @@ export default function Loading() {
         width={142}
         height={60}
         priority
-        className="animate-pulse"
+        className="animate-pulse dark:invert"
       />
       <p className="text-sm text-muted-foreground">불러오는 중...</p>
     </div>
