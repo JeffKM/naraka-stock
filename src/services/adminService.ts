@@ -58,7 +58,10 @@ export async function getDashboard(): Promise<AdminDashboard> {
   return {
     userCount: users.count ?? 0,
     todayTradeCount: trades.data.length,
-    todayTradeVolume: trades.data.reduce((sum, t) => sum + t.quantity * t.price, 0),
+    todayTradeVolume: trades.data.reduce(
+      (sum, t) => sum + Math.round(Number(t.quantity) * t.price),
+      0
+    ),
     unusedSignupCodes: codes.count ?? 0,
     todayVisitClaims: claims.count ?? 0,
   };

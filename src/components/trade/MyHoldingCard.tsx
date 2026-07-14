@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { getJson } from "@/lib/api/client";
-import { formatMoney } from "@/lib/market";
+import { formatMoney, formatQty } from "@/lib/market";
 import { cn } from "@/lib/utils";
 import type { Portfolio, StockQuote } from "@/types/domain";
 
@@ -20,12 +20,10 @@ export function MyHoldingCard({ quote }: { quote: StockQuote }) {
   const holding = portfolio?.holdings.find((h) => h.stockCode === quote.code);
   if (!holding || holding.quantity <= 0) return null;
 
-  const value = holding.quantity * quote.price;
-  const pnl = value - holding.quantity * holding.avgPrice;
-  const pnlPercent =
-    holding.avgPrice > 0
-      ? Math.round((pnl / (holding.quantity * holding.avgPrice)) * 10000) / 100
-      : 0;
+  const value = Math.round(holding.quantity * quote.price);
+  const cost = Math.round(holding.quantity * holding.avgPrice);
+  const pnl = value - cost;
+  const pnlPercent = cost > 0 ? Math.round((pnl / cost) * 10000) / 100 : 0;
   const up = pnl > 0;
   const down = pnl < 0;
 
@@ -35,7 +33,7 @@ export function MyHoldingCard({ quote }: { quote: StockQuote }) {
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-semibold text-muted-foreground">내 보유</h2>
           <span className="text-xs text-muted-foreground">
-            {holding.quantity.toLocaleString("ko-KR")}주 · 평단 {formatMoney(holding.avgPrice)}
+            {formatQty(holding.quantity)}주 · 평단 {formatMoney(holding.avgPrice)}
           </span>
         </div>
         <div className="mt-1 flex items-baseline justify-between">

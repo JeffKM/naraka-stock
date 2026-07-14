@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { formatMoney } from "@/lib/market";
+import { formatMoney, formatQty } from "@/lib/market";
 
 export interface TradeSuccessInfo {
   side: "buy" | "sell";
@@ -85,7 +85,7 @@ export function TradeSuccessOverlay({
 
         <p className="text-lg font-bold">체결 완료!</p>
         <p className="text-sm text-muted-foreground">
-          {info.stockName} {info.quantity.toLocaleString("ko-KR")}주 ×{" "}
+          {info.stockName} {formatQty(info.quantity)}주 ×{" "}
           {formatMoney(info.price)} {info.side === "buy" ? "구매" : "판매"}
         </p>
       </div>

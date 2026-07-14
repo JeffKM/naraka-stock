@@ -24,14 +24,16 @@ export async function getPortfolio(userId: number): Promise<Portfolio> {
   const priceMap = Object.fromEntries(board.quotes.map((q) => [q.code, q.price]));
 
   const items: PortfolioHolding[] = holdings.map((h) => {
+    // numeric은 PostgREST가 문자열로 내려주므로 Number로 복원한다 (소수점 주식)
+    const quantity = Number(h.quantity);
     const currentPrice = priceMap[h.stock_code] ?? 0;
-    const value = currentPrice * h.quantity;
-    const cost = h.avg_price * h.quantity;
+    const value = Math.round(currentPrice * quantity);
+    const cost = Math.round(h.avg_price * quantity);
     return {
       stockCode: h.stock_code,
       // Supabase 조인 결과 타입이 배열로 추론되지만 실제는 단일 객체
       stockName: (h.stocks as unknown as { name: string }).name,
-      quantity: h.quantity,
+      quantity,
       avgPrice: h.avg_price,
       currentPrice,
       value,
@@ -75,7 +77,8 @@ export async function getTrades(userId: number, page: number): Promise<TradePage
     stockCode: t.stock_code,
     stockName: (t.stocks as unknown as { name: string }).name,
     side: t.side as TradeSide,
-    quantity: t.quantity,
+    quantity: Number(t.quantity), // numeric → 소수점 주식 복원
+
     price: t.price,
     fee: t.fee,
     createdAt: t.created_at,

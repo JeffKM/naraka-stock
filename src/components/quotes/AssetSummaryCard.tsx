@@ -51,7 +51,10 @@ export function AssetSummaryCard() {
 
   // 평가손익 = 보유 종목 미실현 손익 합 (표시용 — 실제 정산은 서버)
   const pnl = portfolio.holdings.reduce((sum, h) => sum + h.pnl, 0);
-  const cost = portfolio.holdings.reduce((sum, h) => sum + h.quantity * h.avgPrice, 0);
+  const cost = portfolio.holdings.reduce(
+    (sum, h) => sum + Math.round(h.quantity * h.avgPrice),
+    0
+  );
   const pnlPercent = cost > 0 ? Math.round((pnl / cost) * 10000) / 100 : 0;
   const up = pnl > 0;
   const down = pnl < 0;
