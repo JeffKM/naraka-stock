@@ -4,6 +4,9 @@
 // - 정식뉴스(90%): 자동. 익일 사전생성 경로의 "실제 움직임"을 설명하는 뉴스로,
 //   움직임이 대부분 끝난 뒤(장 후반) published_at을 스탬프해 장중 시간차로 노출된다
 //   (사후 설명 = 따라 사도 이득 없음, tailNewsTick 참고). 10%는 반대 방향 오보.
+// - 중립 잡뉴스(방향성 없음): 잔잔한 종목 중 랜덤으로 골라 장 초·중반(후반 전)에
+//   균등 배치한다. 오르내림 신호가 없어 뉴스추종 악용이 불가하므로 순수 피드 밀도용
+//   (하루 NEUTRAL_TARGET개, 균등 간격 ≈22분 ±5분 지터·종목 순서는 랜덤).
 // - 찌라시(55%): 자동 생성하지 않는다. 어드민이 콘솔에서 직접 흘리고(수동), 그에
 //   맞춰 시세를 조정한다.
 // - 공시(오늘자, 100%): 실제 등락 ±5% 이상 또는 상·하한가만 발행. 폐장 시각에 노출.
@@ -32,27 +35,46 @@ export interface GeneratedNews {
 
 const COVERAGE = 0.7; // 유의미한 움직임 중 뉴스가 붙는 비율 (나머지는 조용히 지나감)
 const NEWS_ACCURACY = 0.9; // 정식뉴스가 실제 방향과 일치할 확률
-const NEUTRAL_NOISE_PROB = 0.12; // 잔잔한 종목의 방향성 없는 잡뉴스
+const NEUTRAL_TARGET = 27; // 초·중반에 균등 배치할 중립 잡뉴스 목표 개수/일 = 가용 중립 종목 전부 (약 22분 간격, 방향성 없음·피드 밀도용)
+const NEUTRAL_JITTER_TICKS = 1; // 균등 간격에서 ±1틱(=±5분, 틱 간격 5분 기준) 흔들어 기계적 등간격 방지
 const STEEP_WINDOW = 3; // 가파른 구간 탐지 창 (3틱 = 15분)
 
 function pick<T>(rng: Rng, arr: readonly T[]): T {
   return arr[Math.floor(rng() * arr.length)];
 }
 
+// rng 기반 Fisher-Yates 셔플 (원본 불변) — 중립 잡뉴스 종목 순서 무작위화에 사용
+function shuffle<T>(rng: Rng, arr: readonly T[]): T[] {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 function levelOf(signedMagnitude: number): BiasLevel {
   return String(signedMagnitude) as BiasLevel;
 }
 
-// 종목별 발행 이력 (제목 집합) — 재사용 금지 추첨에 사용
-export type UsedTitles = Record<string, ReadonlySet<string>>;
+// 종목별 발행 이력 (제목 → 누적 사용 횟수) — 순환 추첨에 사용
+export type UsedTitles = Record<string, ReadonlyMap<string, number>>;
 
-// 사용 이력을 제외한 풀에서 추첨. 소진 시 전체 풀 폴백
+// 사용 횟수가 가장 적은 템플릿들 중에서 랜덤 추첨.
+//   한 바퀴(풀 전체를 1회씩) 다 쓰면 최소 횟수가 올라가 자동으로 새 사이클이 시작되고,
+//   각 사이클 안에서는 아직 덜 쓴 것들만 후보라 매번 새로운 랜덤 순서로 한 바퀴를 돈다.
 function pickUnused(
   rng: Rng,
   pool: readonly NewsTemplate[],
-  used: ReadonlySet<string> | undefined
+  used: ReadonlyMap<string, number> | undefined
 ): NewsTemplate {
-  const fresh = used ? pool.filter((t) => !used.has(t.title)) : pool;
+  if (!used || used.size === 0) return pick(rng, pool);
+  let minCount = Infinity;
+  for (const t of pool) {
+    const c = used.get(t.title) ?? 0;
+    if (c < minCount) minCount = c;
+  }
+  const fresh = pool.filter((t) => (used.get(t.title) ?? 0) === minCount);
   return pick(rng, fresh.length > 0 ? fresh : pool);
 }
 
@@ -110,9 +132,16 @@ export function generateRegularNews(
   openHour: number,
   rng: Rng,
   usedTitles: UsedTitles = {},
-  scale: number = 1 // 판정 구간이 하루보다 짧을 때 임계값 비례 축소 (시세 조정 꼬리)
+  scale: number = 1, // 판정 구간이 하루보다 짧을 때 임계값 비례 축소 (시세 조정 꼬리)
+  neutralTarget: number = NEUTRAL_TARGET // 초·중반에 균등 배치할 중립 잡뉴스 수 (0이면 배치 안 함)
 ): GeneratedNews[] {
   const result: GeneratedNews[] = [];
+  // 방향성 없는 종목 후보 — 전량 모아 두었다가 아래에서 초·중반에 균등 배치한다
+  const neutral: {
+    path: StockDayPath;
+    templates: Record<BiasLevel, NewsTemplate[]>;
+    used: ReadonlyMap<string, number> | undefined;
+  }[] = [];
 
   for (const path of paths) {
     const templates = HINT_TEMPLATES[path.code];
@@ -124,18 +153,7 @@ export function generateRegularNews(
     const magnitude = magnitudeLevel(Math.abs(dayChangePct), scale);
 
     if (magnitude === 0) {
-      // 잔잔한 종목: 가끔 방향성 없는 잡뉴스만 (임의 틱 배치)
-      if (rng() < NEUTRAL_NOISE_PROB) {
-        const template = pickUnused(rng, templates["0"], used);
-        const tick = path.ticks[Math.floor(rng() * path.ticks.length)].tickIndex;
-        result.push({
-          date,
-          stockCode: path.code,
-          grade: "news",
-          ...template,
-          publishedAt: tickTimestamp(date, tick, openHour),
-        });
-      }
+      neutral.push({ path, templates, used }); // 배치는 아래에서 일괄 (균등 분산)
       continue;
     }
 
@@ -152,6 +170,30 @@ export function generateRegularNews(
       grade: "news",
       ...template,
       publishedAt: tickTimestamp(date, tick, openHour),
+    });
+  }
+
+  // 중립 잡뉴스: 랜덤 순서로 최대 neutralTarget개를 골라 장 초·중반에 균등 배치.
+  //   방향성이 없어 뉴스추종 악용이 불가 → 후반부 격리 없이 앞·중반 밀도만 채운다.
+  const picked = shuffle(rng, neutral).slice(0, Math.max(0, neutralTarget));
+  const n = picked.length;
+  for (let i = 0; i < n; i++) {
+    const { path, templates, used } = picked[i];
+    // 장 후반(tailNewsTick 구간, TAIL_MIN_RATIO~) 직전까지가 중립 배치 범위
+    const cutoffIdx = Math.max(1, Math.floor((path.ticks.length - 1) * TAIL_MIN_RATIO));
+    // 슬롯 중앙(균등 간격 ≈22분)에서 ±NEUTRAL_JITTER_TICKS틱(±5분)만 흔든다.
+    //   슬롯 전체 랜덤이면 간격이 5~35분으로 들쭉날쭉 → 중앙 고정+소량 지터로 규칙적이되 등간격은 아니게.
+    const center = (cutoffIdx * (i + 0.5)) / n;
+    const jitter =
+      Math.floor(rng() * (2 * NEUTRAL_JITTER_TICKS + 1)) - NEUTRAL_JITTER_TICKS;
+    const arrIdx = Math.max(0, Math.min(cutoffIdx - 1, Math.round(center) + jitter));
+    const template = pickUnused(rng, templates["0"], used);
+    result.push({
+      date,
+      stockCode: path.code,
+      grade: "news",
+      ...template,
+      publishedAt: tickTimestamp(date, path.ticks[arrIdx].tickIndex, openHour),
     });
   }
 
