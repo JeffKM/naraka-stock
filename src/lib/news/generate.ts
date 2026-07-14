@@ -1,14 +1,17 @@
 // 뉴스 생성 로직 (T-502) — 순수 함수, 배치에서 호출
 //
-// - 힌트 뉴스(내일자): 이벤트 종목 커버리지 70%, 정식뉴스 90%/찌라시 55% 적중
-//   (오보는 반대 방향 같은 세기의 템플릿으로 생성)
-// - 페이크 찌라시: 이벤트 없는 종목도 15% 확률로 ±10급 소문 발행
-// - 공시(오늘자): 실제 등락 ±5% 이상 또는 상·하한가만 발행 (100% 사실)
-// - 템플릿 재사용 금지 (사장님 확정 2026-07-14): 이미 발행에 쓴 힌트 템플릿은
-//   제외하고 추첨한다. 풀 소진 시에만 전체 풀로 폴백 (±10/0은 15개, 나머지 10개라
-//   이벤트 기간 내 소진은 사실상 불가능)
+// 발행 정책 (사장님 확정 2026-07-14):
+// - 정식뉴스(90%): 자동. 익일 사전생성 경로의 "실제 움직임"을 설명하는 뉴스로,
+//   가장 가파른 움직임이 나오는 틱 시각에 published_at을 스탬프해 장중 시간차로
+//   노출된다 (움직임과 동시 = 설명형). 10%는 반대 방향 오보.
+// - 찌라시(55%): 자동 생성하지 않는다. 어드민이 콘솔에서 직접 흘리고(수동), 그에
+//   맞춰 시세를 조정한다.
+// - 공시(오늘자, 100%): 실제 등락 ±5% 이상 또는 상·하한가만 발행. 폐장 시각에 노출.
+// - 템플릿 재사용 금지: 이미 발행에 쓴 정식뉴스 템플릿은 제외하고 추첨한다.
+//   풀 소진 시에만 전체 풀로 폴백.
 
 import type { Rng } from "@/lib/engine/rng";
+import { tickTimestamp } from "@/lib/market";
 import type { NewsGrade } from "@/types/domain";
 import {
   DISCLOSURE_TEMPLATES,
@@ -24,21 +27,20 @@ export interface GeneratedNews {
   grade: NewsGrade;
   title: string;
   body: string;
+  publishedAt: string; // ISO timestamptz — 이 시각부터 피드에 노출
 }
 
-const COVERAGE = 0.7;
-const NEWS_RATIO = 0.6; // 커버된 종목 중 정식뉴스 비율 (나머지는 찌라시)
-const NEWS_ACCURACY = 0.9;
-const RUMOR_ACCURACY = 0.55;
-const FAKE_RUMOR_PROB = 0.15;
-const NEUTRAL_NOISE_PROB = 0.1; // 방향성 없는 잡뉴스
+const COVERAGE = 0.7; // 유의미한 움직임 중 뉴스가 붙는 비율 (나머지는 조용히 지나감)
+const NEWS_ACCURACY = 0.9; // 정식뉴스가 실제 방향과 일치할 확률
+const NEUTRAL_NOISE_PROB = 0.12; // 잔잔한 종목의 방향성 없는 잡뉴스
+const STEEP_WINDOW = 3; // 가파른 구간 탐지 창 (3틱 = 15분)
 
 function pick<T>(rng: Rng, arr: readonly T[]): T {
   return arr[Math.floor(rng() * arr.length)];
 }
 
-function levelOf(bias: number): BiasLevel {
-  return String(bias) as BiasLevel;
+function levelOf(signedMagnitude: number): BiasLevel {
+  return String(signedMagnitude) as BiasLevel;
 }
 
 // 종목별 발행 이력 (제목 집합) — 재사용 금지 추첨에 사용
@@ -54,44 +56,85 @@ function pickUnused(
   return pick(rng, fresh.length > 0 ? fresh : pool);
 }
 
-// 내일자 힌트 뉴스 (편향 추첨 결과 기반 — 실현치가 아니라 "재료" 기준)
-export function generateHintNews(
-  stockCodes: string[],
-  biases: Record<string, number>,
+// 정식뉴스 생성을 위한 종목별 익일 경로 (배치가 생성한 사전 경로)
+export interface StockDayPath {
+  code: string;
+  prevClose: number; // 직전 종가 (등락률 기준)
+  ticks: { tickIndex: number; price: number }[];
+}
+
+// |등락률| → 사건 세기(10/20/30). 5% 미만은 뉴스거리 아님(0).
+function magnitudeLevel(absPct: number): 0 | 10 | 20 | 30 {
+  if (absPct >= 20) return 30;
+  if (absPct >= 12) return 20;
+  if (absPct >= 5) return 10;
+  return 0;
+}
+
+// 경로에서 가장 가파른 구간의 틱 인덱스 (뉴스가 "터지는" 순간)
+function steepestTickIndex(ticks: { tickIndex: number; price: number }[]): number {
+  if (ticks.length <= STEEP_WINDOW) return ticks[ticks.length - 1]?.tickIndex ?? 0;
+  let bestIdx = ticks[STEEP_WINDOW].tickIndex;
+  let bestAbs = -1;
+  for (let i = STEEP_WINDOW; i < ticks.length; i++) {
+    const delta = Math.abs(ticks[i].price - ticks[i - STEEP_WINDOW].price);
+    if (delta > bestAbs) {
+      bestAbs = delta;
+      bestIdx = ticks[i].tickIndex;
+    }
+  }
+  return bestIdx;
+}
+
+// 익일 정식뉴스 — 사전 경로의 실제 움직임을 설명하는 뉴스 (장중 시간차 노출)
+export function generateRegularNews(
+  paths: StockDayPath[],
   date: string,
+  openHour: number,
   rng: Rng,
   usedTitles: UsedTitles = {}
 ): GeneratedNews[] {
   const result: GeneratedNews[] = [];
 
-  for (const code of stockCodes) {
-    const templates = HINT_TEMPLATES[code];
-    if (!templates) continue;
-    const bias = biases[code] ?? 0;
-    const used = usedTitles[code];
+  for (const path of paths) {
+    const templates = HINT_TEMPLATES[path.code];
+    if (!templates || path.ticks.length === 0) continue;
+    const used = usedTitles[path.code];
 
-    if (bias !== 0) {
-      if (rng() >= COVERAGE) continue; // 뉴스 없는 급등락도 존재해야 한다
-      const isNews = rng() < NEWS_RATIO;
-      const accurate = rng() < (isNews ? NEWS_ACCURACY : RUMOR_ACCURACY);
-      const shownBias = accurate ? bias : -bias;
-      const template = pickUnused(rng, templates[levelOf(shownBias)], used);
-      result.push({
-        date,
-        stockCode: code,
-        grade: isNews ? "news" : "rumor",
-        ...template,
-      });
-    } else if (rng() < FAKE_RUMOR_PROB) {
-      // 이벤트 없는 종목의 낚시 찌라시
-      const direction = rng() < 0.55 ? 10 : -10;
-      const template = pickUnused(rng, templates[levelOf(direction)], used);
-      result.push({ date, stockCode: code, grade: "rumor", ...template });
-    } else if (rng() < NEUTRAL_NOISE_PROB) {
-      // 방향성 없는 잡뉴스 (노이즈)
-      const template = pickUnused(rng, templates["0"], used);
-      result.push({ date, stockCode: code, grade: "news", ...template });
+    const closePrice = path.ticks[path.ticks.length - 1].price;
+    const dayChangePct = ((closePrice - path.prevClose) / path.prevClose) * 100;
+    const magnitude = magnitudeLevel(Math.abs(dayChangePct));
+
+    if (magnitude === 0) {
+      // 잔잔한 종목: 가끔 방향성 없는 잡뉴스만 (임의 틱 배치)
+      if (rng() < NEUTRAL_NOISE_PROB) {
+        const template = pickUnused(rng, templates["0"], used);
+        const tick = path.ticks[Math.floor(rng() * path.ticks.length)].tickIndex;
+        result.push({
+          date,
+          stockCode: path.code,
+          grade: "news",
+          ...template,
+          publishedAt: tickTimestamp(date, tick, openHour),
+        });
+      }
+      continue;
     }
+
+    // 유의미한 움직임: 일부는 뉴스 없이 지나간다
+    if (rng() >= COVERAGE) continue;
+
+    const actualDir = dayChangePct >= 0 ? 1 : -1;
+    const shownDir = rng() < NEWS_ACCURACY ? actualDir : -actualDir; // 10% 오보
+    const template = pickUnused(rng, templates[levelOf(shownDir * magnitude)], used);
+    const tick = steepestTickIndex(path.ticks); // 움직임과 동시에 터진다
+    result.push({
+      date,
+      stockCode: path.code,
+      grade: "news",
+      ...template,
+      publishedAt: tickTimestamp(date, tick, openHour),
+    });
   }
 
   return result;
@@ -106,9 +149,11 @@ export interface DailyMove {
 }
 
 // 오늘자 공시 (실제 결과 — 급등락·상하한만)
+// publishedAt은 폐장 직전 틱 시각 = 폐장 순간에 노출된다 (설정된 폐장 시각 기준).
 export function generateDisclosures(
   moves: DailyMove[],
   date: string,
+  publishedAt: string,
   rng: Rng
 ): GeneratedNews[] {
   const result: GeneratedNews[] = [];
@@ -129,6 +174,7 @@ export function generateDisclosures(
       grade: "disclosure",
       title: template.title.replaceAll("{name}", move.name).replaceAll("{pct}", pct),
       body: template.body.replaceAll("{name}", move.name).replaceAll("{pct}", pct),
+      publishedAt,
     });
   }
 

@@ -11,6 +11,10 @@ export interface NewsPage {
 const PAGE_SIZE = 20;
 
 // 뉴스 피드 (T-503): 최신 발행순, 종목 필터 (공개 API)
+//
+// 발행 시각 게이트: 정식뉴스는 배치가 익일 경로의 움직임 시각으로 published_at을
+// 미리 스탬프해 두므로, 아직 도래하지 않은 뉴스는 노출하지 않는다 (장중 시간차 노출).
+// 공시는 폐장 시각으로 스탬프되어 폐장 순간부터 보인다.
 export async function getNewsFeed(stockCode: string | null, page: number): Promise<NewsPage> {
   const supabase = getSupabaseAdmin();
   const from = (page - 1) * PAGE_SIZE;
@@ -18,6 +22,7 @@ export async function getNewsFeed(stockCode: string | null, page: number): Promi
   let query = supabase
     .from("news")
     .select("id, date, stock_code, grade, title, body, published_at, stocks(name)")
+    .lte("published_at", new Date().toISOString())
     .order("published_at", { ascending: false })
     .order("id", { ascending: false })
     .range(from, from + PAGE_SIZE);

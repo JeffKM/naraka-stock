@@ -96,6 +96,15 @@ export function getTickIndex(
   );
 }
 
+// 게임 날짜 + 틱 인덱스 → 실제 순간(UTC ISO). 개장 시각 기준 5분 간격.
+// chartService의 tickTimeEpoch와 달리 화면용 +9h 보정이 없는 "진짜 시각"이다.
+// 뉴스 published_at(장중 시간차 노출)·공시 폐장 시각 계산에 쓴다.
+export function tickTimestamp(date: string, tickIndex: number, openHour: number): string {
+  const open = String(openHour).padStart(2, "0");
+  const base = new Date(`${date}T${open}:00:00+09:00`).getTime();
+  return new Date(base + tickIndex * TICK_INTERVAL_MINUTES * 60_000).toISOString();
+}
+
 // 금액 표시: 1234567 → "1,234,567원"
 export function formatMoney(amount: number): string {
   return `${amount.toLocaleString("ko-KR")}${CURRENCY_LABEL}`;

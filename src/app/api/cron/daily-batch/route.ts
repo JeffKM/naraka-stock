@@ -1,7 +1,8 @@
 import { apiError, apiOk, handleApiError } from "@/lib/api/response";
 import { runDailyBatch } from "@/services/batchService";
 
-// 일일 배치 트리거 (매일 22:00 KST — pg_cron이 pg_net으로 호출, 배포 시 등록)
+// 일일 배치 트리거 (폐장 시각 KST — pg_cron이 pg_net으로 호출, 폐장 시각 변경 시
+// reschedule_daily_batch가 스케줄을 자동 재조정)
 // 수동 실행: curl -X POST -H "Authorization: Bearer $CRON_SECRET" /api/cron/daily-batch
 export async function POST(request: Request) {
   try {

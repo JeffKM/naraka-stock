@@ -4,15 +4,17 @@ import { generateDailyPath, PRICE_LIMIT_RATE } from "@/lib/engine/randomWalk";
 import { createRng, hashSeed } from "@/lib/engine/rng";
 import {
   generateDisclosures,
-  generateHintNews,
+  generateRegularNews,
   type DailyMove,
   type GeneratedNews,
+  type StockDayPath,
   type UsedTitles,
 } from "@/lib/news/generate";
 import {
   addDays,
   getKstParts,
   isOpenDate,
+  tickTimestamp,
   ticksPerDay,
   MARKET_CLOSE_HOUR,
   MARKET_OPEN_HOUR,
@@ -23,9 +25,10 @@ import { recordIndexCloses } from "@/services/indexService";
 import { loadDayLastTicks } from "@/services/tickService";
 import type { StockTier } from "@/types/domain";
 
-// 일일 배치 (T-204): 매일 22:00 실행
-// 1) 오늘이 개장일이면 정산 (OHLC 확정 + 금요일이면 배당)
-// 2) 익일이 개장일이면 편향 추첨 → 84틱 경로 생성 → 원자 반영
+// 일일 배치 (T-204): 폐장 시각에 실행 (pg_cron이 설정된 폐장 시각으로 트리거)
+// 1) 오늘이 개장일이면 정산 (OHLC 확정 + 금요일이면 배당 + 공시 발행)
+// 2) 익일이 개장일이면 편향 추첨 → 경로 생성(틱 수는 장 시간에서 파생) → 정식뉴스
+//    → 원자 반영
 //
 // 모든 DB 반영은 apply_daily_batch() 단일 트랜잭션. 재실행에 안전(멱등)하다.
 
@@ -44,6 +47,8 @@ interface ConfigMap {
   eventEnd: string;
   dividendPercent: number;
   rules: OpenDayRules;
+  openHour: number;
+  closeHour: number;
   ticksPerDay: number; // 장 시간에서 파생 (12~22시면 120틱)
 }
 
@@ -52,6 +57,8 @@ async function loadConfig(): Promise<ConfigMap> {
   const { data, error } = await supabase.from("config").select("key, value");
   if (error) throw error;
   const map = Object.fromEntries(data.map((row) => [row.key, row.value]));
+  const openHour = Number(map.market_open_hour ?? MARKET_OPEN_HOUR);
+  const closeHour = Number(map.market_close_hour ?? MARKET_CLOSE_HOUR);
   return {
     eventStart: map.event_start,
     eventEnd: map.event_end,
@@ -61,17 +68,19 @@ async function loadConfig(): Promise<ConfigMap> {
       holidayExceptions: map.holiday_exceptions ?? [],
       extraOpenDays: map.extra_open_days ?? [],
     },
-    ticksPerDay: ticksPerDay({
-      openHour: Number(map.market_open_hour ?? MARKET_OPEN_HOUR),
-      closeHour: Number(map.market_close_hour ?? MARKET_CLOSE_HOUR),
-    }),
+    openHour,
+    closeHour,
+    ticksPerDay: ticksPerDay({ openHour, closeHour }),
   };
 }
 
 export async function runDailyBatch(overrideToday?: string): Promise<BatchResult> {
   const supabase = getSupabaseAdmin();
   const config = await loadConfig();
-  const today = overrideToday ?? getKstParts().date;
+  // "방금 닫힌 개장일" = today. 폐장 정각에 배치가 도는데, 폐장이 24:00이면 크론이
+  // 다음 날 00:00(KST)에 뜨므로 실행 시각 hour < openHour면 어제가 방금 닫힌 날이다.
+  const kst = getKstParts();
+  const today = overrideToday ?? (kst.hour < config.openHour ? addDays(kst.date, -1) : kst.date);
 
   // 이벤트 시작 전에도 배치는 돌게 둔다 (리허설·테스트) — 종료 후에만 중단
   const todayOpen = isOpenDate(today, config.rules) && today <= config.eventEnd;
@@ -90,6 +99,7 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
   let biases: Record<string, number> = {};
   const summaries: Array<Record<string, unknown>> = [];
   const ticks: Array<Record<string, unknown>> = [];
+  const stockPaths: StockDayPath[] = []; // 정식뉴스 생성용 (익일 경로)
   const news: GeneratedNews[] = [];
 
   if (tomorrowOpen) {
@@ -133,30 +143,31 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
           is_halted: t.isHalted,
         }))
       );
+      stockPaths.push({
+        code: stock.code,
+        prevClose,
+        ticks: path.ticks.map((t) => ({ tickIndex: t.tickIndex, price: t.price })),
+      });
     }
 
-    // 내일자 힌트 뉴스 (추첨 bias 기준 — 실현치 아님, T-502)
+    // 내일자 정식뉴스 (사전 경로의 실제 움직임을 설명 — 장중 시간차 노출, T-502)
     // 이미 발행한 템플릿은 재사용하지 않는다 (생성 대상일 자신의 뉴스는 재실행 시
     // 교체되므로 이력에서 제외 — 배치 멱등성 유지)
     const usedTitles = await loadUsedHintTitles(tomorrowDate);
     news.push(
-      ...generateHintNews(
-        stocks.map((s) => s.code),
-        biases,
-        tomorrowDate,
-        rng,
-        usedTitles
-      )
+      ...generateRegularNews(stockPaths, tomorrowDate, config.openHour, rng, usedTitles)
     );
   }
 
-  // 오늘자 공시 (실제 결과 — 급등락·상하한만)
+  // 오늘자 공시 (실제 결과 — 급등락·상하한만). 폐장 직전 틱 시각에 스탬프해
+  // 폐장 순간부터 노출된다 (설정된 폐장 시각 기준).
   if (todayOpen) {
     const moves = await loadTodayMoves(today, stocks);
     const disclosureRng = createRng(
       hashSeed(`${process.env.SESSION_SECRET}|disclosure|${today}`)
     );
-    news.push(...generateDisclosures(moves, today, disclosureRng));
+    const disclosureAt = tickTimestamp(today, config.ticksPerDay - 1, config.openHour);
+    news.push(...generateDisclosures(moves, today, disclosureAt, disclosureRng));
   }
 
   const { data: result, error } = await supabase.rpc("apply_daily_batch", {
@@ -174,6 +185,7 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
       grade: n.grade,
       title: n.title,
       body: n.body,
+      published_at: n.publishedAt,
     })),
   });
   if (error) throw error;

@@ -463,6 +463,14 @@ export async function updateMarketSettings(
   ];
   const { error } = await supabase.from("config").upsert(rows);
   if (error) throw error;
+
+  // 폐장 시각이 바뀌면 배치 크론도 새 폐장 시각에 맞춰 재조정한다 (best-effort).
+  // pg_cron 미설치(로컬)·잡 미등록이면 함수가 조용히 no-op 하므로 실패해도 무시.
+  const { error: cronError } = await supabase.rpc("reschedule_daily_batch");
+  if (cronError) {
+    console.error("배치 크론 재조정 실패(무시):", cronError.message);
+  }
+
   return { reconciled: await reconcileTodayTicks() };
 }
 
