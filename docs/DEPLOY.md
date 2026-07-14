@@ -59,7 +59,8 @@ select cron.schedule(
       'Authorization', 'Bearer <CRON_SECRET>',
       'Content-Type', 'application/json'
     ),
-    body := '{}'::jsonb
+    body := '{}'::jsonb,
+    timeout_milliseconds := 60000  -- pg_net 기본 5초는 배치 완주 전 끊긴다. 반드시 상향.
   )
   $$
 );
@@ -69,6 +70,29 @@ select * from cron.job;
 -- select cron.unschedule('naraka-daily-batch');
 -- select reschedule_daily_batch();  -- config.market_close_hour 기준으로 스케줄 재조정
 ```
+
+> ⚠️ **이미 등록된 잡의 타임아웃 패치**: `reschedule_daily_batch()`는 스케줄만 바꾸고
+> 커맨드(URL·시크릿·타임아웃)는 보존한다. `timeout_milliseconds` 없이 등록된 기존 잡은
+> 아래처럼 커맨드를 교체해야 한다(스케줄 유지):
+> ```sql
+> select cron.alter_job(
+>   job_id := (select jobid from cron.job where jobname = 'naraka-daily-batch'),
+>   command := $$
+>   select net.http_post(
+>     url := 'https://<도메인>/api/cron/daily-batch',
+>     headers := jsonb_build_object(
+>       'Authorization', 'Bearer <CRON_SECRET>',
+>       'Content-Type', 'application/json'
+>     ),
+>     body := '{}'::jsonb,
+>     timeout_milliseconds := 60000
+>   )
+>   $$
+> );
+> ```
+> 배치 장애(공시·익일 뉴스 누락) 시 진단: `select id, status_code, timed_out, error_msg,
+> created from net._http_response order by created desc limit 10;` — `timed_out = true`면
+> pg_net 타임아웃이 원인이다.
 
 수동 실행(리허설·장애 복구용):
 ```bash
