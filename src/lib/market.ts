@@ -1,16 +1,21 @@
 // 장 운영 시간·틱 계산 유틸 (KST 기준 순수 함수)
 //
-// 기본 규칙 (PRD §2 초안: 수~일 15:00~22:00)에서 출발하되, 실제 운영값은
-// 전부 DB config(market_open_hour / market_close_hour / closed_weekdays /
-// holiday_exceptions / extra_open_days)로 어드민이 조절한다.
-// 하루 틱 수도 장 시간에서 파생된다 — ticksPerDay(hours).
+// 실제 운영값은 전부 DB config(market_open_hour / market_close_hour /
+// closed_weekdays / holiday_exceptions / extra_open_days)로 어드민이 조절한다.
+// 아래 상수는 config를 못 읽었을 때의 fallback 기본값이며, 현재 운영 기본값
+// 12:00~24:00(자정 폐장, PRD §2)과 일치시켜 둔다 — config 읽기가 삐끗해도
+// 장중을 "휴장"으로 잘못 판정하지 않게 하기 위함. 하루 틱 수도 장 시간에서
+// 파생된다 — ticksPerDay(hours).
 
 import type { MarketState } from "@/types/domain";
 
-export const MARKET_OPEN_HOUR = 15;
-export const MARKET_CLOSE_HOUR = 22;
+export const MARKET_OPEN_HOUR = 12; // fallback 개장 시각 — 운영 기본값과 일치
+export const MARKET_CLOSE_HOUR = 24; // fallback 폐장 시각(자정) — 운영 기본값과 일치
 export const TICK_INTERVAL_MINUTES = 5;
-export const TICKS_PER_DAY = 84; // 기본 장 시간 기준 — 엔진 밸런스의 기준 틱 수
+// 엔진 밸런스의 기준 틱 수(고정). 실제 하루 틱 수는 장 시간에서 파생되며
+// (12~24시면 144틱) 이 상수와 다를 수 있다 — randomWalk가 sqrt(TICKS_PER_DAY/
+// totalTicks)로 변동성을 정규화하므로 두 값은 의도적으로 분리돼 있다.
+export const TICKS_PER_DAY = 84;
 export const CLOSED_WEEKDAYS: number[] = []; // 기본값: 정기 휴장 없음 (config.closed_weekdays로 오버라이드) — 휴장일은 추후 논의 시 추가
 
 export const CURRENCY_LABEL = "원"; // 화폐 명칭 (사장님 확정 2026-07-11)

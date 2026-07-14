@@ -25,6 +25,12 @@ export interface MarketConfig {
 // - market_open_hour / market_close_hour: 기본 장 시간 (틱 수도 여기서 파생)
 // - market_hours_override: 오늘 하루만 다른 장 시간 ({date, openHour, closeHour})
 // - closed_weekdays: 정기 휴장 요일 / holiday_exceptions·extra_open_days: 예외일
+// config 값을 정수 시각으로 안전 변환 — 없거나 NaN이면 fallback 사용.
+function toHour(value: unknown, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export async function loadMarketConfig(): Promise<MarketConfig> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -39,6 +45,9 @@ export async function loadMarketConfig(): Promise<MarketConfig> {
       "extra_open_days",
     ]);
   if (error || !data) {
+    // config를 못 읽으면 운영 기본값(DEFAULT_MARKET_HOURS = 12~24)으로 안전하게
+    // 폴백한다. 조용히 삼키면 장중에 차트가 빈 채로 뜨는 원인을 못 찾으니 로깅.
+    console.error("[marketHours] config 로드 실패 — 운영 기본값으로 폴백", error);
     return {
       hours: DEFAULT_MARKET_HOURS,
       defaultHours: DEFAULT_MARKET_HOURS,
@@ -48,9 +57,11 @@ export async function loadMarketConfig(): Promise<MarketConfig> {
   }
 
   const map = Object.fromEntries(data.map((row) => [row.key, row.value]));
+  // 값이 없거나 숫자로 파싱 안 되면(NaN) 운영 기본값으로 폴백 — 깨진 config가
+  // 장중을 "휴장"으로 잘못 판정하지 않게 한다.
   const defaultHours: MarketHours = {
-    openHour: Number(map.market_open_hour ?? DEFAULT_MARKET_HOURS.openHour),
-    closeHour: Number(map.market_close_hour ?? DEFAULT_MARKET_HOURS.closeHour),
+    openHour: toHour(map.market_open_hour, DEFAULT_MARKET_HOURS.openHour),
+    closeHour: toHour(map.market_close_hour, DEFAULT_MARKET_HOURS.closeHour),
   };
 
   const raw = map.market_hours_override as Partial<MarketHoursOverride> | undefined;
@@ -58,8 +69,8 @@ export async function loadMarketConfig(): Promise<MarketConfig> {
     raw && raw.date === getKstParts().date
       ? {
           date: raw.date,
-          openHour: Number(raw.openHour),
-          closeHour: Number(raw.closeHour),
+          openHour: toHour(raw.openHour, defaultHours.openHour),
+          closeHour: toHour(raw.closeHour, defaultHours.closeHour),
         }
       : null;
 
