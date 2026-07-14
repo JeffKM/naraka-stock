@@ -9,14 +9,20 @@ import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth/token";
 
 const PROTECTED_PREFIXES = ["/portfolio", "/history", "/support", "/admin"];
 const AUTH_PAGES = ["/login", "/signup"];
+// 어드민 리다이렉트 예외 — 게임 방법 등 어드민도 볼 수 있는 공용 안내 페이지
+const ADMIN_ALLOWED_PAGES = ["/guide"];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   const session = token ? await verifySessionToken(token) : null;
 
-  // 어드민 → 방문자 페이지 대신 운영자 콘솔로
-  if (session?.isAdmin && !pathname.startsWith("/admin")) {
+  // 어드민 → 방문자 페이지 대신 운영자 콘솔로 (공용 안내 페이지는 예외)
+  if (
+    session?.isAdmin &&
+    !pathname.startsWith("/admin") &&
+    !ADMIN_ALLOWED_PAGES.includes(pathname)
+  ) {
     return NextResponse.redirect(new URL("/admin", request.url));
   }
 
