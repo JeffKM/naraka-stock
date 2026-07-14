@@ -113,7 +113,6 @@ export default function AdminPage() {
 
         <TabsContent value="ops" className="flex flex-col gap-4">
           <MarketSection />
-          <ManualNewsSection />
         </TabsContent>
 
         <TabsContent value="users" className="flex flex-col gap-4">
@@ -126,6 +125,7 @@ export default function AdminPage() {
         <TabsContent value="manage" className="flex flex-col gap-4">
           <StockSection />
           <EventSection />
+          <ManualNewsSection />
           <ResetSection />
         </TabsContent>
 

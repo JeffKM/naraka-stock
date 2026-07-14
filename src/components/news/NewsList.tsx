@@ -78,7 +78,14 @@ function authorOf(n: NewsItem): {
       outletSlug: outlet.slug,
     };
   }
-  // 찌라시: 나라카 익명 제보 계정
+  // 찌라시: 출처(기자·매체명)가 지정돼 있으면 그 이름으로, 없으면 익명 제보 계정
+  if (n.source) {
+    return {
+      name: n.source,
+      handle: `@${n.source.replace(/\s+/g, "")}`,
+      avatar: n.source.slice(0, 2),
+    };
+  }
   return { name: "나라카 찌라시", handle: "@naraka_whisper", avatar: "찌" };
 }
 

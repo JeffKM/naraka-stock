@@ -18,6 +18,7 @@ interface NewsRow {
   grade: string;
   title: string;
   body: string;
+  source: string | null;
   published_at: string;
   stocks: unknown;
 }
@@ -33,6 +34,7 @@ function toNewsItem(n: NewsRow): NewsItem {
     grade: n.grade as NewsGrade,
     title: n.title,
     body: n.body,
+    source: n.source,
     publishedAt: n.published_at,
   };
 }
@@ -59,7 +61,7 @@ export async function getNewsFeed(filter: NewsFeedFilter, page: number): Promise
 
   let query = supabase
     .from("news")
-    .select("id, date, stock_code, grade, title, body, published_at, stocks(name)")
+    .select("id, date, stock_code, grade, title, body, source, published_at, stocks(name)")
     .lte("published_at", new Date().toISOString())
     .order("published_at", { ascending: false })
     .order("id", { ascending: false })
@@ -85,7 +87,7 @@ async function getOutletFeed(outletSlug: string, page: number): Promise<NewsPage
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("news")
-    .select("id, date, stock_code, grade, title, body, published_at, stocks(name)")
+    .select("id, date, stock_code, grade, title, body, source, published_at, stocks(name)")
     .eq("grade", "news")
     .lte("published_at", new Date().toISOString())
     .order("published_at", { ascending: false })
