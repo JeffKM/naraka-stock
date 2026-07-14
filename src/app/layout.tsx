@@ -22,7 +22,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "나라카증권 — 요괴들의 모의 주식 거래소",
+    default: "나라카증권",
     template: "%s | 나라카증권",
   },
   description: "요괴 컨셉카페 나라카의 8월 이벤트 — 가상 화폐로 즐기는 모의 주식 거래",
