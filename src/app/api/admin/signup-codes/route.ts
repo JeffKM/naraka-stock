@@ -16,7 +16,10 @@ export async function GET() {
   }
 }
 
-const createSchema = z.object({ count: z.number().int().min(1).max(200) });
+const createSchema = z.object({
+  count: z.number().int().min(1).max(200),
+  isAdmin: z.boolean().optional().default(false),
+});
 
 export async function POST(request: Request) {
   try {
@@ -25,7 +28,9 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return apiError("VALIDATION", "생성 개수는 1~200 사이여야 합니다.");
     }
-    return apiOk({ codes: await createSignupCodes(parsed.data.count) });
+    return apiOk({
+      codes: await createSignupCodes(parsed.data.count, parsed.data.isAdmin),
+    });
   } catch (error) {
     return handleApiError(error);
   }

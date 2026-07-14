@@ -31,7 +31,7 @@ export async function signup(input: SignupInput): Promise<AuthResult> {
   const passwordHash = await hashPassword(input.password);
   const supabase = getSupabaseAdmin();
 
-  const { data: userId, error } = await supabase.rpc("signup_user", {
+  const { data, error } = await supabase.rpc("signup_user", {
     p_code: input.code.trim(),
     p_nickname: input.nickname,
     p_password_hash: passwordHash,
@@ -41,8 +41,11 @@ export async function signup(input: SignupInput): Promise<AuthResult> {
     throw mapDbError(error.message) ?? error;
   }
 
-  await createSession({ uid: userId, nickname: input.nickname, isAdmin: false });
-  return { nickname: input.nickname, isAdmin: false };
+  // signup_user는 { id, is_admin }을 반환한다. 어드민 발급코드로 가입하면 곧바로
+  // 어드민 계정이 되므로 세션·응답에 그대로 반영한다.
+  const { id: userId, is_admin: isAdmin } = data as { id: number; is_admin: boolean };
+  await createSession({ uid: userId, nickname: input.nickname, isAdmin });
+  return { nickname: input.nickname, isAdmin };
 }
 
 // 로그인 (T-102): 계정 존재 여부를 노출하지 않도록 실패 메시지는 하나로 통일
