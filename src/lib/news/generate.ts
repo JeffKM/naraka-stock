@@ -64,10 +64,13 @@ export interface StockDayPath {
 }
 
 // |등락률| → 사건 세기(10/20/30). 5% 미만은 뉴스거리 아님(0).
-function magnitudeLevel(absPct: number): 0 | 10 | 20 | 30 {
-  if (absPct >= 20) return 30;
-  if (absPct >= 12) return 20;
-  if (absPct >= 5) return 10;
+// scale: 판정 구간이 하루보다 짧을 때(시세 조정 꼬리 등) 임계값을 비례 축소한다.
+//   예: 꼬리가 장의 절반이면 scale=0.5 → 임계 2.5/6/10%. 템플릿은 퍼센트가 아닌
+//   "재료의 세기"(소소/큰/초대형)만 표현하므로 임계를 낮춰도 문구 모순이 없다.
+function magnitudeLevel(absPct: number, scale: number = 1): 0 | 10 | 20 | 30 {
+  if (absPct >= 20 * scale) return 30;
+  if (absPct >= 12 * scale) return 20;
+  if (absPct >= 5 * scale) return 10;
   return 0;
 }
 
@@ -92,7 +95,8 @@ export function generateRegularNews(
   date: string,
   openHour: number,
   rng: Rng,
-  usedTitles: UsedTitles = {}
+  usedTitles: UsedTitles = {},
+  scale: number = 1 // 판정 구간이 하루보다 짧을 때 임계값 비례 축소 (시세 조정 꼬리)
 ): GeneratedNews[] {
   const result: GeneratedNews[] = [];
 
@@ -103,7 +107,7 @@ export function generateRegularNews(
 
     const closePrice = path.ticks[path.ticks.length - 1].price;
     const dayChangePct = ((closePrice - path.prevClose) / path.prevClose) * 100;
-    const magnitude = magnitudeLevel(Math.abs(dayChangePct));
+    const magnitude = magnitudeLevel(Math.abs(dayChangePct), scale);
 
     if (magnitude === 0) {
       // 잔잔한 종목: 가끔 방향성 없는 잡뉴스만 (임의 틱 배치)

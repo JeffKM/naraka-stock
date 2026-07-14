@@ -10,9 +10,11 @@ import {
   addDays,
   isOpenDate,
   ticksPerDay,
+  tickTimestamp,
   TICK_INTERVAL_MINUTES,
 } from "@/lib/market";
 import { loadMarketConfig } from "@/lib/marketHours";
+import { generateRegularNews, type GeneratedNews } from "@/lib/news/generate";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import {
   adjustDivisorForListing,
@@ -177,7 +179,7 @@ export async function triggerSurpriseEvent(
   stockCode: string,
   bias: number,
   durationMinutes: number | null = null
-): Promise<{ fromTick: number; replaced: number }> {
+): Promise<{ fromTick: number; replaced: number; newsVoided: number; newsAdded: number }> {
   const supabase = getSupabaseAdmin();
   const { date: today } = getKstParts();
   const { hours, rules } = await loadMarketConfig();
@@ -241,7 +243,45 @@ export async function triggerSurpriseEvent(
     resumeBias
   );
 
-  const { data: replaced, error: rpcError } = await supabase.rpc("replace_future_ticks", {
+  // 조정 시점 이후(아직 노출 전) 자동 정식뉴스 무효화 기준 시각
+  const newsCutoff = tickTimestamp(today, currentTick, hours.openHour);
+
+  // 창(admin bias) 이후 꼬리(resumeBias) 구간을 기준으로 정식뉴스 재생성.
+  // 창 구간은 어드민 수동 찌라시가 서사를 담당하므로 자동뉴스를 만들지 않는다.
+  const total = ticksPerDay(hours);
+  const remaining = total - 1 - currentTick;
+  const windowTickCount =
+    durationMinutes === null
+      ? remaining
+      : Math.min(Math.max(Math.round(durationMinutes / TICK_INTERVAL_MINUTES), 1), remaining);
+  const windowEndTick = currentTick + windowTickCount;
+
+  // 꼬리가 가파른 구간 탐지창(15분=3틱)보다 짧으면 재생성하지 않는다 — 극단적으로
+  // 짧은 꼬리는 스케일이 과하게 작아져 사소한 움직임이 과장된 뉴스가 되기 때문.
+  const MIN_TAIL_TICKS = 3;
+  let newNews: GeneratedNews[] = [];
+  if (total - 1 - windowEndTick >= MIN_TAIL_TICKS) {
+    const tailTicks = ticks
+      .filter((t) => t.tickIndex > windowEndTick)
+      .map((t) => ({ tickIndex: t.tickIndex, price: t.price }));
+    // 창 끝 가격을 유사 기준가로 삼아 꼬리 등락만 판정 (화면상 꼬리 움직임과 일치)
+    const windowEndPrice =
+      ticks.find((t) => t.tickIndex === windowEndTick)?.price ?? currentRow.price;
+    // 임계값은 꼬리 길이에 비례 축소 (짧은 꼬리도 유의미하면 뉴스가 붙도록)
+    const scale = tailTicks.length / total;
+    // 오늘 이 종목이 이미 쓴 정식뉴스 제목은 재사용 금지
+    const usedTitles = await loadStockNewsTitles(stockCode);
+    newNews = generateRegularNews(
+      [{ code: stockCode, prevClose: windowEndPrice, ticks: tailTicks }],
+      today,
+      hours.openHour,
+      rng,
+      { [stockCode]: usedTitles },
+      scale
+    );
+  }
+
+  const { data: result, error: rpcError } = await supabase.rpc("replace_future_ticks", {
     p_stock_code: stockCode,
     p_date: today,
     p_from_tick: currentTick,
@@ -250,10 +290,34 @@ export async function triggerSurpriseEvent(
       price: t.price,
       is_halted: t.isHalted,
     })),
+    p_news_cutoff: newsCutoff,
+    p_new_news: newNews.map((n) => ({
+      grade: n.grade,
+      title: n.title,
+      body: n.body,
+      published_at: n.publishedAt,
+    })),
   });
   if (rpcError) throw rpcError;
 
-  return { fromTick: currentTick, replaced };
+  return {
+    fromTick: currentTick,
+    replaced: result.replaced,
+    newsVoided: result.newsVoided,
+    newsAdded: result.newsAdded,
+  };
+}
+
+// 특정 종목의 정식뉴스 제목 집합 (재생성 시 재사용 금지) — 시세 조정 꼬리 뉴스용
+async function loadStockNewsTitles(stockCode: string): Promise<ReadonlySet<string>> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("news")
+    .select("title")
+    .eq("stock_code", stockCode)
+    .eq("grade", "news");
+  if (error) throw error;
+  return new Set((data ?? []).map((n) => n.title));
 }
 
 // ── 리허설 데이터 초기화 (개장 전 1회) ──────────────────────────
