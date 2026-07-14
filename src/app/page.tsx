@@ -22,7 +22,7 @@ const TIER_LABEL = { stable: "우량주", normal: "일반주", wild: "테마주"
 
 const WEEKDAY_LABEL = ["", "월", "화", "수", "목", "금", "토", "일"];
 
-// 장 운영 안내 문구: "매일 12:00~22:00" / "수~일 15:00~22:00 (월·화 휴장)" 등
+// 장 운영 안내 문구: "매일 12:00~24:00" / 휴장 요일 지정 시 "12:00~24:00 (월 휴장)" 등
 function marketHoursLabel(market: {
   openHour: number;
   closeHour: number;

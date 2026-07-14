@@ -1,8 +1,9 @@
 // 몬테카를로 밸런스 시뮬레이션 (T-207)
 //
 // 실행: npm run simulate [-- --runs 1000]
-// 운영 배치와 동일한 엔진(src/lib/engine/)으로 이벤트 기간(개장일 22일)을
-// 1,000회 반복해 전략별 최종 자산 분포를 확인한다 (PRD §10 목표 검증).
+// 운영 배치와 동일한 엔진(src/lib/engine/)으로 이벤트 기간의 개장일(휴장 규칙에서 파생 —
+// 정기 휴장 없음이면 08-01~08-30 = 30일)을 1,000회 반복해 전략별 최종 자산 분포를 확인한다
+// (PRD §10 목표 검증).
 
 import { drawDailyBiases, realizeBias, type BiasMap } from "../src/lib/engine/bias";
 import { generateDailyPath, type DailyPath } from "../src/lib/engine/randomWalk";

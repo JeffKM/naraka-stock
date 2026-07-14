@@ -11,7 +11,7 @@ export const MARKET_OPEN_HOUR = 15;
 export const MARKET_CLOSE_HOUR = 22;
 export const TICK_INTERVAL_MINUTES = 5;
 export const TICKS_PER_DAY = 84; // 기본 장 시간 기준 — 엔진 밸런스의 기준 틱 수
-export const CLOSED_WEEKDAYS = [1, 2]; // 기본값 (config.closed_weekdays로 오버라이드)
+export const CLOSED_WEEKDAYS: number[] = []; // 기본값: 정기 휴장 없음 (config.closed_weekdays로 오버라이드) — 휴장일은 추후 논의 시 추가
 
 export const CURRENCY_LABEL = "원"; // 화폐 명칭 (사장님 확정 2026-07-11)
 
@@ -60,7 +60,7 @@ export const DEFAULT_MARKET_HOURS: MarketHours = {
   closeHour: MARKET_CLOSE_HOUR,
 };
 
-// 장 시간 기준 하루 틱 수 (12~22시면 120틱)
+// 장 시간 기준 하루 틱 수 (12~24시면 144틱)
 export function ticksPerDay(hours: MarketHours = DEFAULT_MARKET_HOURS): number {
   return ((hours.closeHour - hours.openHour) * 60) / TICK_INTERVAL_MINUTES;
 }
@@ -132,7 +132,7 @@ export function formatCompactMoney(amount: number): string {
 // ---------------------------------------------------------------------------
 
 export interface OpenDayRules {
-  closedWeekdays?: number[]; // 정기 휴장 요일 (ISO 1=월~7=일, 기본 [1,2])
+  closedWeekdays?: number[]; // 정기 휴장 요일 (ISO 1=월~7=일, 기본 없음)
   holidayExceptions?: string[]; // 임시 휴장일
   extraOpenDays?: string[]; // 휴장 요일인데 여는 날
 }

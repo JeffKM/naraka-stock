@@ -34,7 +34,7 @@ insert into config (key, value) values
   ('market_open_hour', '15'),
   ('market_close_hour', '22'),
   ('tick_interval_minutes', '5'),
-  ('closed_weekdays', '[1, 2]'),
+  ('closed_weekdays', '[]'),
   ('holiday_exceptions', '[]'),
   ('extra_open_days', '[]'),
   ('initial_cash', '1000000'),

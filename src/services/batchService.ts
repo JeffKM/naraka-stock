@@ -49,7 +49,7 @@ interface ConfigMap {
   rules: OpenDayRules;
   openHour: number;
   closeHour: number;
-  ticksPerDay: number; // 장 시간에서 파생 (12~22시면 120틱)
+  ticksPerDay: number; // 장 시간에서 파생 (12~24시면 144틱)
 }
 
 async function loadConfig(): Promise<ConfigMap> {
