@@ -362,7 +362,8 @@ export async function triggerSurpriseEvent(
       hours.openHour,
       rng,
       { [stockCode]: usedTitles },
-      scale
+      scale,
+      0 // 시세 조정 꼬리는 실제 움직임만 설명 — 중립 필러 뉴스는 붙이지 않는다
     );
   }
 
@@ -393,8 +394,8 @@ export async function triggerSurpriseEvent(
   };
 }
 
-// 특정 종목의 정식뉴스 제목 집합 (재생성 시 재사용 금지) — 시세 조정 꼬리 뉴스용
-async function loadStockNewsTitles(stockCode: string): Promise<ReadonlySet<string>> {
+// 특정 종목의 정식뉴스 제목별 누적 사용 횟수 (순환 추첨용) — 시세 조정 꼬리 뉴스용
+async function loadStockNewsTitles(stockCode: string): Promise<ReadonlyMap<string, number>> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("news")
@@ -402,7 +403,9 @@ async function loadStockNewsTitles(stockCode: string): Promise<ReadonlySet<strin
     .eq("stock_code", stockCode)
     .eq("grade", "news");
   if (error) throw error;
-  return new Set((data ?? []).map((n) => n.title));
+  const counts = new Map<string, number>();
+  for (const n of data ?? []) counts.set(n.title, (counts.get(n.title) ?? 0) + 1);
+  return counts;
 }
 
 // ── 리허설 데이터 초기화 (개장 전 1회) ──────────────────────────

@@ -206,7 +206,7 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
   };
 }
 
-// 종목별로 이미 발행에 쓴 힌트 템플릿 제목 (재사용 금지 추첨용)
+// 종목별로 이미 발행에 쓴 힌트 템플릿 제목의 누적 사용 횟수 (순환 추첨용)
 // 생성 대상일(targetDate)의 뉴스는 배치 재실행 시 삭제 후 교체되므로 제외한다
 async function loadUsedHintTitles(targetDate: string): Promise<UsedTitles> {
   const supabase = getSupabaseAdmin();
@@ -219,10 +219,11 @@ async function loadUsedHintTitles(targetDate: string): Promise<UsedTitles> {
     .not("stock_code", "is", null);
   if (error) throw error;
 
-  const used: Record<string, Set<string>> = {};
+  const used: Record<string, Map<string, number>> = {};
   for (const row of data) {
     const code = row.stock_code as string;
-    (used[code] ??= new Set()).add(row.title);
+    const counts = (used[code] ??= new Map());
+    counts.set(row.title, (counts.get(row.title) ?? 0) + 1);
   }
   return used;
 }
