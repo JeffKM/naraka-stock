@@ -99,6 +99,53 @@ function simulateMarket(rng: Rng): DayMarket[] {
   return result;
 }
 
+// --- 뉴스 배치 타이밍 실험 (T-503) ---
+// 정식뉴스가 하루 경로의 어느 틱에 노출되느냐 = 뉴스추종이 먹을 수 있는 "남은 드리프트".
+//   steepest = 현재 운영: 가장 가파른 3틱 구간 (움직임 한창)
+//   middle   = 장 중간
+//   tail     = 움직임이 대부분 끝난 뒤 (후반 85% 지점)
+//   close    = 종가 직전 (남은 움직임 ≈ 0)
+type NewsTiming = "steepest" | "middle" | "tail" | "close";
+const NEWS_TIMING: NewsTiming = ((): NewsTiming => {
+  const i = process.argv.indexOf("--news-timing");
+  const v = i >= 0 ? process.argv[i + 1] : "tail"; // 운영 기본값 = tail (generate.ts와 동일)
+  return (["steepest", "middle", "tail", "close"] as const).includes(v as NewsTiming)
+    ? (v as NewsTiming)
+    : "tail";
+})();
+
+const STEEP_WINDOW = 3; // generate.ts와 동일
+
+// generate.ts의 steepestTickIndex와 동일 로직
+function steepestTickIndex(ticks: { tickIndex: number; price: number }[]): number {
+  if (ticks.length <= STEEP_WINDOW) return ticks.length - 1;
+  let bestIdx = STEEP_WINDOW;
+  let bestAbs = -1;
+  for (let i = STEEP_WINDOW; i < ticks.length; i++) {
+    const delta = Math.abs(ticks[i].price - ticks[i - STEEP_WINDOW].price);
+    if (delta > bestAbs) {
+      bestAbs = delta;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
+function newsTickIndex(ticks: { tickIndex: number; price: number }[], mode: NewsTiming): number {
+  const last = ticks.length - 1;
+  switch (mode) {
+    case "steepest":
+      return steepestTickIndex(ticks);
+    case "middle":
+      return Math.floor(last * 0.5);
+    case "tail":
+      // generate.ts tailNewsTick과 동일: steepest 이후 & 후반 85% 이후 중 늦은 쪽
+      return Math.max(steepestTickIndex(ticks), Math.floor(last * 0.85));
+    case "close":
+      return last;
+  }
+}
+
 // --- 전략들: 하루 단위로 (현금, 보유) 상태를 갱신한다 ---
 
 type Portfolio = { cash: number; qty: Record<string, number> };
@@ -201,7 +248,10 @@ const STRATEGIES: Strategy[] = [
     },
   },
   {
-    // 뉴스추종: 커버리지 70%·적중률 90%의 힌트를 받아 가장 강한 상승 힌트에 몰빵
+    // 뉴스추종: 커버리지 70%·적중률 90%의 힌트를 받아 가장 강한 상승 힌트에 몰빵.
+    // 현실화(2026-07-14): 시가가 아니라 "뉴스가 뜬 틱 가격"에 사서 종가에 판다.
+    // 뉴스 배치 위치(NEWS_TIMING)에 따라 남은 드리프트만 먹을 수 있으므로,
+    // 뉴스를 뒤로 밀수록 이득이 줄어든다.
     name: "뉴스추종",
     run: (market, rng) => {
       const p: Portfolio = { cash: INITIAL_CASH, qty: {} };
@@ -216,7 +266,9 @@ const STRATEGIES: Strategy[] = [
           }
         }
         if (best) {
-          buyAll(p, best.code, day.paths[best.code].open);
+          const ticks = day.paths[best.code].ticks;
+          const entryIdx = newsTickIndex(ticks, NEWS_TIMING);
+          buyAll(p, best.code, ticks[entryIdx].price); // 뉴스 뜬 틱에 진입
           sellAll(p, best.code, day.paths[best.code].close);
         }
         payDividends(p, day);
@@ -252,7 +304,9 @@ function main() {
   const runsArg = process.argv.indexOf("--runs");
   const runs = runsArg >= 0 ? Number(process.argv[runsArg + 1]) : 1000;
 
-  console.log(`개장일 ${openDays().length}일 × ${runs}회 몬테카를로 시뮬레이션\n`);
+  console.log(
+    `개장일 ${openDays().length}일 × ${runs}회 몬테카를로 시뮬레이션 (뉴스 타이밍=${NEWS_TIMING})\n`
+  );
 
   const results: Record<string, number[]> = Object.fromEntries(
     STRATEGIES.map((s) => [s.name, []])
