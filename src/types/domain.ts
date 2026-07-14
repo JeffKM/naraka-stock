@@ -84,12 +84,34 @@ export interface PortfolioHolding {
   value: number; // 평가액
   pnl: number; // 평가손익 (원)
   pnlPercent: number; // 수익률 (%)
+  reservedQty: number; // 매도 지정가로 예약(락)된 수량
+  availableQty: number; // 매도 가능 수량 (= quantity − reservedQty)
 }
 
 export interface Portfolio {
   cash: number;
   holdings: PortfolioHolding[];
-  totalAssets: number; // 현금 + 평가액 합
+  totalAssets: number; // 현금 + 평가액 합 (예약분 포함 — 실제 이동 없음)
+  reservedCash: number; // 매수 지정가로 예약(락)된 현금 합
+  availableCash: number; // 매수 가능 현금 (= cash − reservedCash)
+}
+
+// 지정가 예약주문 (PRD §4.5) — status: pending 대기 / filled 체결 / cancelled 취소 / expired 당일만료
+export type OrderStatus = "pending" | "filled" | "cancelled" | "expired";
+
+export interface LimitOrder {
+  id: number;
+  stockCode: string;
+  stockName: string;
+  side: TradeSide;
+  limitPrice: number;
+  reservedCash: number | null; // 매수 예약 금액
+  reservedQty: number | null; // 매도 예약 수량
+  status: OrderStatus;
+  createdAt: string;
+  filledAt: string | null; // 소급 체결 시각
+  filledPrice: number | null;
+  filledQty: number | null;
 }
 
 // 로그인 유저 정보 (/api/auth/me 응답)
