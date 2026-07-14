@@ -37,7 +37,7 @@
 | 상한가/하한가 | 직전 개장일 종가 대비 **±30%** |
 | 장 운영 시간 | 개장~폐장 KST — **현재 운영 기본값 12:00~24:00(자정 폐장)**, 어드민 조정 가능(§4.1) / 휴장일도 `config`로 지정 |
 | 주가 갱신 | **5분 주기** 틱 (하루 틱 수는 장 시간에서 파생) + 프론트엔드 보간 연출 |
-| 주문 방식 | **시장가만** (현재 틱 가격으로 즉시 체결) |
+| 주문 방식 | **시장가만** (현재 틱 가격으로 즉시 체결) — 매수는 **금액 기준**, 매도는 **수량·금액 택일**, **소수점 주식** 지원(수량 최대 6자리) |
 | 거래 수수료 | 매도 시 **0.3%** (초단타 스팸 방지) |
 | 초기 자금 | **1,000,000 원** 고정 (전원 동일, 추가 입금 없음) |
 | 방문 보너스 | 매장 방문 시 당일 코드 입력 → **+100,000 원** (1일 1회) |
@@ -134,6 +134,7 @@
 ### 4.2 장중 동작
 - 현재가 = 사전 생성 경로에서 `floor(현재시각 / 5분)` 위치의 틱 값 → **장중 크론 불필요**, 서버는 읽기만 함
 - 매수/매도는 항상 "현재 틱 가격"으로 서버에서 체결 (클라이언트가 보내는 가격은 신뢰하지 않음)
+- **금액 기준 소수점 체결**(토스 벤치마킹): 매수는 금액(원)만 받아 `수량 = 금액 / 체결가`(6자리 절사)로 체결하고 대금만 차감(남는 원은 현금 유지) → 자본 100% 투입 가능. 매도는 수량·금액 택일이며, 금액모드 초과분·반올림 잔량은 전량으로 스냅. 클라이언트는 금액 또는 수량만 전송하고 수량 환산·대금 계산은 전부 `execute_trade`가 수행
 - 프론트엔드는 틱 사이 5분 동안 가격을 미세하게 흔들리는 것처럼 **보간 연출** (실제 체결가는 틱 값 고정)
 - **정식뉴스도 사전 생성 경로처럼 시간차로 노출**: 배치가 published_at을 미래 틱 시각으로 스탬프해 두고, 피드는 `published_at <= now()`만 조회 → 장중 크론 없이 뉴스가 저절로 풀린다
 
@@ -248,7 +249,7 @@
 - **장중 크론 없음**: 5분 틱은 사전 생성 경로를 읽기만 하므로 Vercel Hobby(크론 1일 1회 제한)로도 충분
 - **배치 구조** (2026-07-12 확정): 경로 생성·편향 추첨 로직은 **TS 엔진**(`src/lib/engine/`, 시드 RNG로 결정적) — 몬테카를로 시뮬레이션과 운영 배치가 같은 코드를 쓴다. DB 반영은 `apply_daily_batch()` 단일 트랜잭션(멱등). 트리거는 pg_cron→pg_net HTTP 호출로 `/api/cron/daily-batch` (CRON_SECRET 인증, 등록은 T-702 배포 시)
 - **모든 돈 계산은 서버(Postgres 함수/트랜잭션)에서**: 매수/매도는 단일 트랜잭션으로 잔고 검증 → 체결 → 기록. 클라이언트는 표시만
-- 자산 컬럼은 정수(원 단위) — 부동소수점 금지
+- 돈 컬럼(현금·가격·대금·수수료·평단)은 정수(원 단위) — 부동소수점 금지. **보유·거래 수량만 numeric(20,6) 소수점**(소수점 주식) — numeric은 정확한 십진수라 부동소수점 아님
 - **인증은 커스텀(닉네임+비밀번호), Supabase Auth 미사용**: 모든 DB 접근은 서버(service role) 경유, RLS는 전 테이블 기본 차단 — 클라이언트 직접 접근 봉쇄
 
 ### 9.2 DB 스키마 개요
@@ -261,8 +262,8 @@ visit_claims     — user_id, date (unique)
 stocks           — code, name, tier, description, listed
 daily_ticks      — stock_code, date, tick_index(0~83), price, is_halted
 daily_summary    — stock_code, date, open, high, low, close, bias(추첨 결과)
-holdings         — user_id, stock_code, quantity, avg_price
-trades           — id, user_id, stock_code, side, quantity, price, fee, created_at
+holdings         — user_id, stock_code, quantity(numeric 소수점), avg_price
+trades           — id, user_id, stock_code, side, quantity(numeric 소수점), price, fee, created_at
 news             — id, date, stock_code, grade(공시/뉴스/찌라시), title, body, published_at
 config           — key, value (이벤트 기간, 수수료율 등)
 ```
