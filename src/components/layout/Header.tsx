@@ -10,7 +10,7 @@ export function Header() {
     <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-lg items-center justify-between px-4">
         <Link href="/" aria-label="나라카증권 홈">
-          <Image src="/logo.png" alt="나라카증권" width={52} height={40} priority />
+          <Image src="/logo.png" alt="나라카증권" width={94} height={40} priority />
         </Link>
         <div className="flex items-center gap-2">
           <MarketStatusBadge />

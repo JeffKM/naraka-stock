@@ -7,7 +7,7 @@ export default function Loading() {
       <Image
         src="/logo.png"
         alt="나라카증권"
-        width={78}
+        width={142}
         height={60}
         priority
         className="animate-pulse"
