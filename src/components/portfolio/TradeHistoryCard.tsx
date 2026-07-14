@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getJson } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
-import { formatMoney } from "@/lib/market";
+import { formatMoney, formatQty } from "@/lib/market";
 import type { Trade } from "@/types/domain";
 
 interface TradePageDto {
@@ -100,7 +100,7 @@ function TradePageBlock({
           </div>
           <div className="text-right text-sm">
             <p>
-              {t.quantity}주 × {formatMoney(t.price)}
+              {formatQty(t.quantity)}주 × {formatMoney(t.price)}
             </p>
             {t.fee > 0 && (
               <p className="text-xs text-muted-foreground">수수료 {formatMoney(t.fee)}</p>

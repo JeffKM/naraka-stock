@@ -29,7 +29,8 @@ export async function executeTrade(userId: number, input: TradeInput): Promise<T
     p_user_id: userId,
     p_stock_code: input.stockCode,
     p_side: input.side,
-    p_quantity: input.quantity,
+    p_quantity: input.quantity ?? null,
+    p_amount: input.amount ?? null,
   });
 
   if (error) {

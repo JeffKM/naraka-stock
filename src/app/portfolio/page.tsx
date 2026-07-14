@@ -15,7 +15,7 @@ import { usePriceWiggle } from "@/hooks/usePriceWiggle";
 import { useQuotes } from "@/hooks/useQuotes";
 import { getJson, postJson } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
-import { formatMoney } from "@/lib/market";
+import { formatMoney, formatQty } from "@/lib/market";
 import type { Me, Portfolio } from "@/types/domain";
 
 // 보유 종목 한 줄 — 장중엔 평가액이 미세 진동 (표시용, 시세판과 동일 연출)
@@ -23,7 +23,7 @@ function HoldingRow({ holding: h }: { holding: Portfolio["holdings"][number] }) 
   const { data: quotesData } = useQuotes();
   const liveValue = usePriceWiggle(h.value, quotesData?.marketState === "open");
   const livePnl = h.pnl + (liveValue - h.value); // 평가액 진동만큼 손익도 함께
-  const cost = h.quantity * h.avgPrice;
+  const cost = Math.round(h.quantity * h.avgPrice);
   const livePnlPercent = cost > 0 ? Math.round((livePnl / cost) * 10000) / 100 : 0;
   return (
     <Link
@@ -33,7 +33,7 @@ function HoldingRow({ holding: h }: { holding: Portfolio["holdings"][number] }) 
       <div>
         <p className="font-medium">{h.stockName}</p>
         <p className="text-xs text-muted-foreground">
-          {h.quantity}주 · 평단 {formatMoney(h.avgPrice)}
+          {formatQty(h.quantity)}주 · 평단 {formatMoney(h.avgPrice)}
         </p>
       </div>
       <div className="text-right">

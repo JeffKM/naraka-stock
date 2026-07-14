@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { TradeSuccessOverlay, type TradeSuccessInfo } from "@/components/trade/TradeSuccessOverlay";
 import { getJson, postJson } from "@/lib/api/client";
-import { formatMoney } from "@/lib/market";
+import { formatMoney, formatQty } from "@/lib/market";
 import { playTradeSound } from "@/lib/sound";
 import type { Portfolio, StockQuote } from "@/types/domain";
 
@@ -106,7 +106,11 @@ interface TradeDialogProps {
   onSuccess: (info: TradeSuccessInfo) => void;
 }
 
-// 주문 공통 제출 훅 역할 — 체결되면 다이얼로그를 닫고 성공 팝업을 띄운다
+// 서버로 보내는 주문 페이로드 — 금액(매수·매도 금액모드) 또는 수량(매도 수량모드)
+type TradePayload = { amount: number } | { quantity: number };
+
+// 주문 공통 제출 훅 역할 — 체결되면 다이얼로그를 닫고 성공 팝업을 띄운다.
+// estQty는 체결 전 유효성 가드용 추정치이고, 실제 체결 수량은 서버 응답을 쓴다.
 function useSubmitTrade(
   quote: StockQuote,
   side: "buy" | "sell",
@@ -116,17 +120,24 @@ function useSubmitTrade(
   const queryClient = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
 
-  async function submit(quantity: number, reset: () => void) {
-    if (quantity <= 0 || submitting) return;
+  async function submit(payload: TradePayload, estQty: number, reset: () => void) {
+    if (estQty <= 0 || submitting) return;
     setSubmitting(true);
     try {
-      const result = await postJson<{ price: number; fee: number; cash: number }>(
-        "/api/trade",
-        { stockCode: quote.code, side, quantity }
-      );
+      const result = await postJson<{
+        price: number;
+        fee: number;
+        cash: number;
+        quantity: number;
+      }>("/api/trade", { stockCode: quote.code, side, ...payload });
       onOpenChange(false);
       reset();
-      onSuccess({ side, stockName: quote.name, quantity, price: result.price });
+      onSuccess({
+        side,
+        stockName: quote.name,
+        quantity: result.quantity, // 서버가 체결한 실제 소수점 수량
+        price: result.price,
+      });
       playTradeSound(); // 체결 효과음 (볼륨은 설정 모달에서 조절)
       queryClient.invalidateQueries({ queryKey: ["portfolio"] });
       queryClient.invalidateQueries({ queryKey: ["me"] });
@@ -144,7 +155,8 @@ function useSubmitTrade(
 
 const BUY_CHIPS = [10_000, 50_000, 100_000] as const;
 
-// 구매: 얼마치 살까요? — 금액을 넣으면 수량으로 환산해 시장가 체결
+// 구매: 얼마치 살까요? — 금액을 넣으면 소수점 주식으로 시장가 체결.
+// 서버가 금액 기준으로 체결하므로 클라이언트는 금액만 보낸다 (수량은 표시용 추정).
 function BuyDialog({
   open,
   onOpenChange,
@@ -155,11 +167,9 @@ function BuyDialog({
   const [amountText, setAmountText] = useState("");
   const { submit, submitting } = useSubmitTrade(quote, "buy", onOpenChange, onSuccess);
 
-  const amount = Number(amountText) || 0;
-  const quantity = quote.price > 0 ? Math.floor(amount / quote.price) : 0;
-  const maxQty = quote.price > 0 ? Math.floor(cash / quote.price) : 0;
-  const cost = quantity * quote.price;
-  const valid = quantity >= 1 && quantity <= maxQty;
+  const amount = Math.floor(Number(amountText) || 0);
+  const quantity = quote.price > 0 ? amount / quote.price : 0; // 소수점 예상 수량
+  const valid = amount >= 1 && amount <= cash;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -180,7 +190,9 @@ function BuyDialog({
             value={amountText}
             autoFocus
             onChange={(e) => setAmountText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && valid && submit(quantity, () => setAmountText(""))}
+            onKeyDown={(e) =>
+              e.key === "Enter" && valid && submit({ amount }, quantity, () => setAmountText(""))
+            }
             className="h-12 text-lg font-semibold"
           />
           <div className="flex gap-1.5">
@@ -199,8 +211,8 @@ function BuyDialog({
               size="sm"
               variant="outline"
               className="flex-1"
-              disabled={maxQty <= 0}
-              onClick={() => setAmountText(String(maxQty * quote.price))}
+              disabled={cash <= 0}
+              onClick={() => setAmountText(String(cash))}
             >
               최대
             </Button>
@@ -209,24 +221,28 @@ function BuyDialog({
           <div className="rounded-lg bg-muted/50 p-3 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">예상 수량</span>
-              <span className="font-medium">{quantity.toLocaleString("ko-KR")}주</span>
+              <span className="font-medium">{formatQty(quantity)}주</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">필요 금액</span>
-              <span className="font-medium">{formatMoney(cost)}</span>
+              <span className="text-muted-foreground">주문 금액</span>
+              <span className="font-medium">{formatMoney(amount)}</span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               주문 가능 {formatMoney(cash)}
-              {amount > 0 && quantity === 0 && " · 1주 금액보다 적어요"}
+              {amount > cash && " · 잔고를 초과했어요"}
             </p>
           </div>
 
           <Button
             className="h-12 bg-bull text-base font-bold text-white hover:bg-bull/90"
             disabled={!valid || submitting}
-            onClick={() => submit(quantity, () => setAmountText(""))}
+            onClick={() => submit({ amount }, quantity, () => setAmountText(""))}
           >
-            {submitting ? "주문 중..." : quantity >= 1 ? `${quantity}주 구매 확인` : "구매 확인"}
+            {submitting
+              ? "주문 중..."
+              : quantity > 0
+                ? `${formatQty(quantity)}주 구매 확인`
+                : "구매 확인"}
           </Button>
         </div>
       </DialogContent>
@@ -234,14 +250,19 @@ function BuyDialog({
   );
 }
 
-const SELL_CHIPS = [
+const SELL_RATIOS = [
   { label: "10%", ratio: 0.1 },
   { label: "25%", ratio: 0.25 },
   { label: "50%", ratio: 0.5 },
   { label: "전량", ratio: 1 },
 ] as const;
 
-// 판매: 몇 주 팔까요? — 수량 입력 + 비율 칩
+// 6자리로 절사 (서버 절사 규칙과 일치 — 표시·전송 값 불일치 방지)
+function truncQty(q: number): number {
+  return Math.floor(q * 1_000_000) / 1_000_000;
+}
+
+// 판매: 수량(주) / 금액(원) 토글. 금액모드는 보유 평가액 초과 시 전량으로 체결된다.
 function SellDialog({
   open,
   onOpenChange,
@@ -249,46 +270,91 @@ function SellDialog({
   holdingQty,
   onSuccess,
 }: TradeDialogProps & { holdingQty: number }) {
-  const [quantityText, setQuantityText] = useState("");
+  const [mode, setMode] = useState<"qty" | "amount">("qty");
+  const [text, setText] = useState("");
   const { submit, submitting } = useSubmitTrade(quote, "sell", onOpenChange, onSuccess);
 
-  const quantity = Number(quantityText) || 0;
-  const gross = quantity * quote.price;
+  const holdingValue = Math.round(holdingQty * quote.price); // 보유 평가액 (원)
+  const input = Number(text) || 0;
+
+  // 입력을 체결 수량으로 환산 (금액모드는 금액/현재가). 보유량으로 상한 클램프.
+  const rawQty = mode === "qty" ? input : quote.price > 0 ? input / quote.price : 0;
+  const sellQty = Math.min(truncQty(rawQty), holdingQty);
+  const gross = Math.round(sellQty * quote.price);
   const fee = Math.floor(gross * SELL_FEE_RATE);
-  const valid = quantity >= 1 && quantity <= holdingQty;
+  const valid = sellQty > 0 && (mode === "qty" ? input <= holdingQty + 1e-6 : input >= 1);
+
+  function reset() {
+    setText("");
+  }
+
+  // 확정 페이로드: 수량모드는 수량, 금액모드는 금액을 서버로 보낸다.
+  const payload: TradePayload = mode === "qty" ? { quantity: sellQty } : { amount: Math.floor(input) };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>몇 주 팔까요?</DialogTitle>
+          <DialogTitle>얼마나 팔까요?</DialogTitle>
           <DialogDescription>
-            {quote.name} · 1주 {formatMoney(quote.price)} · 보유{" "}
-            {holdingQty.toLocaleString("ko-KR")}주
+            {quote.name} · 1주 {formatMoney(quote.price)} · 보유 {formatQty(holdingQty)}주
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
+          {/* 수량 / 금액 입력 토글 */}
+          <div className="flex gap-1.5">
+            <Button
+              size="sm"
+              variant={mode === "qty" ? "default" : "outline"}
+              className="flex-1"
+              onClick={() => {
+                setMode("qty");
+                setText("");
+              }}
+            >
+              수량
+            </Button>
+            <Button
+              size="sm"
+              variant={mode === "amount" ? "default" : "outline"}
+              className="flex-1"
+              onClick={() => {
+                setMode("amount");
+                setText("");
+              }}
+            >
+              금액
+            </Button>
+          </div>
+
           <Input
             type="number"
-            inputMode="numeric"
+            inputMode="decimal"
             min={0}
-            placeholder="수량 (주)"
-            value={quantityText}
+            step="any"
+            placeholder={mode === "qty" ? "수량 (주)" : "금액 (원)"}
+            value={text}
             autoFocus
-            onChange={(e) => setQuantityText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && valid && submit(quantity, () => setQuantityText(""))}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && valid && submit(payload, sellQty, reset)}
             className="h-12 text-lg font-semibold"
           />
           <div className="flex gap-1.5">
-            {SELL_CHIPS.map((chip) => (
+            {SELL_RATIOS.map((chip) => (
               <Button
                 key={chip.label}
                 size="sm"
                 variant="outline"
                 className="flex-1"
                 disabled={holdingQty <= 0}
-                onClick={() => setQuantityText(String(Math.max(1, Math.floor(holdingQty * chip.ratio))))}
+                onClick={() =>
+                  setText(
+                    mode === "qty"
+                      ? String(chip.ratio === 1 ? holdingQty : truncQty(holdingQty * chip.ratio))
+                      : String(Math.floor(holdingValue * chip.ratio))
+                  )
+                }
               >
                 {chip.label}
               </Button>
@@ -296,6 +362,10 @@ function SellDialog({
           </div>
 
           <div className="rounded-lg bg-muted/50 p-3 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">예상 수량</span>
+              <span className="font-medium">{formatQty(sellQty)}주</span>
+            </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">예상 체결액</span>
               <span className="font-medium">{formatMoney(gross)}</span>
@@ -313,9 +383,13 @@ function SellDialog({
           <Button
             className="h-12 bg-bear text-base font-bold text-white hover:bg-bear/90"
             disabled={!valid || submitting}
-            onClick={() => submit(quantity, () => setQuantityText(""))}
+            onClick={() => submit(payload, sellQty, reset)}
           >
-            {submitting ? "주문 중..." : quantity >= 1 ? `${quantity}주 판매 확인` : "판매 확인"}
+            {submitting
+              ? "주문 중..."
+              : sellQty > 0
+                ? `${formatQty(sellQty)}주 판매 확인`
+                : "판매 확인"}
           </Button>
         </div>
       </DialogContent>

@@ -31,7 +31,8 @@ export async function getRanking(): Promise<RankingBoard> {
 
   const holdingValue = new Map<number, number>();
   for (const h of holdings) {
-    const value = (priceMap[h.stock_code] ?? 0) * h.quantity;
+    // numeric quantity는 문자열로 오므로 Number로 복원 후 원 단위 반올림
+    const value = Math.round((priceMap[h.stock_code] ?? 0) * Number(h.quantity));
     holdingValue.set(h.user_id, (holdingValue.get(h.user_id) ?? 0) + value);
   }
 

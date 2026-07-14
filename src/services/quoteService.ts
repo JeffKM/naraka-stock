@@ -120,7 +120,8 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
       .gte("created_at", `${today}T00:00:00+09:00`);
     if (tradeError) throw tradeError;
     for (const row of tradeRows) {
-      volumes[row.stock_code] = (volumes[row.stock_code] ?? 0) + row.quantity;
+      // numeric quantity는 문자열로 오므로 Number로 복원 (소수점 주식 거래량)
+      volumes[row.stock_code] = (volumes[row.stock_code] ?? 0) + Number(row.quantity);
     }
   }
 
@@ -165,7 +166,8 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
       upperLimit,
       lowerLimit,
       marketCap: price * stock.shares_outstanding,
-      volume: volumes[stock.code] ?? 0,
+      volume: Math.round(volumes[stock.code] ?? 0), // 표시용 정수 주 수로 반올림
+
       spark: sparks[stock.code] ?? [],
     };
   });

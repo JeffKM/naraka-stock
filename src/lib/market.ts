@@ -115,6 +115,12 @@ export function formatMoney(amount: number): string {
   return `${amount.toLocaleString("ko-KR")}${CURRENCY_LABEL}`;
 }
 
+// 수량 표시: 소수점 주식(최대 6자리). 정수면 그대로, 소수는 불필요한 0을 뗀다.
+// 예: 3 → "3", 2.136170 → "2.13617"
+export function formatQty(qty: number): string {
+  return qty.toLocaleString("ko-KR", { maximumFractionDigits: 6 });
+}
+
 // 큰 금액 축약 표시 (시가총액 등): 6.4조 → "6조 4,000억원", 8160억 → "8,160억원"
 export function formatCompactMoney(amount: number): string {
   const JO = 1_0000_0000_0000; // 1조
