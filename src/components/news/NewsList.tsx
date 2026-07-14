@@ -155,7 +155,7 @@ export function NewsList({
               // 전체 피드: 게시물마다 개별 카드 (인스타식 분리)
               compact
                 ? "py-3.5"
-                : "rounded-xl border border-border bg-card px-4 py-3.5 transition-colors hover:border-border/80 hover:bg-muted/20"
+                : "rounded-xl border border-foreground/[0.14] bg-card px-4 py-3.5 shadow-sm transition-colors hover:border-foreground/25 hover:bg-muted/20"
             )}
           >
             {/* 아바타 — 정식 뉴스는 매체 로고, 그 외(공시·찌라시)는 텍스트 배지 */}
