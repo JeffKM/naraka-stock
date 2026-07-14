@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TradeHistoryCard } from "@/components/portfolio/TradeHistoryCard";
+import { MyOrdersCard } from "@/components/order/MyOrdersCard";
 import { LiveTotalAssets } from "@/components/quotes/LiveTotalAssets";
 import { usePriceWiggle } from "@/hooks/usePriceWiggle";
 import { useQuotes } from "@/hooks/useQuotes";
@@ -148,6 +149,8 @@ export default function PortfolioPage() {
           ))}
         </CardContent>
       </Card>
+
+      <MyOrdersCard />
 
       <Card>
         <CardHeader>

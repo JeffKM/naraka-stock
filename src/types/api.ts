@@ -9,6 +9,8 @@ export type ApiErrorCode =
   | "TRADING_HALTED" // VI·서킷브레이커 거래정지
   | "INSUFFICIENT_CASH" // 잔고 부족
   | "INSUFFICIENT_QUANTITY" // 보유 수량 부족
+  | "BAND_OUT" // 지정가가 당일 상하한(±30%) 밖
+  | "ORDER_LIMIT" // 미체결 지정가 주문 개수 상한 초과
   | "CODE_INVALID" // 가입·방문 코드 무효
   | "CODE_ALREADY_USED" // 코드 중복 사용
   | "NICKNAME_TAKEN" // 닉네임 중복

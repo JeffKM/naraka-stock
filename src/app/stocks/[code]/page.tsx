@@ -8,6 +8,7 @@ import { NewsList } from "@/components/news/NewsList";
 import { StockChart } from "@/components/chart/StockChart";
 import { StockStats } from "@/components/quotes/StockStats";
 import { MyHoldingCard } from "@/components/trade/MyHoldingCard";
+import { MyOrdersCard } from "@/components/order/MyOrdersCard";
 import { StockComments } from "@/components/trade/StockComments";
 import { TradePanel } from "@/components/trade/TradePanel";
 import { usePriceFlash } from "@/hooks/usePriceFlash";
@@ -95,6 +96,8 @@ export default function StockDetailPage({
       <MyHoldingCard quote={quote} />
 
       <TradePanel quote={quote} marketHalted={data?.marketState === "halted"} />
+
+      <MyOrdersCard stockCode={quote.code} />
 
       <StockStats quote={quote} />
 
