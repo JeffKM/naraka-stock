@@ -20,9 +20,7 @@ export default function NewsPage() {
   return (
     <div className="flex flex-col">
       {/* 피드 헤더 — 상단 고정 (SNS 타임라인 감성) */}
-      <div className="sticky top-14 z-20 -mx-4 border-b border-border bg-background/80 px-4 pb-2 pt-1 backdrop-blur">
-        <h1 className="py-2 text-xl font-bold">소식통</h1>
-
+      <div className="sticky top-14 z-20 -mx-4 border-b border-border bg-background/80 px-4 pb-2 pt-2 backdrop-blur">
         {/* 종목 필터 — 27종을 한 줄 가로 스크롤로 (여러 줄 wrap 방지) */}
         <div className="-mx-4 px-4">
           <div className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
