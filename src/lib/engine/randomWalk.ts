@@ -35,6 +35,10 @@ const DAILY_DRIFT: Record<StockTier, number> = {
 
 export const PRICE_LIMIT_RATE = 0.3; // 상하한 ±30%
 
+// --- 리얼리티 개선 상수 (2026-07-16, 경로 생성 층위) ---
+// σ = TICK_SIGMA·sqrt(scale)·intraday·cluster·regime. 전부 방향중립(σ만 스케일).
+const INTRADAY_U_AMPLITUDE = 0.8; // U자 진폭 (개장·마감 대비 정오)
+
 // 점프(급등락 이벤트): 랜덤워크만으로는 틱 단위 급변이 없어 차트가 밋밋하고 VI가
 // 발동하지 않는다. 낮은 확률로 한 틱에 2~7% 점프를 주입한다 (연출 + VI 재료).
 const JUMP_PROBABILITY: Record<StockTier, number> = {
@@ -82,12 +86,14 @@ export function generateDailyPath(
   const driftPerTick = Math.log(1 + (bias + DAILY_DRIFT[tier]) / 100) / totalTicks;
   // 틱 수 보정: 하루 변동성·점프 기대 횟수를 84틱 기준과 같게 유지
   const scale = TICKS_PER_DAY / totalTicks;
-  const sigma = TICK_SIGMA[tier] * Math.sqrt(scale);
+  const baseSigma = TICK_SIGMA[tier] * Math.sqrt(scale);
   const jumpProbability = JUMP_PROBABILITY[tier] * scale;
+  const intraday = intradayProfile(totalTicks);
 
   const prices: number[] = [];
   let price = prevClose;
   for (let i = 0; i < totalTicks; i++) {
+    const sigma = baseSigma * intraday[i];
     price *= Math.exp(driftPerTick + sigma * nextGaussian(rng));
     // 확률적 점프 (방향 50:50)
     if (rng() < jumpProbability) {
@@ -180,4 +186,16 @@ export function regenerateRemainingPath(
   }
 
   return ticks;
+}
+
+// 인트라데이 U자 변동성 배율 — 개장·마감↑·정오↓. 구간 평균을 정확히 1로
+// 정규화해 하루 총변동성을 보존한다(방향 무관, RNG 미소비).
+export function intradayProfile(totalTicks: number): number[] {
+  if (totalTicks <= 1) return [1];
+  const raw = Array.from({ length: totalTicks }, (_, i) => {
+    const t = i / (totalTicks - 1); // 0..1
+    return 1 + INTRADAY_U_AMPLITUDE * (2 * t - 1) ** 2;
+  });
+  const mean = raw.reduce((a, b) => a + b, 0) / totalTicks;
+  return raw.map((r) => r / mean);
 }
