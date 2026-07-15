@@ -102,7 +102,7 @@ function SupportPostItem({ post }: { post: AdminSupportPost }) {
               답변완료
             </Badge>
           ) : post.status === "reviewing" ? (
-            <Badge variant="outline" className="px-1.5 text-[11px] text-primary">
+            <Badge variant="outline" className="px-1.5 text-[11px] text-primary-accent">
               검토중
             </Badge>
           ) : (

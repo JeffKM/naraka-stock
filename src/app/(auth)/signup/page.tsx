@@ -124,7 +124,7 @@ export default function SignupPage() {
         </form>
         <p className="mt-4 text-center text-sm text-muted-foreground">
           이미 계좌가 있나요?{" "}
-          <Link href="/login" className="text-primary underline underline-offset-4">
+          <Link href="/login" className="text-primary-accent underline underline-offset-4">
             로그인
           </Link>
         </p>

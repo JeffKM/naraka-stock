@@ -108,7 +108,7 @@ function StatusBadge({ status }: { status: SupportPost["status"] }) {
   if (status === "done") return <Badge className="px-1.5 text-[11px]">답변완료</Badge>;
   if (status === "reviewing") {
     return (
-      <Badge variant="outline" className="px-1.5 text-[11px] text-primary">
+      <Badge variant="outline" className="px-1.5 text-[11px] text-primary-accent">
         검토중
       </Badge>
     );
@@ -194,7 +194,7 @@ function SupportPostItem({ post }: { post: SupportPost }) {
 
       {post.reply && (
         <div className="rounded-lg border border-primary/30 bg-primary/5 p-2.5">
-          <p className="mb-1 text-xs font-medium text-primary">나라카 답변</p>
+          <p className="mb-1 text-xs font-medium text-primary-accent">나라카 답변</p>
           <p className="whitespace-pre-wrap text-sm">{post.reply}</p>
         </div>
       )}

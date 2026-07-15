@@ -97,7 +97,7 @@ export default function GuidePage() {
           <Card key={rule.title}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <Icon className="size-4 shrink-0 text-primary" />
+                <Icon className="size-4 shrink-0 text-primary-accent" />
                 {rule.title}
               </CardTitle>
             </CardHeader>

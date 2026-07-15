@@ -50,6 +50,9 @@
      브랜드 레드(primary)와 혼동하지 않도록 등락 레드는 밝고 채도 높게 유지 */
   --color-bull: var(--bull);
   --color-bear: var(--bear);
+  /* 브랜드 레드를 '텍스트/아이콘/링크'로 쓸 때 전용 (버튼 채움용 --primary와 분리).
+     다크 배경 위 가독성을 위해 --primary보다 밝다. text-primary-accent 유틸로 사용. */
+  --color-primary-accent: var(--primary-accent);
 }
 
 /* 나라카 라이트 팔레트 — 다크의 "먹색 위 한지"를 뒤집은 "한지 위 먹색".
@@ -63,13 +66,14 @@
   --popover-foreground: oklch(0.27 0.02 30);
   --primary: oklch(0.5 0.19 27); /* 브랜드 핏빛 레드 (다크와 동일) */
   --primary-foreground: oklch(0.96 0.02 85);
+  --primary-accent: oklch(0.5 0.19 27); /* 라이트 배경 위에선 --primary와 동일해도 6.1:1 (AA) */
   --secondary: oklch(0.93 0.02 75);
   --secondary-foreground: oklch(0.32 0.03 30);
   --muted: oklch(0.94 0.015 80);
   --muted-foreground: oklch(0.5 0.02 45);
   --accent: oklch(0.92 0.03 55);
   --accent-foreground: oklch(0.32 0.03 30);
-  --destructive: oklch(0.55 0.21 27);
+  --destructive: oklch(0.55 0.2 35); /* 다크와 동일 계열 — 브랜드 레드와 구분 */
   --border: oklch(0.3 0.03 40 / 14%);
   --input: oklch(0.3 0.03 40 / 12%);
   --ring: oklch(0.5 0.15 27);
@@ -99,15 +103,20 @@
   --card-foreground: oklch(0.93 0.02 85);
   --popover: oklch(0.22 0.015 25);
   --popover-foreground: oklch(0.93 0.02 85);
-  --primary: oklch(0.5 0.19 27); /* 브랜드 핏빛 레드 (깊게) */
+  --primary: oklch(0.5 0.19 27); /* 브랜드 핏빛 레드 (깊게) — 버튼 채움용 */
   --primary-foreground: oklch(0.96 0.02 85);
+  --primary-accent: oklch(0.63 0.19 27); /* 웜 차콜 위 빨간 텍스트/링크 가독성: bg 5.0:1 / card 4.5:1 (AA) */
   --secondary: oklch(0.28 0.03 20); /* 웜 버건디 그레이 */
   --secondary-foreground: oklch(0.93 0.02 85);
-  --muted: oklch(0.26 0.02 25);
+  /* muted는 눌린(recessed) 서브 표면 — 올라온 card(0.22) '아래'에 오도록 0.215로.
+     bg 0.17 < muted 0.215 < card 0.22 < secondary 0.28 < accent 0.30 단조 정렬 */
+  --muted: oklch(0.215 0.02 25);
   --muted-foreground: oklch(0.68 0.02 60);
   --accent: oklch(0.3 0.05 20);
   --accent-foreground: oklch(0.95 0.02 85);
-  --destructive: oklch(0.6 0.21 27);
+  /* 파괴 액션: 브랜드 레드(hue 27)와 나란히 놨을 때 구분되도록 살짝 주홍 쪽으로(hue 35).
+     동시에 L 상향(0.6→0.63)으로 카드 위 대비 AA 확보(3.97→4.54). */
+  --destructive: oklch(0.63 0.195 35);
   --border: oklch(0.93 0.03 60 / 10%);
   --input: oklch(0.93 0.03 60 / 14%);
   --ring: oklch(0.5 0.15 27);

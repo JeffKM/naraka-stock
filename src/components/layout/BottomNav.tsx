@@ -20,7 +20,7 @@ const TABS = [
 // 탭 아이콘 — 해당 탭으로 이동 중이면 깜빡여서 "누른 게 반응했다"는 피드백을 준다
 function TabIcon({ icon: Icon }: { icon: (typeof TABS)[number]["icon"] }) {
   const { pending } = useLinkStatus();
-  return <Icon className={cn("size-5", pending && "animate-pulse text-primary")} aria-hidden />;
+  return <Icon className={cn("size-5", pending && "animate-pulse text-primary-accent")} aria-hidden />;
 }
 
 // 모바일 하단 탭 내비게이션 — 운영자 콘솔에서는 숨긴다
@@ -40,7 +40,7 @@ export function BottomNav() {
               href={href}
               className={cn(
                 "flex flex-col items-center gap-0.5 py-2 text-[11px] transition-colors",
-                active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                active ? "text-primary-accent" : "text-muted-foreground hover:text-foreground"
               )}
             >
               <TabIcon icon={Icon} />
