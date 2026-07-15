@@ -156,7 +156,7 @@ export function generateDailyPath(
 
   return {
     ticks,
-    open: prices[0],
+    open: prices[0], // 개장 갭 + 첫 틱 이동이 합성돼 반올림된 값 (순수 갭값 아님)
     high: Math.max(...prices),
     low: Math.min(...prices),
     close: prices[totalTicks - 1],
@@ -193,6 +193,9 @@ export function regenerateRemainingPath(
   const windowDriftPerTick = Math.log(1 + bias / 100) / windowTicks;
   const resumeDriftPerTick = Math.log(1 + resumeBias / 100) / totalTicks;
   // generateDailyPath와 동일한 intraday·클러스터링·레짐 σ 구조 (개장 갭 제외 — 재생성 전용이라 없음)
+  // 한계: 레짐을 새로 추첨하고 h를 1로 리셋하므로, 조정 시점에 σ 레벨의 이음새가 생길 수 있다
+  // (가격 레벨은 currentPrice에서 연속). 오전 레짐/h 승계는 시그니처 변경이 필요해 하지 않는다.
+  // 시세조정은 드문 어드민 수동 개입이라 허용 가능한 트레이드오프.
   const intraday = intradayProfile(totalTicks);
   const regime = pickRegime(tier, rng); // RNG 1 소비 (틱 루프 진입 전)
   let h = 1; // 클러스터링 상태 (틱 간 지속)
