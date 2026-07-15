@@ -56,6 +56,7 @@ const JUMP_PROBABILITY: Record<StockTier, number> = {
 };
 const JUMP_MIN = 0.02;
 const JUMP_MAX = 0.07;
+const AFTERSHOCK_BOOST = 0.8; // 점프 후 클러스터링 상태 부스트 (여진)
 
 // VI: 직전 틱 대비 ±8% 이상 급변 → 다음 1틱(5분) 거래정지 (등급 무관 단일 임계값)
 const VI_THRESHOLD = 0.08;
@@ -110,6 +111,7 @@ export function generateDailyPath(
     if (rng() < jumpProbability) {
       const size = JUMP_MIN + rng() * (JUMP_MAX - JUMP_MIN);
       price *= rng() < 0.5 ? 1 + size : 1 - size;
+      h = clusterBoost(h); // 여진: 다음 틱들 σ 상승
     }
     price = Math.min(Math.max(price, lowerLimit), upperLimit);
     prices.push(roundPrice(price));
@@ -216,4 +218,9 @@ export function intradayProfile(totalTicks: number): number[] {
 export function clusterStep(h: number, shock: number): number {
   const next = 1 + CLUSTER_RHO * (h - 1) + CLUSTER_ETA * shock;
   return Math.min(CLUSTER_MAX, Math.max(CLUSTER_MIN, next));
+}
+
+// 점프 여진: 점프 직후 클러스터링 상태를 일시 부스트(이후 AR(1)로 감쇠).
+export function clusterBoost(h: number): number {
+  return Math.min(CLUSTER_MAX, h + AFTERSHOCK_BOOST);
 }

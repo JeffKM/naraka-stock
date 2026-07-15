@@ -3,6 +3,7 @@
 import {
   intradayProfile,
   clusterStep,
+  clusterBoost,
   generateDailyPath,
 } from "../src/lib/engine/randomWalk";
 import { createRng, hashSeed } from "../src/lib/engine/rng";
@@ -65,6 +66,12 @@ function approx(a: number, b: number, tol: number): boolean {
   }
   const avg = sum / K;
   check("cluster: 제곱수익률 lag-1 자기상관 > 0.02", avg > 0.02, `avg=${avg.toFixed(4)}`);
+}
+
+// --- Task 3: 점프 여진 ---
+{
+  check("aftershock: 부스트 적용", approx(clusterBoost(1), 1.8, 1e-12), `=${clusterBoost(1)}`);
+  check("aftershock: 상한 클램프", clusterBoost(2.4) === 2.5);
 }
 
 if (failures > 0) {
