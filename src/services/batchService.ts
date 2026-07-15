@@ -4,7 +4,9 @@ import { generateDailyPath, PRICE_LIMIT_RATE } from "@/lib/engine/randomWalk";
 import { createRng, hashSeed } from "@/lib/engine/rng";
 import {
   generateDisclosures,
+  generateEarlySignalNews,
   generateRegularNews,
+  pickEarlySignalTargets,
   type DailyMove,
   type GeneratedNews,
   type StockDayPath,
@@ -119,7 +121,8 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
       if (!prevClose) {
         throw new Error(`직전 종가가 없습니다: ${stock.code} (${today})`);
       }
-      // 뉴스는 추첨 bias 기준으로 발행하되, 실제 경로는 확률적 실현치를 따른다
+      // 실제 경로는 확률적 실현치(realizeBias)를 따르고, 뉴스도 이 실현 경로를
+      // "설명"하는 방식으로 발행된다 (추첨 bias가 아니라 실현 결과 기준 — generate.ts)
       const path = generateDailyPath(
         prevClose,
         realizeBias(biases[stock.code], rng),
@@ -154,8 +157,32 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
     // 이미 발행한 템플릿은 재사용하지 않는다 (생성 대상일 자신의 뉴스는 재실행 시
     // 교체되므로 이력에서 제외 — 배치 멱등성 유지)
     const usedTitles = await loadUsedHintTitles(tomorrowDate);
+
+    // 장중 조기 방향뉴스 (편향 이벤트 상위 2종을 장 70% 지점에 흘림 — T-505).
+    // 이 종목은 후반 정식뉴스에서 제외해 한 종목당 방향뉴스 하나만 유지한다.
+    const earlyTargets = pickEarlySignalTargets(biases);
     news.push(
-      ...generateRegularNews(stockPaths, tomorrowDate, config.openHour, rng, usedTitles)
+      ...generateEarlySignalNews(
+        stockPaths,
+        earlyTargets,
+        biases,
+        tomorrowDate,
+        config.openHour,
+        rng,
+        usedTitles
+      )
+    );
+    news.push(
+      ...generateRegularNews(
+        stockPaths,
+        tomorrowDate,
+        config.openHour,
+        rng,
+        usedTitles,
+        1,
+        undefined,
+        new Set(earlyTargets)
+      )
     );
   }
 
