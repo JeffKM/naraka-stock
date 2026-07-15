@@ -39,6 +39,14 @@ export const PRICE_LIMIT_RATE = 0.3; // 상하한 ±30%
 // σ = TICK_SIGMA·sqrt(scale)·intraday·cluster·regime. 전부 방향중립(σ만 스케일).
 const INTRADAY_U_AMPLITUDE = 0.8; // U자 진폭 (개장·마감 대비 정오)
 
+// 변동성 클러스터링 (GARCH-lite): 지속성 상태 h를 AR(1)로 진화시켜
+// "험한 구간이 뭉쳐서" 오게 한다. 충격은 방향중립(중심화된 |가우시안|).
+const CLUSTER_RHO = 0.9; // 클러스터링 지속성 (AR(1))
+const CLUSTER_ETA = 0.15; // 충격 감도
+const CLUSTER_MIN = 0.5;
+const CLUSTER_MAX = 2.5;
+const MEAN_ABS_GAUSSIAN = Math.sqrt(2 / Math.PI); // E[|Z|] — 충격 중심화용
+
 // 점프(급등락 이벤트): 랜덤워크만으로는 틱 단위 급변이 없어 차트가 밋밋하고 VI가
 // 발동하지 않는다. 낮은 확률로 한 틱에 2~7% 점프를 주입한다 (연출 + VI 재료).
 const JUMP_PROBABILITY: Record<StockTier, number> = {
@@ -89,12 +97,15 @@ export function generateDailyPath(
   const baseSigma = TICK_SIGMA[tier] * Math.sqrt(scale);
   const jumpProbability = JUMP_PROBABILITY[tier] * scale;
   const intraday = intradayProfile(totalTicks);
+  let h = 1; // 클러스터링 상태 (틱 간 지속)
 
   const prices: number[] = [];
   let price = prevClose;
   for (let i = 0; i < totalTicks; i++) {
-    const sigma = baseSigma * intraday[i];
+    const sigma = baseSigma * intraday[i] * h;
     price *= Math.exp(driftPerTick + sigma * nextGaussian(rng));
+    // 다음 틱 σ에 반영될 상태 진화 (중심화된 |가우시안| 충격 → 방향중립)
+    h = clusterStep(h, Math.abs(nextGaussian(rng)) - MEAN_ABS_GAUSSIAN);
     // 확률적 점프 (방향 50:50)
     if (rng() < jumpProbability) {
       const size = JUMP_MIN + rng() * (JUMP_MAX - JUMP_MIN);
@@ -198,4 +209,11 @@ export function intradayProfile(totalTicks: number): number[] {
   });
   const mean = raw.reduce((a, b) => a + b, 0) / totalTicks;
   return raw.map((r) => r / mean);
+}
+
+// 변동성 클러스터링 상태 갱신 (AR(1) + 클램프). shock은 중심화된 |가우시안|이라
+// 평균 0 → E[h]≈1(총변동성 보존). σ 배율만 → 방향중립.
+export function clusterStep(h: number, shock: number): number {
+  const next = 1 + CLUSTER_RHO * (h - 1) + CLUSTER_ETA * shock;
+  return Math.min(CLUSTER_MAX, Math.max(CLUSTER_MIN, next));
 }
