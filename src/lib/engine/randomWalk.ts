@@ -35,6 +35,21 @@ const DAILY_DRIFT: Record<StockTier, number> = {
 
 export const PRICE_LIMIT_RATE = 0.3; // 상하한 ±30%
 
+// --- 리얼리티 개선 상수 (2026-07-16, 경로 생성 층위) ---
+// σ = TICK_SIGMA·sqrt(scale)·intraday·cluster·regime. 전부 방향중립(σ만 스케일).
+const INTRADAY_U_AMPLITUDE = 0.8; // U자 진폭 (개장·마감 대비 정오)
+
+// 변동성 클러스터링 (GARCH-lite): 지속성 상태 h를 AR(1)로 진화시켜
+// "험한 구간이 뭉쳐서" 오게 한다. 충격은 방향중립(중심화된 |가우시안|).
+const CLUSTER_RHO = 0.9; // 클러스터링 지속성 (AR(1))
+const CLUSTER_ETA = 0.15; // 충격 감도
+const CLUSTER_MIN = 0.5;
+const CLUSTER_MAX = 2.5;
+const MEAN_ABS_GAUSSIAN = Math.sqrt(2 / Math.PI); // E[|Z|] — 충격 중심화용
+
+// 레짐: σ 배율만(방향중립). 하루 시작 시 등급별 추첨.
+const REGIME_MULT = { calm: 0.7, normal: 1.0, stormy: 1.6 } as const;
+
 // 점프(급등락 이벤트): 랜덤워크만으로는 틱 단위 급변이 없어 차트가 밋밋하고 VI가
 // 발동하지 않는다. 낮은 확률로 한 틱에 2~7% 점프를 주입한다 (연출 + VI 재료).
 const JUMP_PROBABILITY: Record<StockTier, number> = {
@@ -44,10 +59,23 @@ const JUMP_PROBABILITY: Record<StockTier, number> = {
 };
 const JUMP_MIN = 0.02;
 const JUMP_MAX = 0.07;
+const AFTERSHOCK_BOOST = 0.8; // 점프 후 클러스터링 상태 부스트 (여진)
 
 // VI: 직전 틱 대비 ±8% 이상 급변 → 다음 1틱(5분) 거래정지 (등급 무관 단일 임계값)
 const VI_THRESHOLD = 0.08;
 const VI_HALT_TICKS = 1;
+
+// 개장 갭 σ (방향 랜덤·드리프트 없음). 오버나이트 지정가 arb 안전.
+export const GAP_SIGMA: Record<StockTier, number> = {
+  stable: 0.003,
+  normal: 0.005,
+  wild: 0.008,
+};
+
+// 개장 갭 배율 (RNG 가우시안 1 소비). E[log]=0 → 방향중립.
+export function openingGapFactor(tier: StockTier, rng: Rng): number {
+  return Math.exp(GAP_SIGMA[tier] * nextGaussian(rng));
+}
 
 export interface Tick {
   tickIndex: number;
@@ -82,17 +110,28 @@ export function generateDailyPath(
   const driftPerTick = Math.log(1 + (bias + DAILY_DRIFT[tier]) / 100) / totalTicks;
   // 틱 수 보정: 하루 변동성·점프 기대 횟수를 84틱 기준과 같게 유지
   const scale = TICKS_PER_DAY / totalTicks;
-  const sigma = TICK_SIGMA[tier] * Math.sqrt(scale);
+  const baseSigma = TICK_SIGMA[tier] * Math.sqrt(scale);
   const jumpProbability = JUMP_PROBABILITY[tier] * scale;
+  const intraday = intradayProfile(totalTicks);
+  const regime = pickRegime(tier, rng); // RNG 1 소비 (틱 루프 진입 전)
+  let h = 1; // 클러스터링 상태 (틱 간 지속)
 
   const prices: number[] = [];
-  let price = prevClose;
+  // 개장 갭 (틱 진입 전 1회, 상하한 클램프)
+  let price = Math.min(
+    Math.max(prevClose * openingGapFactor(tier, rng), lowerLimit),
+    upperLimit
+  );
   for (let i = 0; i < totalTicks; i++) {
+    const sigma = baseSigma * intraday[i] * h * regime.mult;
     price *= Math.exp(driftPerTick + sigma * nextGaussian(rng));
+    // 다음 틱 σ에 반영될 상태 진화 (중심화된 |가우시안| 충격 → 방향중립)
+    h = clusterStep(h, Math.abs(nextGaussian(rng)) - MEAN_ABS_GAUSSIAN);
     // 확률적 점프 (방향 50:50)
     if (rng() < jumpProbability) {
       const size = JUMP_MIN + rng() * (JUMP_MAX - JUMP_MIN);
       price *= rng() < 0.5 ? 1 + size : 1 - size;
+      h = clusterBoost(h); // 여진: 다음 틱들 σ 상승
     }
     price = Math.min(Math.max(price, lowerLimit), upperLimit);
     prices.push(roundPrice(price));
@@ -117,7 +156,7 @@ export function generateDailyPath(
 
   return {
     ticks,
-    open: prices[0],
+    open: prices[0], // 개장 갭 + 첫 틱 이동이 합성돼 반올림된 값 (순수 갭값 아님)
     high: Math.max(...prices),
     low: Math.min(...prices),
     close: prices[totalTicks - 1],
@@ -147,12 +186,19 @@ export function regenerateRemainingPath(
   const windowTicks =
     biasTicks === null ? remaining : Math.min(Math.max(biasTicks, 1), remaining);
   const scale = TICKS_PER_DAY / totalTicks;
-  const sigma = TICK_SIGMA[tier] * Math.sqrt(scale);
+  const baseSigma = TICK_SIGMA[tier] * Math.sqrt(scale);
   const jumpProbability = JUMP_PROBABILITY[tier] * scale;
   // 틱당 드리프트: 등급 기본(항상) + 창 안은 bias, 창 밖은 resumeBias
   const baseDriftPerTick = Math.log(1 + DAILY_DRIFT[tier] / 100) / totalTicks;
   const windowDriftPerTick = Math.log(1 + bias / 100) / windowTicks;
   const resumeDriftPerTick = Math.log(1 + resumeBias / 100) / totalTicks;
+  // generateDailyPath와 동일한 intraday·클러스터링·레짐 σ 구조 (개장 갭 제외 — 재생성 전용이라 없음)
+  // 한계: 레짐을 새로 추첨하고 h를 1로 리셋하므로, 조정 시점에 σ 레벨의 이음새가 생길 수 있다
+  // (가격 레벨은 currentPrice에서 연속). 오전 레짐/h 승계는 시그니처 변경이 필요해 하지 않는다.
+  // 시세조정은 드문 어드민 수동 개입이라 허용 가능한 트레이드오프.
+  const intraday = intradayProfile(totalTicks);
+  const regime = pickRegime(tier, rng); // RNG 1 소비 (틱 루프 진입 전)
+  let h = 1; // 클러스터링 상태 (틱 간 지속)
 
   const ticks: Tick[] = [];
   const prices: number[] = [];
@@ -160,10 +206,14 @@ export function regenerateRemainingPath(
   for (let i = fromTick + 1; i < totalTicks; i++) {
     const inWindow = i - fromTick <= windowTicks;
     const drift = baseDriftPerTick + (inWindow ? windowDriftPerTick : resumeDriftPerTick);
+    const sigma = baseSigma * intraday[i] * h * regime.mult;
     price *= Math.exp(drift + sigma * nextGaussian(rng));
+    // 다음 틱 σ에 반영될 상태 진화 (중심화된 |가우시안| 충격 → 방향중립)
+    h = clusterStep(h, Math.abs(nextGaussian(rng)) - MEAN_ABS_GAUSSIAN);
     if (rng() < jumpProbability) {
       const size = JUMP_MIN + rng() * (JUMP_MAX - JUMP_MIN);
       price *= rng() < 0.5 ? 1 + size : 1 - size;
+      h = clusterBoost(h); // 여진: 다음 틱들 σ 상승
     }
     price = Math.min(Math.max(price, lowerLimit), upperLimit);
     const rounded = roundPrice(price);
@@ -180,4 +230,47 @@ export function regenerateRemainingPath(
   }
 
   return ticks;
+}
+
+// 인트라데이 U자 변동성 배율 — 개장·마감↑·정오↓. 구간 평균을 정확히 1로
+// 정규화해 하루 총변동성을 보존한다(방향 무관, RNG 미소비).
+export function intradayProfile(totalTicks: number): number[] {
+  if (totalTicks <= 1) return [1];
+  const raw = Array.from({ length: totalTicks }, (_, i) => {
+    const t = i / (totalTicks - 1); // 0..1
+    return 1 + INTRADAY_U_AMPLITUDE * (2 * t - 1) ** 2;
+  });
+  const mean = raw.reduce((a, b) => a + b, 0) / totalTicks;
+  return raw.map((r) => r / mean);
+}
+
+// 변동성 클러스터링 상태 갱신 (AR(1) + 클램프). shock은 중심화된 |가우시안|이라
+// 평균 0 → E[h]≈1(총변동성 보존). σ 배율만 → 방향중립.
+export function clusterStep(h: number, shock: number): number {
+  const next = 1 + CLUSTER_RHO * (h - 1) + CLUSTER_ETA * shock;
+  return Math.min(CLUSTER_MAX, Math.max(CLUSTER_MIN, next));
+}
+
+// 점프 여진: 점프 직후 클러스터링 상태를 일시 부스트(이후 AR(1)로 감쇠).
+export function clusterBoost(h: number): number {
+  return Math.min(CLUSTER_MAX, h + AFTERSHOCK_BOOST);
+}
+
+// 등급별 레짐 확률 [calm, normal, stormy]. 잡주일수록 험한 날 비중↑.
+export const REGIME_PROB: Record<StockTier, [number, number, number]> = {
+  stable: [0.5, 0.45, 0.05],
+  normal: [0.4, 0.5, 0.1],
+  wild: [0.25, 0.5, 0.25],
+};
+
+// 하루 레짐 추첨 (RNG 1 소비). σ 전역 배율만 결정 — 방향 무관.
+export function pickRegime(
+  tier: StockTier,
+  rng: Rng
+): { name: "calm" | "normal" | "stormy"; mult: number } {
+  const [pCalm, pNormal] = REGIME_PROB[tier];
+  const u = rng();
+  if (u < pCalm) return { name: "calm", mult: REGIME_MULT.calm };
+  if (u < pCalm + pNormal) return { name: "normal", mult: REGIME_MULT.normal };
+  return { name: "stormy", mult: REGIME_MULT.stormy };
 }
