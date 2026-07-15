@@ -90,6 +90,23 @@ sigma_i = TICK_SIGMA[tier] * Math.sqrt(scale) * intraday(i) * cluster(h_i) * reg
   - `GAP_SIGMA` 등급별 0.3~0.8% 초안
 - 상하한 클램프 안에서 적용. 오버나이트 지정가 arb는 방향 랜덤이라 안전(I1).
 
+### 확정 파라미터 (몬테카를로 게이트 통과값, 2026-07-16)
+
+Task 7 `npm run simulate -- --runs 500` 1차 실행에서 게이트 3개 전부 통과 →
+§4의 초안 수치를 튜닝 없이 그대로 확정한다.
+
+| 상수 | 확정값 |
+|---|---|
+| `INTRADAY_U_AMPLITUDE` | 0.8 |
+| `CLUSTER_RHO` / `CLUSTER_ETA` | 0.9 / 0.15 |
+| `CLUSTER_MIN` / `CLUSTER_MAX` | 0.5 / 2.5 |
+| `AFTERSHOCK_BOOST` | 0.8 |
+| `REGIME_MULT` | calm 0.7 / normal 1.0 / stormy 1.6 |
+| `REGIME_PROB.stable` | [0.5, 0.45, 0.05] |
+| `REGIME_PROB.normal` | [0.4, 0.5, 0.1] |
+| `REGIME_PROB.wild` | [0.25, 0.5, 0.25] |
+| `GAP_SIGMA` | stable 0.003 / normal 0.005 / wild 0.008 |
+
 ## 5. 배치 (파일 영향 최소)
 
 - 전부 `src/lib/engine/randomWalk.ts` 내부.
@@ -113,6 +130,12 @@ sigma_i = TICK_SIGMA[tier] * Math.sqrt(scale) * intraday(i) * cluster(h_i) * reg
 5. **등급 순서 회귀** — 우량 < 일반 < 테마 변동성 순서 유지.
 
 파라미터(§4의 초안 수치)는 이 시뮬레이션으로 확정한다.
+
+**검증 결과 (Task 7, `--runs 500`, 튜닝 없이 1차 통과):** 지정가브라켓 4종 전부
+중앙값 <1.0배·손실율 >50%(잡주4/4 0.63배/100.0%, 잡주6/6 0.69배/99.6%,
+잡주8/8 0.75배/98.6%, 전종목6 0.89배/100.0%)로 차익 자멸 유지, 존버(안정주)
+손실율 30.0% < 잡주몰빵 73.2%로 등급 순서 유지, 존버(분산) 중앙값 0.99배로
+개선 전 1.00배 대비 ±15% 이내 — `verify-realism.ts` 재확인 PASS.
 
 ## 7. 리스크와 유의
 
