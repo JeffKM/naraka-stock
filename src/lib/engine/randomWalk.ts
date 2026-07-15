@@ -1,39 +1,52 @@
 // 일일 가격 경로 생성기 (T-201) + VI 구간 마킹 (T-203)
 //
-// - 기하 랜덤워크: 틱마다 price *= exp(드리프트 + 변동성·z)
-// - 드리프트: 편향 bias%가 하루 전체에 걸쳐 반영되도록 ln(1+bias/100)/틱수
+// - 기하 랜덤워크(현실형): 틱마다 price *= exp(드리프트 + 변동성·z)
+//   장중 가격과 종가가 함께 움직이는 실제 시장형. 평균회귀(OU)를 쓰지 않는 이유는,
+//   "장중 크게·종가 얌전"이라는 인위적 되돌림이 지정가 예약주문의 무손실 차익거래
+//   (저점매수→반등매도)를 만들기 때문(시뮬레이션 검증 2026-07-15). 랜덤워크는
+//   되돌림 보장이 없어 그 브라켓 전략이 스스로 손실을 내 자멸한다.
+// - 드리프트: (편향 bias% + 등급 기본 드리프트)가 하루 전체에 걸쳐 반영. 기본
+//   드리프트는 등급별 "오를 확률" 편향(우량 우상향).
 // - 클램프: 직전 개장일 종가 ±30% (상한가/하한가)
-// - VI: 직전 틱 대비 ±6% 급변 → 다음 1틱(5분) 거래정지
-// - 틱 수는 장 시간에 따라 가변 (기본 84 = 15~22시). 틱 수가 달라져도
-//   "하루" 변동성·점프 빈도가 유지되도록 √스케일/비율 보정한다 — 밸런스
-//   튜닝(T-701)은 84틱 기준이므로 이 보정이 없으면 장이 길수록 과열된다.
+// - VI: 직전 틱 대비 ±8% 급변 → 다음 1틱(5분) 거래정지 (랜덤워크에선 틱 σ가 작아
+//   주로 점프가 겹칠 때만 발동 = 드문 서킷)
+// - 틱 수는 장 시간에 따라 가변 (기본 84 = 15~22시). 틱 수가 달라져도 "하루"
+//   변동성·점프 빈도가 유지되도록 σ ∝ √(84/틱수), 점프빈도 ∝ (84/틱수)로 보정한다.
 
 import type { StockTier } from "@/types/domain";
 import { TICKS_PER_DAY } from "@/lib/market";
 import { nextGaussian, type Rng } from "./rng";
 
-// 등급별 틱당 변동성 (일일 변동폭 목표: 안정 ±1~5% / 일반 ±3~15% / 잡주 ±10~30%)
+// 등급별 틱당 변동성 — 종가·장중이 함께 커지는 현실형. 생동감 있게 튜닝하되
+// 등급 순서 유지(2026-07-15 재튜닝). 우량도 월 3일쯤 두 자릿수 등락이 나온다.
 const TICK_SIGMA: Record<StockTier, number> = {
-  stable: 0.0018,
-  normal: 0.006,
-  wild: 0.014,
+  stable: 0.005,
+  normal: 0.009,
+  wild: 0.015,
+};
+
+// 등급별 기본 일일 드리프트(%/일). 편향과 합산돼 하루 드리프트로 반영된다.
+// 우량주에 양(+)의 드리프트를 줘 "오를 확률"을 일반·잡주보다 높인다(우상향).
+const DAILY_DRIFT: Record<StockTier, number> = {
+  stable: 0.2,
+  normal: 0,
+  wild: -0.2,
 };
 
 export const PRICE_LIMIT_RATE = 0.3; // 상하한 ±30%
 
-// 점프(급등락 이벤트): 랜덤워크만으로는 틱 단위 급변이 없어 차트가 밋밋하고
-// VI가 발동하지 않는다. 낮은 확률로 한 틱에 2~7% 점프를 주입한다 (연출 + VI 재료).
+// 점프(급등락 이벤트): 랜덤워크만으로는 틱 단위 급변이 없어 차트가 밋밋하고 VI가
+// 발동하지 않는다. 낮은 확률로 한 틱에 2~7% 점프를 주입한다 (연출 + VI 재료).
 const JUMP_PROBABILITY: Record<StockTier, number> = {
-  stable: 0.002,
-  normal: 0.005,
+  stable: 0.004,
+  normal: 0.006,
   wild: 0.015,
 };
 const JUMP_MIN = 0.02;
 const JUMP_MAX = 0.07;
 
-// VI: 직전 틱 대비 ±6% 이상 급변 → 다음 1틱(5분) 거래정지
-// (PRD 초안 "10분 내 ±10%"는 현 변동성에서 발동 확률 0이라 시뮬레이션 후 조정)
-const VI_THRESHOLD = 0.06;
+// VI: 직전 틱 대비 ±8% 이상 급변 → 다음 1틱(5분) 거래정지 (등급 무관 단일 임계값)
+const VI_THRESHOLD = 0.08;
 const VI_HALT_TICKS = 1;
 
 export interface Tick {
@@ -65,11 +78,12 @@ export function generateDailyPath(
 ): DailyPath {
   const upperLimit = roundPrice(prevClose * (1 + PRICE_LIMIT_RATE));
   const lowerLimit = roundPrice(prevClose * (1 - PRICE_LIMIT_RATE));
-  const driftPerTick = Math.log(1 + bias / 100) / totalTicks;
-  // 하루 변동성 보존: 틱이 많아져도 σ_일 = σ_틱·√틱수 가 84틱 기준과 같도록
-  const sigma = TICK_SIGMA[tier] * Math.sqrt(TICKS_PER_DAY / totalTicks);
-  // 하루 점프 기대 횟수 보존
-  const jumpProbability = JUMP_PROBABILITY[tier] * (TICKS_PER_DAY / totalTicks);
+  // 편향 + 등급 기본 드리프트를 하루 전체에 편다
+  const driftPerTick = Math.log(1 + (bias + DAILY_DRIFT[tier]) / 100) / totalTicks;
+  // 틱 수 보정: 하루 변동성·점프 기대 횟수를 84틱 기준과 같게 유지
+  const scale = TICKS_PER_DAY / totalTicks;
+  const sigma = TICK_SIGMA[tier] * Math.sqrt(scale);
+  const jumpProbability = JUMP_PROBABILITY[tier] * scale;
 
   const prices: number[] = [];
   let price = prevClose;
@@ -84,7 +98,7 @@ export function generateDailyPath(
     prices.push(roundPrice(price));
   }
 
-  // VI 마킹: 직전 틱 대비 ±6% 이상 급변 → 다음 틱부터 5분 정지
+  // VI 마킹: 직전 틱 대비 ±8% 이상 급변 → 다음 틱부터 5분 정지
   const halted = new Array<boolean>(totalTicks).fill(false);
   for (let i = 0; i < totalTicks; i++) {
     const base = i === 0 ? prevClose : prices[i - 1];
@@ -113,7 +127,7 @@ export function generateDailyPath(
 // 시세 조정용: 오늘 경로의 남은 구간(fromTick 이후)만 재생성 (T-604)
 // bias는 biasTicks 구간(null이면 남은 시간 전체)에 걸리는 드리프트로 작용하고,
 // 구간이 끝나면 resumeBias(그날 추첨 편향)의 하루 드리프트로 복귀한다.
-// 상하한은 원래 기준가 유지.
+// 등급 기본 드리프트는 전 구간에 계속 적용. 상하한은 원래 기준가 유지.
 export function regenerateRemainingPath(
   prevClose: number, // 오늘 상하한 기준 (직전 개장일 종가)
   currentPrice: number, // 현재 틱 가격 (여기서부터 이어간다)
@@ -132,29 +146,35 @@ export function regenerateRemainingPath(
 
   const windowTicks =
     biasTicks === null ? remaining : Math.min(Math.max(biasTicks, 1), remaining);
-  const driftPerTick = Math.log(1 + bias / 100) / windowTicks;
-  // 복귀 드리프트는 원래 경로와 같은 틱당 비율 (하루 전체에 편향을 편 값)
+  const scale = TICKS_PER_DAY / totalTicks;
+  const sigma = TICK_SIGMA[tier] * Math.sqrt(scale);
+  const jumpProbability = JUMP_PROBABILITY[tier] * scale;
+  // 틱당 드리프트: 등급 기본(항상) + 창 안은 bias, 창 밖은 resumeBias
+  const baseDriftPerTick = Math.log(1 + DAILY_DRIFT[tier] / 100) / totalTicks;
+  const windowDriftPerTick = Math.log(1 + bias / 100) / windowTicks;
   const resumeDriftPerTick = Math.log(1 + resumeBias / 100) / totalTicks;
-  const sigma = TICK_SIGMA[tier] * Math.sqrt(TICKS_PER_DAY / totalTicks);
-  const jumpProbability = JUMP_PROBABILITY[tier] * (TICKS_PER_DAY / totalTicks);
 
   const ticks: Tick[] = [];
+  const prices: number[] = [];
   let price = currentPrice;
   for (let i = fromTick + 1; i < totalTicks; i++) {
-    const drift = i - fromTick <= windowTicks ? driftPerTick : resumeDriftPerTick;
+    const inWindow = i - fromTick <= windowTicks;
+    const drift = baseDriftPerTick + (inWindow ? windowDriftPerTick : resumeDriftPerTick);
     price *= Math.exp(drift + sigma * nextGaussian(rng));
     if (rng() < jumpProbability) {
       const size = JUMP_MIN + rng() * (JUMP_MAX - JUMP_MIN);
       price *= rng() < 0.5 ? 1 + size : 1 - size;
     }
     price = Math.min(Math.max(price, lowerLimit), upperLimit);
-    ticks.push({ tickIndex: i, price: roundPrice(price), isHalted: false });
+    const rounded = roundPrice(price);
+    prices.push(rounded);
+    ticks.push({ tickIndex: i, price: rounded, isHalted: false });
   }
 
-  // VI 마킹 (직전 틱 대비 ±6% → 다음 틱 정지, 재생성 구간 내에서만)
+  // VI 마킹 (직전 틱 대비 ±8% → 다음 틱 정지, 재생성 구간 내에서만)
   for (let i = 0; i < ticks.length; i++) {
-    const base = i === 0 ? currentPrice : ticks[i - 1].price;
-    if (Math.abs(ticks[i].price - base) / base >= VI_THRESHOLD && i + 1 < ticks.length) {
+    const base = i === 0 ? currentPrice : prices[i - 1];
+    if (Math.abs(prices[i] - base) / base >= VI_THRESHOLD && i + 1 < ticks.length) {
       ticks[i + 1].isHalted = true;
     }
   }

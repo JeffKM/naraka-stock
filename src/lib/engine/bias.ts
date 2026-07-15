@@ -1,9 +1,9 @@
 // 일일 편향(bias) 추첨 (T-202, PRD §10)
 //
 // - 매일 종목 수의 약 15%(±1)에 이벤트 배정 — 로스터 규모에 비례 스케일
-//   (27종 기준 3~5개). 잡주(wild)는 배정 확률 2배
+//   (27종 기준 3~5개). 배정 가중치는 등급별(우량 1.2 / 일반 1 / 잡주 2)
 // - 크기: ±10 (40%) / ±20 (35%) / ±30 (25%)
-// - 방향: 상승 55% / 하락 45% (시장 약우상향)
+// - 방향(등급별): 상승 확률 우량 60% / 일반 55% / 잡주 50% (우량 우상향)
 
 import type { StockTier } from "@/types/domain";
 import type { Rng } from "./rng";
@@ -21,7 +21,19 @@ const MAGNITUDE_TABLE: Array<{ value: number; weight: number }> = [
   { value: 30, weight: 25 },
 ];
 
-const UP_PROBABILITY = 0.55;
+// 등급별 상승 확률 — 우량주를 일반·잡주보다 높여 "오를 확률" 편향(우상향)
+const UP_PROBABILITY: Record<StockTier, number> = {
+  stable: 0.6,
+  normal: 0.55,
+  wild: 0.5,
+};
+
+// 등급별 이벤트 배정 가중치 (잡주가 이벤트 단골, 우량은 약간 상향)
+const EVENT_WEIGHT: Record<StockTier, number> = {
+  stable: 1.2,
+  normal: 1,
+  wild: 2,
+};
 
 // 이벤트 종목 수: 로스터 규모에 비례 (종목 수 × 15%), ±1 균등 흔들림
 const EVENT_RATIO = 0.15;
@@ -61,8 +73,11 @@ export function drawDailyBiases(stocks: BiasTarget[], rng: Rng): BiasMap {
   const base = Math.round(stocks.length * EVENT_RATIO);
   const eventCount = Math.max(1, Math.min(stocks.length, base - 1 + Math.floor(rng() * 3)));
 
-  // 잡주 가중 2배 추첨 (중복 없이)
-  const pool = stocks.map((s) => ({ value: s.code, weight: s.tier === "wild" ? 2 : 1 }));
+  // 등급별 가중 추첨 (중복 없이)
+  const tierOf: Record<string, StockTier> = Object.fromEntries(
+    stocks.map((s) => [s.code, s.tier])
+  );
+  const pool = stocks.map((s) => ({ value: s.code, weight: EVENT_WEIGHT[s.tier] }));
   const picked: string[] = [];
   while (picked.length < eventCount && pool.length > 0) {
     const code = pickWeighted(rng, pool);
@@ -72,7 +87,7 @@ export function drawDailyBiases(stocks: BiasTarget[], rng: Rng): BiasMap {
 
   for (const code of picked) {
     const magnitude = pickWeighted(rng, MAGNITUDE_TABLE);
-    const direction = rng() < UP_PROBABILITY ? 1 : -1;
+    const direction = rng() < UP_PROBABILITY[tierOf[code]] ? 1 : -1;
     biases[code] = magnitude * direction;
   }
 

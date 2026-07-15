@@ -191,6 +191,64 @@ interface Strategy {
   run: (market: DayMarket[], rng: Rng) => number; // 최종 총자산
 }
 
+// 지정가 브라켓(데이 트레이드): 매일 대상 종목에 시가 -dip% 지정가 매수를 걸고,
+// 체결되면 매수가 +rise% 지정가 매도를 건다. 미체결 매도는 종가에 청산(당일 만료).
+// 실제 규칙 재현: 매수 틱≤지정가 / 매도 틱≥지정가, 체결가=지정가 고정, halt 틱 스킵,
+// 밴드밖(±30%) 지정가 접수 거부. OU 되돌림을 수확하려는 스마트 전략의 지배력 검증용.
+function bracketStrategy(
+  name: string,
+  tier: StockTier | "all",
+  dip: number,
+  rise: number
+): Strategy {
+  return {
+    name,
+    run: (market) => {
+      const p: Portfolio = { cash: INITIAL_CASH, qty: {} };
+      const targets = tier === "all" ? STOCKS : STOCKS.filter((s) => s.tier === tier);
+      for (const day of market) {
+        const budget = Math.floor(p.cash / targets.length); // 종목별 균등 예약
+        let spent = 0;
+        let proceeds = 0;
+        for (const stock of targets) {
+          const path = day.paths[stock.code];
+          const buyLimit = Math.round(path.open * (1 - dip));
+          // 밴드밖(±30%) 지정가는 접수 거부
+          const lowerBand = Math.round(day.prevCloses[stock.code] * (1 - 0.3));
+          if (buyLimit < lowerBand) continue;
+          // 매수 체결 틱: 가격 ≤ 지정가 (halt 스킵)
+          let buyIdx = -1;
+          for (let i = 0; i < path.ticks.length; i++) {
+            if (path.ticks[i].isHalted) continue;
+            if (path.ticks[i].price <= buyLimit) {
+              buyIdx = i;
+              break;
+            }
+          }
+          if (buyIdx < 0) continue; // 매수 미체결 → 현금 유지
+          const qty = Math.floor(budget / buyLimit);
+          if (qty <= 0) continue;
+          spent += qty * buyLimit;
+          // 매도 체결 틱: 매수 이후 가격 ≥ 지정가, 없으면 종가 청산
+          const sellLimit = Math.round(buyLimit * (1 + rise));
+          let exitPrice = path.close;
+          for (let j = buyIdx + 1; j < path.ticks.length; j++) {
+            if (path.ticks[j].isHalted) continue;
+            if (path.ticks[j].price >= sellLimit) {
+              exitPrice = sellLimit;
+              break;
+            }
+          }
+          const gross = qty * exitPrice;
+          proceeds += gross - Math.floor(gross * SELL_FEE_RATE);
+        }
+        p.cash += proceeds - spent;
+      }
+      return p.cash;
+    },
+  };
+}
+
 const STRATEGIES: Strategy[] = [
   {
     // 존버: 첫날 전 종목 균등 분산 매수 후 방치 (배당 수령)
@@ -291,6 +349,10 @@ const STRATEGIES: Strategy[] = [
       return p.cash;
     },
   },
+  bracketStrategy("지정가브라켓(잡주4/4)", "wild", 0.04, 0.04),
+  bracketStrategy("지정가브라켓(잡주6/6)", "wild", 0.06, 0.06),
+  bracketStrategy("지정가브라켓(잡주8/8)", "wild", 0.08, 0.08),
+  bracketStrategy("지정가브라켓(전종목6)", "all", 0.06, 0.06),
 ];
 
 // --- 실행 ---
@@ -330,7 +392,7 @@ function main() {
     const mean = sorted.reduce((a, b) => a + b, 0) / sorted.length;
     const lossRate = sorted.filter((v) => v < INITIAL_CASH).length / sorted.length;
     console.log(
-      `${strategy.name.padEnd(10)} ${fmt(percentile(sorted, 0.5))} / ${fmt(mean)} / ${fmt(
+      `${strategy.name.padEnd(18)} ${fmt(percentile(sorted, 0.5))} / ${fmt(mean)} / ${fmt(
         percentile(sorted, 0.9)
       )} / ${fmt(sorted[sorted.length - 1])} / ${(lossRate * 100).toFixed(1)}%`
     );
