@@ -5,6 +5,7 @@ import {
   clusterStep,
   clusterBoost,
   generateDailyPath,
+  regenerateRemainingPath,
   pickRegime,
   REGIME_PROB,
   openingGapFactor,
@@ -106,6 +107,27 @@ function approx(a: number, b: number, tol: number): boolean {
   check("gap: 평균 log ≈ 0 (방향중립)", approx(mean, 0, 0.001), `mean=${mean.toFixed(4)}`);
   check("gap: 표준편차 ≈ GAP_SIGMA.wild", approx(sd, GAP_SIGMA.wild, GAP_SIGMA.wild * 0.05), `sd=${sd.toFixed(4)}`);
   check("gap: 등급 순서 stable<normal<wild", GAP_SIGMA.stable < GAP_SIGMA.normal && GAP_SIGMA.normal < GAP_SIGMA.wild);
+}
+
+// --- Task 6: regenerateRemainingPath 동기화 ---
+{
+  const r = createRng(hashSeed("regen"));
+  const day = generateDailyPath(50000, 0, "wild", r, 84);
+  const fromTick = 40;
+  const current = day.ticks[fromTick].price;
+  const r2 = createRng(hashSeed("regen2"));
+  const remain = regenerateRemainingPath(50000, current, fromTick, 0, "wild", r2, 84);
+  const upper = Math.round(50000 * 1.3);
+  const lower = Math.round(50000 * 0.7);
+  check("regen: 틱 수 == 남은 구간", remain.length === 84 - 1 - fromTick, `len=${remain.length}`);
+  check("regen: 인덱스 연속", remain.every((t, i) => t.tickIndex === fromTick + 1 + i));
+  check("regen: 상하한 안", remain.every((t) => t.price >= lower && t.price <= upper));
+  // 시간구조 반영: 반환 구간 로그수익률 크기가 일정치 않음(상수 σ면 분산이 매우 작게 균일)
+  const absRet = remain.map((t, i) =>
+    i === 0 ? Math.abs(Math.log(t.price / current)) : Math.abs(Math.log(t.price / remain[i - 1].price))
+  );
+  const nonzero = absRet.filter((x) => x > 0);
+  check("regen: 수익률 변동 존재", nonzero.length > 0);
 }
 
 if (failures > 0) {

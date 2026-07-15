@@ -186,12 +186,16 @@ export function regenerateRemainingPath(
   const windowTicks =
     biasTicks === null ? remaining : Math.min(Math.max(biasTicks, 1), remaining);
   const scale = TICKS_PER_DAY / totalTicks;
-  const sigma = TICK_SIGMA[tier] * Math.sqrt(scale);
+  const baseSigma = TICK_SIGMA[tier] * Math.sqrt(scale);
   const jumpProbability = JUMP_PROBABILITY[tier] * scale;
   // 틱당 드리프트: 등급 기본(항상) + 창 안은 bias, 창 밖은 resumeBias
   const baseDriftPerTick = Math.log(1 + DAILY_DRIFT[tier] / 100) / totalTicks;
   const windowDriftPerTick = Math.log(1 + bias / 100) / windowTicks;
   const resumeDriftPerTick = Math.log(1 + resumeBias / 100) / totalTicks;
+  // generateDailyPath와 동일한 intraday·클러스터링·레짐 σ 구조 (개장 갭 제외 — 재생성 전용이라 없음)
+  const intraday = intradayProfile(totalTicks);
+  const regime = pickRegime(tier, rng); // RNG 1 소비 (틱 루프 진입 전)
+  let h = 1; // 클러스터링 상태 (틱 간 지속)
 
   const ticks: Tick[] = [];
   const prices: number[] = [];
@@ -199,10 +203,14 @@ export function regenerateRemainingPath(
   for (let i = fromTick + 1; i < totalTicks; i++) {
     const inWindow = i - fromTick <= windowTicks;
     const drift = baseDriftPerTick + (inWindow ? windowDriftPerTick : resumeDriftPerTick);
+    const sigma = baseSigma * intraday[i] * h * regime.mult;
     price *= Math.exp(drift + sigma * nextGaussian(rng));
+    // 다음 틱 σ에 반영될 상태 진화 (중심화된 |가우시안| 충격 → 방향중립)
+    h = clusterStep(h, Math.abs(nextGaussian(rng)) - MEAN_ABS_GAUSSIAN);
     if (rng() < jumpProbability) {
       const size = JUMP_MIN + rng() * (JUMP_MAX - JUMP_MIN);
       price *= rng() < 0.5 ? 1 + size : 1 - size;
+      h = clusterBoost(h); // 여진: 다음 틱들 σ 상승
     }
     price = Math.min(Math.max(price, lowerLimit), upperLimit);
     const rounded = roundPrice(price);
