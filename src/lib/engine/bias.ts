@@ -54,7 +54,8 @@ function pickWeighted<T>(rng: Rng, table: Array<{ value: T; weight: number }>): 
 // (시뮬레이션에서 중앙값 8.4배). 그래서 재료는 확률적으로만 실현된다:
 // - 30% 확률로 방향 반전 (재료 소멸·선반영 컨셉)
 // - 실현 강도는 20~100% 균등 (기대 60%)
-// 뉴스는 원래 bias 기준으로 발행하므로 뉴스 적중률 명세(90%/55%)는 유지된다.
+// 뉴스는 이 실현 경로(realizeBias 후 생성된 실제 움직임)를 "설명"하는 방식으로
+// 발행된다(2026-07-14 개편, generate.ts). 즉 원래 bias가 아니라 실현 결과 기준이다.
 const FLIP_PROBABILITY = 0.3;
 const REALIZATION_MIN = 0.2;
 const REALIZATION_MAX = 1.0;
