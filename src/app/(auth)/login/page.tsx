@@ -78,7 +78,7 @@ function LoginForm() {
         </form>
         <p className="mt-4 text-center text-sm text-muted-foreground">
           아직 계좌가 없나요?{" "}
-          <Link href="/signup" className="text-primary underline underline-offset-4">
+          <Link href="/signup" className="text-primary-accent underline underline-offset-4">
             계좌 개설
           </Link>
         </p>

@@ -83,7 +83,7 @@ function HistoryRow({ order }: { order: LimitOrder }) {
       <span
         className={cn(
           "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
-          filled ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
+          filled ? "bg-primary/15 text-primary-accent" : "bg-muted text-muted-foreground"
         )}
       >
         {STATUS_LABEL[order.status]}

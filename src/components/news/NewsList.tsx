@@ -33,7 +33,7 @@ const GRADE_META: Record<NewsGrade, GradeMeta> = {
   news: {
     verified: true,
     avatarClass: "bg-primary text-primary-foreground",
-    checkClass: "text-primary",
+    checkClass: "text-primary-accent",
   },
   rumor: {
     verified: false,
@@ -231,7 +231,7 @@ export function NewsList({
                 <div className="mt-2 text-xs">
                   <Link
                     href={`/stocks/${n.stockCode}`}
-                    className="font-medium text-primary hover:underline"
+                    className="font-medium text-primary-accent hover:underline"
                   >
                     ${n.stockName}
                   </Link>

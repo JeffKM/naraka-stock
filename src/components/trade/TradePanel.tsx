@@ -293,7 +293,7 @@ function LimitPriceInput({
         <p className="text-xs text-bear">상하한가(±30%) 범위를 벗어났어요</p>
       )}
       {immediate && (
-        <p className="text-xs text-primary">현재가 조건이 충족돼 즉시 시장가로 체결돼요</p>
+        <p className="text-xs text-primary-accent">현재가 조건이 충족돼 즉시 시장가로 체결돼요</p>
       )}
     </div>
   );

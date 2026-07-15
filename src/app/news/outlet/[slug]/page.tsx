@@ -52,7 +52,7 @@ export default function NewsOutletPage({
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <h1 className="text-lg font-bold">{outlet.name}</h1>
-              <BadgeCheck className="size-4 shrink-0 text-primary" />
+              <BadgeCheck className="size-4 shrink-0 text-primary-accent" />
             </div>
             <p className="text-sm text-muted-foreground">{outlet.handle}</p>
           </div>
