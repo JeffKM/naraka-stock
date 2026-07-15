@@ -7,6 +7,8 @@ import {
   generateDailyPath,
   pickRegime,
   REGIME_PROB,
+  openingGapFactor,
+  GAP_SIGMA,
 } from "../src/lib/engine/randomWalk";
 import { createRng, hashSeed } from "../src/lib/engine/rng";
 import type { StockTier } from "../src/types/domain";
@@ -91,6 +93,19 @@ function approx(a: number, b: number, tol: number): boolean {
   }
   const mults = new Set([pickRegime("wild", createRng(1)).mult]);
   check("regime: mult 값 검증", [0.7, 1.0, 1.6].includes([...mults][0]));
+}
+
+// --- Task 5: 개장 갭 ---
+{
+  const r = createRng(hashSeed("gap"));
+  const logs: number[] = [];
+  const N = 200000;
+  for (let i = 0; i < N; i++) logs.push(Math.log(openingGapFactor("wild", r)));
+  const mean = logs.reduce((a, b) => a + b, 0) / N;
+  const sd = Math.sqrt(logs.reduce((a, b) => a + (b - mean) ** 2, 0) / N);
+  check("gap: 평균 log ≈ 0 (방향중립)", approx(mean, 0, 0.001), `mean=${mean.toFixed(4)}`);
+  check("gap: 표준편차 ≈ GAP_SIGMA.wild", approx(sd, GAP_SIGMA.wild, GAP_SIGMA.wild * 0.05), `sd=${sd.toFixed(4)}`);
+  check("gap: 등급 순서 stable<normal<wild", GAP_SIGMA.stable < GAP_SIGMA.normal && GAP_SIGMA.normal < GAP_SIGMA.wild);
 }
 
 if (failures > 0) {
