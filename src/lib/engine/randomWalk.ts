@@ -47,6 +47,9 @@ const CLUSTER_MIN = 0.5;
 const CLUSTER_MAX = 2.5;
 const MEAN_ABS_GAUSSIAN = Math.sqrt(2 / Math.PI); // E[|Z|] — 충격 중심화용
 
+// 레짐: σ 배율만(방향중립). 하루 시작 시 등급별 추첨.
+const REGIME_MULT = { calm: 0.7, normal: 1.0, stormy: 1.6 } as const;
+
 // 점프(급등락 이벤트): 랜덤워크만으로는 틱 단위 급변이 없어 차트가 밋밋하고 VI가
 // 발동하지 않는다. 낮은 확률로 한 틱에 2~7% 점프를 주입한다 (연출 + VI 재료).
 const JUMP_PROBABILITY: Record<StockTier, number> = {
@@ -98,12 +101,13 @@ export function generateDailyPath(
   const baseSigma = TICK_SIGMA[tier] * Math.sqrt(scale);
   const jumpProbability = JUMP_PROBABILITY[tier] * scale;
   const intraday = intradayProfile(totalTicks);
+  const regime = pickRegime(tier, rng); // RNG 1 소비 (틱 루프 진입 전)
   let h = 1; // 클러스터링 상태 (틱 간 지속)
 
   const prices: number[] = [];
   let price = prevClose;
   for (let i = 0; i < totalTicks; i++) {
-    const sigma = baseSigma * intraday[i] * h;
+    const sigma = baseSigma * intraday[i] * h * regime.mult;
     price *= Math.exp(driftPerTick + sigma * nextGaussian(rng));
     // 다음 틱 σ에 반영될 상태 진화 (중심화된 |가우시안| 충격 → 방향중립)
     h = clusterStep(h, Math.abs(nextGaussian(rng)) - MEAN_ABS_GAUSSIAN);
@@ -223,4 +227,23 @@ export function clusterStep(h: number, shock: number): number {
 // 점프 여진: 점프 직후 클러스터링 상태를 일시 부스트(이후 AR(1)로 감쇠).
 export function clusterBoost(h: number): number {
   return Math.min(CLUSTER_MAX, h + AFTERSHOCK_BOOST);
+}
+
+// 등급별 레짐 확률 [calm, normal, stormy]. 잡주일수록 험한 날 비중↑.
+export const REGIME_PROB: Record<StockTier, [number, number, number]> = {
+  stable: [0.5, 0.45, 0.05],
+  normal: [0.4, 0.5, 0.1],
+  wild: [0.25, 0.5, 0.25],
+};
+
+// 하루 레짐 추첨 (RNG 1 소비). σ 전역 배율만 결정 — 방향 무관.
+export function pickRegime(
+  tier: StockTier,
+  rng: Rng
+): { name: "calm" | "normal" | "stormy"; mult: number } {
+  const [pCalm, pNormal] = REGIME_PROB[tier];
+  const u = rng();
+  if (u < pCalm) return { name: "calm", mult: REGIME_MULT.calm };
+  if (u < pCalm + pNormal) return { name: "normal", mult: REGIME_MULT.normal };
+  return { name: "stormy", mult: REGIME_MULT.stormy };
 }

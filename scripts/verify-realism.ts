@@ -5,6 +5,8 @@ import {
   clusterStep,
   clusterBoost,
   generateDailyPath,
+  pickRegime,
+  REGIME_PROB,
 } from "../src/lib/engine/randomWalk";
 import { createRng, hashSeed } from "../src/lib/engine/rng";
 import type { StockTier } from "../src/types/domain";
@@ -72,6 +74,23 @@ function approx(a: number, b: number, tol: number): boolean {
 {
   check("aftershock: 부스트 적용", approx(clusterBoost(1), 1.8, 1e-12), `=${clusterBoost(1)}`);
   check("aftershock: 상한 클램프", clusterBoost(2.4) === 2.5);
+}
+
+// --- Task 4: 레짐 ---
+{
+  const tiers: StockTier[] = ["stable", "normal", "wild"];
+  for (const tier of tiers) {
+    const [pc, pn, ps] = REGIME_PROB[tier];
+    check(`regime ${tier}: 확률 합 == 1`, approx(pc + pn + ps, 1, 1e-12));
+    const r = createRng(hashSeed(`regime|${tier}`));
+    const counts = { calm: 0, normal: 0, stormy: 0 };
+    const N = 200000;
+    for (let i = 0; i < N; i++) counts[pickRegime(tier, r).name]++;
+    check(`regime ${tier}: calm 빈도 ≈ ${pc}`, approx(counts.calm / N, pc, 0.01), `${(counts.calm / N).toFixed(3)}`);
+    check(`regime ${tier}: stormy 빈도 ≈ ${ps}`, approx(counts.stormy / N, ps, 0.01), `${(counts.stormy / N).toFixed(3)}`);
+  }
+  const mults = new Set([pickRegime("wild", createRng(1)).mult]);
+  check("regime: mult 값 검증", [0.7, 1.0, 1.6].includes([...mults][0]));
 }
 
 if (failures > 0) {
