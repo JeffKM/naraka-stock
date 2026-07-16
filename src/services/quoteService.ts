@@ -90,11 +90,13 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
   const prices: Record<string, { price: number; isHalted: boolean }> = {};
   const sparks: Record<string, number[]> = {};
   const pathByStock: Record<string, Record<number, number>> = {}; // 지수 계산용 (틱 정렬)
+  // 당일 누적 시뮬 시장 거래량 (사전 생성 틱의 volume 합 — 참가자 체결과 무관)
+  const volumes: Record<string, number> = {};
   if (tickIndex !== null) {
-    // 현재 틱까지의 오늘 경로 전체 (현재가 + 스파크라인을 한 번에)
+    // 현재 틱까지의 오늘 경로 전체 (현재가 + 스파크라인 + 거래량을 한 번에)
     const { data: tickRows, error: tickError } = await supabase
       .from("daily_ticks")
-      .select("stock_code, tick_index, price, is_halted")
+      .select("stock_code, tick_index, price, is_halted, volume")
       .eq("date", today)
       .lte("tick_index", tickIndex)
       .order("tick_index", { ascending: true });
@@ -102,26 +104,13 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
     for (const row of tickRows) {
       (sparks[row.stock_code] ??= []).push(row.price);
       (pathByStock[row.stock_code] ??= {})[row.tick_index] = row.price;
+      volumes[row.stock_code] = (volumes[row.stock_code] ?? 0) + row.volume;
       // 마지막 틱(오름차순 마지막 행)을 현재가로 쓴다 — 장 시간이 운영 중
       // 늘어나 오늘 경로가 현재 틱보다 짧아도 종가에서 동결 표시된다
       prices[row.stock_code] = {
         price: row.price,
         isHalted: row.tick_index === tickIndex && row.is_halted,
       };
-    }
-  }
-
-  // 당일 누적 거래량 (참가자 체결 주 수 — 익명 집계, Phase 8)
-  const volumes: Record<string, number> = {};
-  {
-    const { data: tradeRows, error: tradeError } = await supabase
-      .from("trades")
-      .select("stock_code, quantity")
-      .gte("created_at", `${today}T00:00:00+09:00`);
-    if (tradeError) throw tradeError;
-    for (const row of tradeRows) {
-      // numeric quantity는 문자열로 오므로 Number로 복원 (소수점 주식 거래량)
-      volumes[row.stock_code] = (volumes[row.stock_code] ?? 0) + Number(row.quantity);
     }
   }
 
@@ -167,7 +156,7 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
       upperLimit,
       lowerLimit,
       marketCap: price * stock.shares_outstanding,
-      volume: Math.round(volumes[stock.code] ?? 0), // 표시용 정수 주 수로 반올림
+      volume: Math.round(volumes[stock.code] ?? 0), // 시뮬 시장 거래량, 표시용 정수 반올림
 
       spark: sparks[stock.code] ?? [],
     };

@@ -16,11 +16,13 @@ export interface DailyCandle {
   high: number;
   low: number;
   close: number;
+  volume: number;
 }
 
 export interface IntradayPoint {
   time: number; // Unix epoch (초)
   price: number;
+  volume: number;
 }
 
 export interface ChartData {
@@ -46,7 +48,7 @@ export async function getChartData(stockCode: string, now: Date = new Date()): P
   // 일봉: 과거 확정분 (+ 마감 후엔 오늘 포함)
   const { data: dailyRows, error: dailyError } = await supabase
     .from("daily_summary")
-    .select("date, open, high, low, close")
+    .select("date, open, high, low, close, volume")
     .lte("date", afterClose ? today : addDaysStr(today, -1))
     .order("date", { ascending: true });
   if (dailyError) throw dailyError;
@@ -63,7 +65,7 @@ export async function getChartData(stockCode: string, now: Date = new Date()): P
   if (maxTick !== null) {
     const { data: tickRows, error: tickError } = await supabase
       .from("daily_ticks")
-      .select("tick_index, price")
+      .select("tick_index, price, volume")
       .eq("stock_code", stockCode)
       .eq("date", today)
       .lte("tick_index", maxTick)
@@ -72,13 +74,21 @@ export async function getChartData(stockCode: string, now: Date = new Date()): P
     todayPoints = tickRows.map((t) => ({
       time: tickTimeEpoch(today, t.tick_index, hours.openHour),
       price: t.price,
+      volume: t.volume,
     }));
   }
 
   return {
     daily: dailyRows
       .filter((d) => d.date <= today)
-      .map((d) => ({ time: d.date, open: d.open, high: d.high, low: d.low, close: d.close })),
+      .map((d) => ({
+        time: d.date,
+        open: d.open,
+        high: d.high,
+        low: d.low,
+        close: d.close,
+        volume: d.volume,
+      })),
     today: todayPoints,
   };
 }
