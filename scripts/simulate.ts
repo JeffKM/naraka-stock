@@ -26,34 +26,40 @@ const DIVIDEND_RATE = 0.01;
 
 // 등급·기준가는 운영 확정안 기준 (2026-07-14, migrations/20260714000000)
 // 섹터는 운영 확정안 기준 (2026-07-16, migrations/20260716010000_sector.sql)
+// 배열 순서는 code 오름차순(리뷰 결함 수정, 2026-07-17): drawDailyBiases·drawSectorEvent가
+// 이 배열 순서로 RNG를 소비하므로, 운영 배치(batchService.ts)의 종목 조회 쿼리가 쓰는
+// `.order("code")`와 순서를 맞춰야 두 경로가 동일 시드에서 동일 결과를 낸다. 원래 이
+// 배열은 마이그레이션 INSERT 순서(시가총액 순)를 따랐으나, Postgres는 ORDER BY 없는
+// SELECT의 행 순서를 보장하지 않으므로 배치 쪽은 code 정렬로 고정했다 — 표시용
+// 정렬(quoteService·adminService.listStocks)도 이미 code 기준이라 관례에도 맞다.
 const STOCKS: Array<{ code: string; tier: StockTier; sector: StockSector; initial: number }> = [
-  { code: "MLVD", tier: "stable", sector: "semiconductor", initial: 245000 },
-  { code: "OKHX", tier: "stable", sector: "semiconductor", initial: 198000 },
-  { code: "NRKE", tier: "stable", sector: "electronics", initial: 128000 },
-  { code: "MAPL", tier: "stable", sector: "electronics", initial: 172000 },
   { code: "ALBN", tier: "stable", sector: "it", initial: 152000 },
-  { code: "BNZN", tier: "stable", sector: "retail", initial: 135000 },
-  { code: "OKSL", tier: "stable", sector: "auto", initial: 118000 },
-  { code: "NOMH", tier: "stable", sector: "it", initial: 105000 },
-  { code: "MLMT", tier: "stable", sector: "retail", initial: 102000 },
-  { code: "MRSF", tier: "normal", sector: "it", initial: 92000 },
-  { code: "OKCT", tier: "normal", sector: "retail", initial: 84000 },
-  { code: "MRCL", tier: "normal", sector: "it", initial: 76000 },
-  { code: "BNOC", tier: "normal", sector: "defense", initial: 68000 },
-  { code: "OKFX", tier: "normal", sector: "media", initial: 62000 },
-  { code: "MIPA", tier: "normal", sector: "retail", initial: 54000 },
-  { code: "BNSK", tier: "normal", sector: "finance", initial: 46000 },
-  { code: "MRFI", tier: "normal", sector: "finance", initial: 39000 },
-  { code: "NRKM", tier: "normal", sector: "auto", initial: 33000 },
-  { code: "MHEN", tier: "wild", sector: "media", initial: 24500 },
   { code: "BBNN", tier: "wild", sector: "it", initial: 19800 },
-  { code: "MLTA", tier: "wild", sector: "it", initial: 17500 },
-  { code: "SPCO", tier: "wild", sector: "defense", initial: 14800 },
-  { code: "NRKB", tier: "wild", sector: "bio", initial: 11200 },
-  { code: "MHBT", tier: "wild", sector: "retail", initial: 9400 },
-  { code: "MELL", tier: "wild", sector: "bio", initial: 7600 },
   { code: "BNAS", tier: "wild", sector: "defense", initial: 6200 },
+  { code: "BNOC", tier: "normal", sector: "defense", initial: 68000 },
+  { code: "BNSK", tier: "normal", sector: "finance", initial: 46000 },
+  { code: "BNZN", tier: "stable", sector: "retail", initial: 135000 },
+  { code: "MAPL", tier: "stable", sector: "electronics", initial: 172000 },
+  { code: "MELL", tier: "wild", sector: "bio", initial: 7600 },
+  { code: "MHBT", tier: "wild", sector: "retail", initial: 9400 },
+  { code: "MHEN", tier: "wild", sector: "media", initial: 24500 },
+  { code: "MIPA", tier: "normal", sector: "retail", initial: 54000 },
+  { code: "MLMT", tier: "stable", sector: "retail", initial: 102000 },
+  { code: "MLTA", tier: "wild", sector: "it", initial: 17500 },
+  { code: "MLVD", tier: "stable", sector: "semiconductor", initial: 245000 },
+  { code: "MRCL", tier: "normal", sector: "it", initial: 76000 },
+  { code: "MRFI", tier: "normal", sector: "finance", initial: 39000 },
+  { code: "MRSF", tier: "normal", sector: "it", initial: 92000 },
+  { code: "NOMH", tier: "stable", sector: "it", initial: 105000 },
+  { code: "NRKB", tier: "wild", sector: "bio", initial: 11200 },
+  { code: "NRKE", tier: "stable", sector: "electronics", initial: 128000 },
+  { code: "NRKM", tier: "normal", sector: "auto", initial: 33000 },
   { code: "OKCC", tier: "wild", sector: "retail", initial: 4900 },
+  { code: "OKCT", tier: "normal", sector: "retail", initial: 84000 },
+  { code: "OKFX", tier: "normal", sector: "media", initial: 62000 },
+  { code: "OKHX", tier: "stable", sector: "semiconductor", initial: 198000 },
+  { code: "OKSL", tier: "stable", sector: "auto", initial: 118000 },
+  { code: "SPCO", tier: "wild", sector: "defense", initial: 14800 },
 ];
 
 // 개장일 목록

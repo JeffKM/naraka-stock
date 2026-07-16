@@ -93,10 +93,16 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
   const tomorrowOpen = isOpenDate(tomorrowDate, config.rules) && tomorrowDate <= config.eventEnd;
 
   // 종목 + 직전 종가 (가장 최근 daily_summary)
+  // .order("code")로 행 순서를 고정한다: drawDailyBiases·drawSectorEvent가 이 배열
+  // 순서로 RNG를 소비하므로(같은 시드라도 순서가 흔들리면 배정이 바뀐다), ORDER BY 없이
+  // Postgres 기본 반환 순서에 기대면 안 된다. scripts/simulate.ts의 STOCKS 배열도
+  // 동일하게 code 오름차순으로 정렬해 두 경로의 RNG 소비 순서를 맞춘다(quoteService·
+  // adminService.listStocks도 이미 code 정렬 — 이 관례와 일치).
   const { data: stocks, error: stocksError } = await supabase
     .from("stocks")
     .select("code, name, tier, sector")
-    .eq("listed", true);
+    .eq("listed", true)
+    .order("code");
   if (stocksError) throw stocksError;
 
   let biases: Record<string, number> = {};
