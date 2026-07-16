@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { getJson, postJson } from "@/lib/api/client";
 import type { Me } from "@/types/domain";
@@ -20,7 +19,10 @@ export function AuthButton() {
   if (!me) {
     return (
       <Button size="sm" variant="outline" asChild>
-        <Link href="/login">로그인</Link>
+        {/* Next Link 대신 일반 앵커(하드 내비게이션). 좀비 세션에서 /login 프리페치가
+            홈 리다이렉트로 라우터 캐시에 박히면 클릭이 튕기므로, 항상 서버로 최신 이동한다.
+            (로그아웃도 같은 이유로 window.location을 사용) */}
+        <a href="/login">로그인</a>
       </Button>
     );
   }

@@ -1,7 +1,7 @@
 import "server-only";
 import { ApiException } from "@/lib/api/response";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { getSession } from "./session";
+import { destroySession, getSession } from "./session";
 
 export interface AuthedUser {
   id: number;
@@ -27,6 +27,10 @@ export async function requireUser(): Promise<AuthedUser> {
     .single();
 
   if (error || !user) {
+    // 좀비 세션(서명은 유효하나 DB에 유저 없음 — 데이터 초기화·계정 삭제 후)을 자가 치유한다.
+    // 쿠키를 파기하지 않으면 proxy가 서명만 보고 로그인 상태로 오판해 /login 접근을 막아
+    // 재로그인이 불가능한 교착에 빠진다.
+    await destroySession();
     throw new ApiException("UNAUTHORIZED", "존재하지 않는 계정입니다.");
   }
   if (user.is_banned) {
