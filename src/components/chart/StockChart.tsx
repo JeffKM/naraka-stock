@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   AreaSeries,
   CandlestickSeries,
+  HistogramSeries,
   createChart,
   type IChartApi,
 } from "lightweight-charts";
@@ -12,10 +13,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getJson } from "@/lib/api/client";
+import { formatMoney } from "@/lib/market";
 
 interface ChartDto {
-  daily: Array<{ time: string; open: number; high: number; low: number; close: number }>;
-  today: Array<{ time: number; price: number }>;
+  daily: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>;
+  today: Array<{ time: number; price: number; volume: number }>;
 }
 
 // 다크 테마 차트 색 (globals.css 팔레트와 톤 일치)
@@ -25,6 +27,11 @@ const CHART_COLORS = {
   up: "#e05c4f", // bull
   down: "#5b8cc9", // bear
   area: "#c04a3e",
+  volUp: "rgba(224, 92, 79, 0.4)",
+  volDown: "rgba(91, 140, 201, 0.4)",
+  volNeutral: "rgba(184, 173, 163, 0.4)",
+  high: "rgba(224, 92, 79, 0.5)",
+  low: "rgba(91, 140, 201, 0.5)",
 };
 
 // 라인(당일) / 분봉 캔들(5분 틱 집계) / 일봉 캔들
@@ -42,11 +49,39 @@ interface IntradayCandle {
   high: number;
   low: number;
   close: number;
+  volume: number;
+}
+
+// 일봉(문자열 날짜) / 분봉(초 단위 epoch) 시간 값을 함께 다루기 위한 공용 타입
+type CandleTime = number | string;
+
+interface ChartCandle {
+  time: CandleTime;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+// 크로스헤어 hover 시 오버레이에 표시할 봉 데이터 (라인 모드는 o/h/l 없이 가격+거래량만)
+interface HoverInfo {
+  o?: number;
+  h?: number;
+  l?: number;
+  c: number;
+  v: number;
+}
+
+// lightweight-charts의 Time(숫자/문자열/BusinessDay)을 Map 키로 쓸 수 있게 문자열로 정규화
+function timeKey(t: number | string | { year: number; month: number; day: number }): string {
+  if (typeof t === "number" || typeof t === "string") return String(t);
+  return `${t.year}-${String(t.month).padStart(2, "0")}-${String(t.day).padStart(2, "0")}`;
 }
 
 // 5분 틱을 n분 봉으로 집계 (개장 15:00이 정시라 버킷 경계가 항상 맞아떨어진다)
 function aggregateCandles(
-  points: Array<{ time: number; price: number }>,
+  points: Array<{ time: number; price: number; volume: number }>,
   minutes: number
 ): IntradayCandle[] {
   const bucketSec = minutes * 60;
@@ -58,16 +93,18 @@ function aggregateCandles(
       last.high = Math.max(last.high, p.price);
       last.low = Math.min(last.low, p.price);
       last.close = p.price;
+      last.volume += p.volume;
     } else {
-      candles.push({ time: start, open: p.price, high: p.price, low: p.price, close: p.price });
+      candles.push({ time: start, open: p.price, high: p.price, low: p.price, close: p.price, volume: p.volume });
     }
   }
   return candles;
 }
 
-// 종목 차트 (T-402/T-801): 당일 라인 + 분봉 캔들 + 일봉 캔들
+// 종목 차트 (T-402/T-801): 당일 라인 + 분봉 캔들 + 일봉 캔들 + 거래량 히스토그램 + OHLCV 툴팁 + 고저 마커
 export function StockChart({ code }: { code: string }) {
   const [mode, setMode] = useState<Mode>("line");
+  const [hover, setHover] = useState<HoverInfo | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
 
@@ -96,44 +133,104 @@ export function StockChart({ code }: { code: string }) {
     });
     chartRef.current = chart;
 
+    // 가격 시리즈 (라인 또는 캔들) — 고저 마커·툴팁이 참조할 수 있도록 상위 스코프에 유지
+    const priceSeries =
+      mode === "line"
+        ? chart.addSeries(AreaSeries, {
+            lineColor: CHART_COLORS.area,
+            topColor: "rgba(192, 74, 62, 0.35)",
+            bottomColor: "rgba(192, 74, 62, 0.02)",
+            lineWidth: 2,
+          })
+        : chart.addSeries(CandlestickSeries, {
+            upColor: CHART_COLORS.up,
+            downColor: CHART_COLORS.down,
+            borderVisible: false,
+            wickUpColor: CHART_COLORS.up,
+            wickDownColor: CHART_COLORS.down,
+          });
+
+    // 캔들 데이터(일봉/분봉 집계) — 라인 모드에서는 빈 배열. 일봉은 날짜 문자열, 분봉은 초 단위 epoch 시간을 그대로 유지한다
+    const candleData: ChartCandle[] =
+      mode === "daily"
+        ? data.daily.map((d) => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume }))
+        : mode === "line"
+          ? []
+          : aggregateCandles(data.today, MINUTES_BY_MODE[mode as "m15" | "m30" | "m60"]);
+
     if (mode === "line") {
-      const series = chart.addSeries(AreaSeries, {
-        lineColor: CHART_COLORS.area,
-        topColor: "rgba(192, 74, 62, 0.35)",
-        bottomColor: "rgba(192, 74, 62, 0.02)",
-        lineWidth: 2,
-      });
-      series.setData(
+      priceSeries.setData(
         // lightweight-charts는 UTCTimestamp 초 단위를 받는다
         data.today.map((t) => ({ time: t.time as never, value: t.price }))
       );
     } else {
-      const series = chart.addSeries(CandlestickSeries, {
-        upColor: CHART_COLORS.up,
-        downColor: CHART_COLORS.down,
-        borderVisible: false,
-        wickUpColor: CHART_COLORS.up,
-        wickDownColor: CHART_COLORS.down,
-      });
-      if (mode === "daily") {
-        series.setData(
-          data.daily.map((d) => ({
-            time: d.time,
-            open: d.open,
-            high: d.high,
-            low: d.low,
-            close: d.close,
-          }))
-        );
-      } else {
-        series.setData(
-          aggregateCandles(data.today, MINUTES_BY_MODE[mode]).map((c) => ({
-            ...c,
-            time: c.time as never,
-          }))
-        );
-      }
+      priceSeries.setData(
+        candleData.map((c) => ({
+          time: c.time as never,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+        }))
+      );
     }
+
+    // 거래량 히스토그램 — 하단 20% 별도 price scale
+    const volSeries = chart.addSeries(HistogramSeries, {
+      priceFormat: { type: "volume" },
+      priceScaleId: "vol",
+      color: CHART_COLORS.volNeutral,
+    });
+    chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+    const volData =
+      mode === "line"
+        ? data.today.map((t) => ({ time: t.time as never, value: t.volume, color: CHART_COLORS.volNeutral }))
+        : candleData.map((c) => ({
+            time: c.time as never,
+            value: c.volume,
+            color: c.close >= c.open ? CHART_COLORS.volUp : CHART_COLORS.volDown,
+          }));
+    volSeries.setData(volData);
+
+    // 최고·최저가 price line (고저 마커)
+    const highs = mode === "daily" ? data.daily.map((d) => d.high) : mode === "line" ? data.today.map((t) => t.price) : candleData.map((c) => c.high);
+    const lows = mode === "daily" ? data.daily.map((d) => d.low) : mode === "line" ? data.today.map((t) => t.price) : candleData.map((c) => c.low);
+    if (highs.length) {
+      priceSeries.createPriceLine({
+        price: Math.max(...highs),
+        color: CHART_COLORS.high,
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: "고",
+      });
+      priceSeries.createPriceLine({
+        price: Math.min(...lows),
+        color: CHART_COLORS.low,
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: "저",
+      });
+    }
+
+    // 크로스헤어 hover 시 시/고/저/종/거래량 오버레이 — 시간 값을 문자열 키로 정규화해 일봉(날짜 문자열)·분봉(epoch 초) 모두 대응
+    const byTime = new Map<string, HoverInfo>();
+    if (mode === "line") {
+      data.today.forEach((t) => byTime.set(timeKey(t.time), { c: t.price, v: t.volume }));
+    } else {
+      candleData.forEach((c) => byTime.set(timeKey(c.time), { o: c.open, h: c.high, l: c.low, c: c.close, v: c.volume }));
+    }
+    const handleCrosshairMove = (param: Parameters<Parameters<IChartApi["subscribeCrosshairMove"]>[0]>[0]) => {
+      if (param.time == null) {
+        setHover(null);
+        return;
+      }
+      const key = timeKey(param.time as number | string | { year: number; month: number; day: number });
+      setHover(byTime.get(key) ?? null);
+    };
+    chart.subscribeCrosshairMove(handleCrosshairMove);
+
     chart.timeScale().fitContent();
 
     const onResize = () => {
@@ -145,8 +242,10 @@ export function StockChart({ code }: { code: string }) {
     window.addEventListener("resize", onResize);
     return () => {
       window.removeEventListener("resize", onResize);
+      chart.unsubscribeCrosshairMove(handleCrosshairMove);
       chart.remove();
       chartRef.current = null;
+      setHover(null);
     };
   }, [data, mode]);
 
@@ -170,7 +269,21 @@ export function StockChart({ code }: { code: string }) {
             아직 오늘 장이 열리지 않았습니다
           </div>
         )}
-        <div ref={containerRef} className={todayEmpty || isLoading ? "hidden" : ""} />
+        <div className="relative">
+          <div ref={containerRef} className={todayEmpty || isLoading ? "hidden" : ""} />
+          {hover && !todayEmpty && !isLoading && (
+            <div className="pointer-events-none absolute left-2 top-2 rounded-md bg-background/90 px-2 py-1 text-xs tabular-nums shadow">
+              {hover.o != null && (
+                <span>
+                  시 {formatMoney(hover.o)} · 고 {formatMoney(hover.h!)} · 저 {formatMoney(hover.l!)} · 종{" "}
+                  {formatMoney(hover.c)} ·{" "}
+                </span>
+              )}
+              {hover.o == null && <span>가 {formatMoney(hover.c)} · </span>}
+              거래량 {hover.v.toLocaleString()}
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

@@ -1,6 +1,16 @@
 // 도메인 타입 — DB 스키마(PRD §9.2)와 1:1 대응하는 기본 타입과 화면용 파생 타입.
 
 export type StockTier = "stable" | "normal" | "wild";
+export type StockSector =
+  | "semiconductor"
+  | "electronics"
+  | "it"
+  | "retail"
+  | "auto"
+  | "media"
+  | "finance"
+  | "defense"
+  | "bio";
 export type NewsGrade = "disclosure" | "news" | "rumor";
 export type TradeSide = "buy" | "sell";
 
@@ -11,6 +21,7 @@ export interface Stock {
   code: string;
   name: string;
   tier: StockTier;
+  sector: StockSector;
   description: string;
   listed: boolean;
   sharesOutstanding: number; // 발행주식수 (시가총액 = 현재가 × 발행주식수)
@@ -21,6 +32,7 @@ export interface StockQuote {
   code: string;
   name: string;
   tier: StockTier;
+  sector: StockSector;
   price: number; // 현재 틱 가격 (원)
   prevClose: number; // 직전 개장일 종가
   change: number; // 등락액
@@ -31,7 +43,7 @@ export interface StockQuote {
   upperLimit: number; // 오늘 상한가 (직전 종가 +30%)
   lowerLimit: number; // 오늘 하한가 (직전 종가 -30%)
   marketCap: number; // 시가총액 (현재가 × 발행주식수)
-  volume: number; // 당일 누적 거래량 (참가자 체결 주 수, 매수+매도)
+  volume: number; // 당일 누적 시뮬 시장 거래량 (사전 생성 틱 합)
   spark: number[]; // 오늘 개장~현재 틱의 가격 경로 (스파크라인용, 장외엔 빈 배열)
 }
 

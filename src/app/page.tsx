@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,11 +15,24 @@ import { Sparkline } from "@/components/quotes/Sparkline";
 import { usePriceFlash } from "@/hooks/usePriceFlash";
 import { usePriceWiggle } from "@/hooks/usePriceWiggle";
 import { useQuotes } from "@/hooks/useQuotes";
+import { useWatchlist } from "@/hooks/useWatchlist";
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/market";
 import type { StockQuote } from "@/types/domain";
 
 const TIER_LABEL = { stable: "우량주", normal: "일반주", wild: "테마주" } as const;
+
+const SECTOR_LABEL: Record<StockQuote["sector"], string> = {
+  semiconductor: "반도체",
+  electronics: "전기전자",
+  it: "IT·플랫폼",
+  retail: "유통·소비재",
+  auto: "자동차",
+  media: "미디어·엔터",
+  finance: "금융",
+  defense: "방산·중공업",
+  bio: "바이오·제약",
+};
 
 const WEEKDAY_LABEL = ["", "월", "화", "수", "목", "금", "토", "일"];
 
@@ -59,7 +73,17 @@ function sortQuotes(quotes: StockQuote[], mode: SortMode): StockQuote[] {
 }
 
 // 시세판 한 줄 — 장중엔 틱 사이 가격 미세 진동 + 등락 배경 플래시 (표시용, 상세 화면과 동일 연출)
-function QuoteRow({ quote: q, marketOpen }: { quote: StockQuote; marketOpen: boolean }) {
+function QuoteRow({
+  quote: q,
+  marketOpen,
+  watching,
+  onToggle,
+}: {
+  quote: StockQuote;
+  marketOpen: boolean;
+  watching: boolean;
+  onToggle: () => void;
+}) {
   const displayPrice = usePriceWiggle(q.price, marketOpen && !q.isHalted);
   const flash = usePriceFlash(displayPrice);
   const up = q.change > 0;
@@ -70,9 +94,27 @@ function QuoteRow({ quote: q, marketOpen }: { quote: StockQuote; marketOpen: boo
       className="flex items-center justify-between py-3 transition-colors hover:bg-muted/40"
     >
       <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            onToggle();
+          }}
+          className="p-1"
+          aria-label={watching ? "관심 해제" : "관심 등록"}
+        >
+          <Star
+            className={cn(
+              "h-4 w-4",
+              watching ? "fill-primary-accent text-primary-accent" : "text-muted-foreground"
+            )}
+          />
+        </button>
         <div>
           <p className="font-medium leading-tight">{q.name}</p>
-          <p className="text-xs text-muted-foreground">{TIER_LABEL[q.tier]}</p>
+          <p className="text-xs text-muted-foreground">
+            {TIER_LABEL[q.tier]} · {SECTOR_LABEL[q.sector]}
+          </p>
         </div>
         {q.isUpperLimit && <Badge className="bg-bull px-1.5 text-xs">上</Badge>}
         {q.isLowerLimit && <Badge className="bg-bear px-1.5 text-xs">下</Badge>}
@@ -122,8 +164,11 @@ function QuoteRow({ quote: q, marketOpen }: { quote: StockQuote; marketOpen: boo
 export default function Home() {
   const { data, isLoading } = useQuotes();
   const [sort, setSort] = useState<SortMode>("marketCap");
+  const [tab, setTab] = useState<"all" | "watch">("all");
+  const watchlist = useWatchlist();
 
-  const quotes = data ? sortQuotes(data.quotes, sort) : undefined;
+  const base = data ? sortQuotes(data.quotes, sort) : undefined;
+  const quotes = base?.filter((q) => tab === "all" || watchlist.isWatching(q.code));
 
   return (
     <div className="flex flex-col gap-4">
@@ -145,23 +190,49 @@ export default function Home() {
 
       <PopularStocks />
 
-      <div className="flex justify-end gap-1">
-        {SORT_OPTIONS.map((option) => (
+      <div className="flex items-center justify-between">
+        <div className="flex gap-1">
           <Button
-            key={option.value}
             variant="ghost"
             size="sm"
-            onClick={() => setSort(option.value)}
+            onClick={() => setTab("all")}
             className={cn(
               "h-7 px-2 text-xs",
-              sort === option.value
-                ? "bg-muted text-foreground"
-                : "text-muted-foreground"
+              tab === "all" ? "bg-muted text-foreground" : "text-muted-foreground"
             )}
           >
-            {option.label}
+            전체
           </Button>
-        ))}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setTab("watch")}
+            className={cn(
+              "h-7 px-2 text-xs",
+              tab === "watch" ? "bg-muted text-foreground" : "text-muted-foreground"
+            )}
+          >
+            관심
+          </Button>
+        </div>
+        <div className="flex gap-1">
+          {SORT_OPTIONS.map((option) => (
+            <Button
+              key={option.value}
+              variant="ghost"
+              size="sm"
+              onClick={() => setSort(option.value)}
+              className={cn(
+                "h-7 px-2 text-xs",
+                sort === option.value
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground"
+              )}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
       </div>
 
       <Card>
@@ -174,10 +245,31 @@ export default function Home() {
               </div>
             ))}
           {quotes?.map((q) => (
-            <QuoteRow key={q.code} quote={q} marketOpen={data?.marketState === "open"} />
+            <QuoteRow
+              key={q.code}
+              quote={q}
+              marketOpen={data?.marketState === "open"}
+              watching={watchlist.isWatching(q.code)}
+              onToggle={() => watchlist.toggle(q.code)}
+            />
           ))}
         </CardContent>
       </Card>
+
+      {tab === "watch" && quotes?.length === 0 && (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          {watchlist.loggedOut ? (
+            <>
+              로그인하면 관심종목을 등록할 수 있어요.{" "}
+              <Link href="/login" className="text-primary-accent underline underline-offset-4">
+                로그인하기
+              </Link>
+            </>
+          ) : (
+            "관심 등록한 종목이 없습니다. 별을 눌러 등록하세요."
+          )}
+        </p>
+      )}
 
       <NewsHighlight />
 

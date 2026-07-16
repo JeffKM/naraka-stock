@@ -1,11 +1,12 @@
 import "server-only";
-import { drawDailyBiases, realizeBias } from "@/lib/engine/bias";
+import { applySectorEvent, drawDailyBiases, drawSectorEvent, realizeBias } from "@/lib/engine/bias";
 import { generateDailyPath, PRICE_LIMIT_RATE } from "@/lib/engine/randomWalk";
 import { createRng, hashSeed } from "@/lib/engine/rng";
 import {
   generateDisclosures,
   generateEarlySignalNews,
   generateRegularNews,
+  generateSectorNews,
   pickEarlySignalTargets,
   type DailyMove,
   type GeneratedNews,
@@ -92,10 +93,16 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
   const tomorrowOpen = isOpenDate(tomorrowDate, config.rules) && tomorrowDate <= config.eventEnd;
 
   // 종목 + 직전 종가 (가장 최근 daily_summary)
+  // .order("code")로 행 순서를 고정한다: drawDailyBiases·drawSectorEvent가 이 배열
+  // 순서로 RNG를 소비하므로(같은 시드라도 순서가 흔들리면 배정이 바뀐다), ORDER BY 없이
+  // Postgres 기본 반환 순서에 기대면 안 된다. scripts/simulate.ts의 STOCKS 배열도
+  // 동일하게 code 오름차순으로 정렬해 두 경로의 RNG 소비 순서를 맞춘다(quoteService·
+  // adminService.listStocks도 이미 code 정렬 — 이 관례와 일치).
   const { data: stocks, error: stocksError } = await supabase
     .from("stocks")
-    .select("code, name, tier")
-    .eq("listed", true);
+    .select("code, name, tier, sector")
+    .eq("listed", true)
+    .order("code");
   if (stocksError) throw stocksError;
 
   let biases: Record<string, number> = {};
@@ -111,10 +118,19 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
 
     // 시드: 날짜 + 서버 비밀 → 결정적이지만 외부에서 예측 불가
     const rng = createRng(hashSeed(`${process.env.SESSION_SECRET}|${tomorrowDate}`));
-    biases = drawDailyBiases(
-      stocks.map((s) => ({ code: s.code, tier: s.tier as StockTier })),
-      rng
-    );
+    const biasTargets = stocks.map((s) => ({
+      code: s.code,
+      tier: s.tier as StockTier,
+      sector: s.sector as string,
+    }));
+    const individualBiases = drawDailyBiases(biasTargets, rng);
+    // 섹터 이벤트 (피드백 3): 개별 편향 위에 섹터 공통 편향을 덧댄다. RNG 소비 순서상
+    // drawDailyBiases 직후·generateDailyPath 루프 진입 전에 호출해야 시드 재현성이 유지된다.
+    // applySectorEvent는 RNG를 소비하지 않는 순수 병합이라 아래 배정은 RNG 스트림에 영향 없다.
+    const sectorEvent = drawSectorEvent(biasTargets, rng);
+    // 가격 경로·요약·섹터 판정용 결합 편향 (개별 + 섹터 가산). 조기 방향뉴스 후보
+    // 선정에는 쓰지 않는다 — 아래 pickEarlySignalTargets 호출부 주석 참고 (리뷰 결함 수정).
+    biases = applySectorEvent(individualBiases, biasTargets, sectorEvent);
 
     for (const stock of stocks) {
       const prevClose = prevCloses[stock.code];
@@ -137,6 +153,7 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
         low: path.low,
         close: path.close,
         bias: biases[stock.code],
+        volume: path.ticks.reduce((sum, t) => sum + t.volume, 0),
       });
       ticks.push(
         ...path.ticks.map((t) => ({
@@ -144,6 +161,7 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
           tick_index: t.tickIndex,
           price: t.price,
           is_halted: t.isHalted,
+          volume: t.volume,
         }))
       );
       stockPaths.push({
@@ -160,12 +178,17 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
 
     // 장중 조기 방향뉴스 (편향 이벤트 상위 2종을 장 70% 지점에 흘림 — T-505).
     // 이 종목은 후반 정식뉴스에서 제외해 한 종목당 방향뉴스 하나만 유지한다.
-    const earlyTargets = pickEarlySignalTargets(biases);
+    // 후보 선정·세기(magnitude)는 반드시 "개별" 편향(individualBiases) 기준이어야 한다.
+    // 결합(섹터 가산 후) 편향을 넘기면 섹터-only 종목이 top-2를 밀어내거나 개별+섹터
+    // 상쇄로 순편향이 낮은 종목이 뽑히는 리뷰 결함이 재발한다 (방향 자체는 아래 함수
+    // 내부에서 "노출 틱→종가 실제 방향"으로 실현 경로 기준 산출되므로 결합 편향의 영향을
+    // 받지 않는다).
+    const earlyTargets = pickEarlySignalTargets(individualBiases);
     news.push(
       ...generateEarlySignalNews(
         stockPaths,
         earlyTargets,
-        biases,
+        individualBiases,
         tomorrowDate,
         config.openHour,
         rng,
@@ -182,6 +205,16 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
         1,
         undefined,
         new Set(earlyTargets)
+      )
+    );
+
+    // 섹터 뉴스 (피드백 3): 섹터 이벤트 발생 시 정식뉴스 1건(stock_code=null) 추가
+    news.push(
+      ...generateSectorNews(
+        sectorEvent ? { sector: sectorEvent.sector, direction: sectorEvent.direction } : null,
+        config.ticksPerDay,
+        tomorrowDate,
+        config.openHour
       )
     );
   }
