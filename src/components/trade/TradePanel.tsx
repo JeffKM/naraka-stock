@@ -300,6 +300,7 @@ function LimitPriceInput({
 }
 
 const BUY_CHIPS = [10_000, 50_000, 100_000] as const;
+const BUY_QTY_CHIPS = [1, 5, 10] as const;
 
 // 구매: 시장가(금액→소수점 즉시 체결) / 지정가(금액 예약, 조건 도달 시 지정가로 체결)
 function BuyDialog({
@@ -310,21 +311,30 @@ function BuyDialog({
   onSuccess,
 }: TradeDialogProps & { availableCash: number }) {
   const [orderType, setOrderType] = useState<OrderType>("market");
+  const [mode, setMode] = useState<"amount" | "qty">("amount");
   const [amountText, setAmountText] = useState("");
   const [limitText, setLimitText] = useState("");
   const market = useSubmitTrade(quote, "buy", onOpenChange, onSuccess);
   const order = useSubmitOrder(quote, "buy", onOpenChange, onSuccess);
 
-  const amount = Math.floor(Number(amountText) || 0);
-  const limitPrice = Math.floor(Number(limitText) || 0);
   const isLimit = orderType === "limit";
+  const amount = Math.floor(Number(amountText) || 0); // 금액 모드 입력값 (원)
+  const qtyInput = Math.floor(Number(amountText) || 0); // 수량 모드 입력값 (매수는 정수만, D1 RPC 제약)
+  const limitPrice = Math.floor(Number(limitText) || 0);
   // 지정가면 예상 수량은 지정가 기준, 시장가면 현재가 기준
   const unit = isLimit && limitPrice > 0 ? limitPrice : quote.price;
-  const quantity = unit > 0 ? amount / unit : 0;
+  const quantity = unit > 0 ? amount / unit : 0; // 금액 모드(또는 지정가) 예상 수량
+  // 지정가·금액 모드는 기존 금액 경로, 시장가 수량 모드만 별도 값 사용
+  const buyQty = isLimit || mode === "amount" ? quantity : qtyInput;
+  const buyAmount = isLimit || mode === "amount" ? amount : Math.round(qtyInput * quote.price);
+  const maxBuyQty = quote.price > 0 ? Math.floor(availableCash / quote.price) : 0;
 
   const bandOk = limitPrice > 0 && limitPrice <= quote.upperLimit && limitPrice >= quote.lowerLimit;
-  const valid =
-    amount >= 1 && amount <= availableCash && (isLimit ? bandOk : true);
+  const valid = isLimit
+    ? amount >= 1 && amount <= availableCash && bandOk
+    : mode === "amount"
+      ? amount >= 1 && amount <= availableCash
+      : qtyInput >= 1 && Math.round(qtyInput * quote.price) <= availableCash;
 
   function reset() {
     setAmountText("");
@@ -333,7 +343,11 @@ function BuyDialog({
 
   function onSubmit() {
     if (!valid) return;
-    if (isLimit) order.submit({ limitPrice, amount }, reset);
+    if (isLimit) {
+      order.submit({ limitPrice, amount }, reset);
+      return;
+    }
+    if (mode === "qty") market.submit({ quantity: qtyInput }, qtyInput, () => setAmountText(""));
     else market.submit({ amount }, quantity, () => setAmountText(""));
   }
 
@@ -356,11 +370,40 @@ function BuyDialog({
             <LimitPriceInput quote={quote} side="buy" value={limitText} onChange={setLimitText} />
           )}
 
+          {/* 시장가 금액/수량 토글 (지정가는 금액 기준만) */}
+          {!isLimit && (
+            <div className="flex gap-1.5">
+              <Button
+                size="sm"
+                variant={mode === "amount" ? "default" : "outline"}
+                className="flex-1"
+                onClick={() => {
+                  setMode("amount");
+                  setAmountText("");
+                }}
+              >
+                금액
+              </Button>
+              <Button
+                size="sm"
+                variant={mode === "qty" ? "default" : "outline"}
+                className="flex-1"
+                onClick={() => {
+                  setMode("qty");
+                  setAmountText("");
+                }}
+              >
+                수량
+              </Button>
+            </div>
+          )}
+
           <Input
             type="number"
             inputMode="numeric"
             min={0}
-            placeholder="금액 (원)"
+            step={!isLimit && mode === "qty" ? "1" : undefined}
+            placeholder={!isLimit && mode === "qty" ? "수량 (주)" : "금액 (원)"}
             value={amountText}
             autoFocus={!isLimit}
             onChange={(e) => setAmountText(e.target.value)}
@@ -368,40 +411,67 @@ function BuyDialog({
             className="h-12 text-lg font-semibold"
           />
           <div className="flex gap-1.5">
-            {BUY_CHIPS.map((chip) => (
-              <Button
-                key={chip}
-                size="sm"
-                variant="outline"
-                className="flex-1"
-                onClick={() => setAmountText(String(amount + chip))}
-              >
-                +{chip / 10_000}만
-              </Button>
-            ))}
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex-1"
-              disabled={availableCash <= 0}
-              onClick={() => setAmountText(String(availableCash))}
-            >
-              최대
-            </Button>
+            {!isLimit && mode === "qty" ? (
+              <>
+                {BUY_QTY_CHIPS.map((chip) => (
+                  <Button
+                    key={chip}
+                    size="sm"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setAmountText(String(qtyInput + chip))}
+                  >
+                    +{chip}주
+                  </Button>
+                ))}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  disabled={maxBuyQty <= 0}
+                  onClick={() => setAmountText(String(maxBuyQty))}
+                >
+                  최대
+                </Button>
+              </>
+            ) : (
+              <>
+                {BUY_CHIPS.map((chip) => (
+                  <Button
+                    key={chip}
+                    size="sm"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setAmountText(String(amount + chip))}
+                  >
+                    +{chip / 10_000}만
+                  </Button>
+                ))}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  disabled={availableCash <= 0}
+                  onClick={() => setAmountText(String(availableCash))}
+                >
+                  최대
+                </Button>
+              </>
+            )}
           </div>
 
           <div className="rounded-lg bg-muted/50 p-3 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">예상 수량</span>
-              <span className="font-medium">{formatQty(quantity)}주</span>
+              <span className="font-medium">{formatQty(buyQty)}주</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">주문 금액</span>
-              <span className="font-medium">{formatMoney(amount)}</span>
+              <span className="font-medium">{formatMoney(buyAmount)}</span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               주문 가능 {formatMoney(availableCash)}
-              {amount > availableCash && " · 잔고를 초과했어요"}
+              {buyAmount > availableCash && " · 잔고를 초과했어요"}
             </p>
           </div>
 
@@ -414,9 +484,13 @@ function BuyDialog({
               ? "주문 중..."
               : isLimit
                 ? "지정가 매수 예약"
-                : quantity > 0
-                  ? `${formatQty(quantity)}주 구매 확인`
-                  : "구매 확인"}
+                : mode === "qty"
+                  ? qtyInput > 0
+                    ? `${qtyInput}주 구매 확인`
+                    : "구매 확인"
+                  : quantity > 0
+                    ? `${formatQty(quantity)}주 구매 확인`
+                    : "구매 확인"}
           </Button>
         </div>
       </DialogContent>
