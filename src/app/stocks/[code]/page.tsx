@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect } from "react";
+import { Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,6 +15,7 @@ import { TradePanel } from "@/components/trade/TradePanel";
 import { usePriceFlash } from "@/hooks/usePriceFlash";
 import { usePriceWiggle } from "@/hooks/usePriceWiggle";
 import { useQuotes } from "@/hooks/useQuotes";
+import { useWatchlist } from "@/hooks/useWatchlist";
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/market";
 import type { StockQuote } from "@/types/domain";
@@ -40,6 +42,7 @@ export default function StockDetailPage({
 }) {
   const { code } = use(params);
   const { data, isLoading } = useQuotes();
+  const watchlist = useWatchlist();
 
   const quote = data?.quotes.find((q) => q.code === code.toUpperCase());
   // 표시용 미세 진동 (장중 + 정지 아님일 때만) — 체결가는 항상 서버 틱 값
@@ -80,6 +83,21 @@ export default function StockDetailPage({
       <div>
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-bold">{quote.name}</h1>
+          <button
+            type="button"
+            onClick={() => watchlist.toggle(quote.code)}
+            className="p-1"
+            aria-label={watchlist.isWatching(quote.code) ? "관심 해제" : "관심 등록"}
+          >
+            <Star
+              className={cn(
+                "h-4 w-4",
+                watchlist.isWatching(quote.code)
+                  ? "fill-primary-accent text-primary-accent"
+                  : "text-muted-foreground"
+              )}
+            />
+          </button>
           <Badge variant="secondary">{TIER_LABEL[quote.tier]}</Badge>
           <Badge variant="secondary">{SECTOR_LABEL[quote.sector]}</Badge>
           {quote.isUpperLimit && <Badge className="bg-bull">上</Badge>}
