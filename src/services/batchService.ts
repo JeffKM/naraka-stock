@@ -117,11 +117,14 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
       tier: s.tier as StockTier,
       sector: s.sector as string,
     }));
-    biases = drawDailyBiases(biasTargets, rng);
+    const individualBiases = drawDailyBiases(biasTargets, rng);
     // 섹터 이벤트 (피드백 3): 개별 편향 위에 섹터 공통 편향을 덧댄다. RNG 소비 순서상
     // drawDailyBiases 직후·generateDailyPath 루프 진입 전에 호출해야 시드 재현성이 유지된다.
+    // applySectorEvent는 RNG를 소비하지 않는 순수 병합이라 아래 배정은 RNG 스트림에 영향 없다.
     const sectorEvent = drawSectorEvent(biasTargets, rng);
-    biases = applySectorEvent(biases, biasTargets, sectorEvent);
+    // 가격 경로·요약·섹터 판정용 결합 편향 (개별 + 섹터 가산). 조기 방향뉴스 후보
+    // 선정에는 쓰지 않는다 — 아래 pickEarlySignalTargets 호출부 주석 참고 (리뷰 결함 수정).
+    biases = applySectorEvent(individualBiases, biasTargets, sectorEvent);
 
     for (const stock of stocks) {
       const prevClose = prevCloses[stock.code];
@@ -167,12 +170,17 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
 
     // 장중 조기 방향뉴스 (편향 이벤트 상위 2종을 장 70% 지점에 흘림 — T-505).
     // 이 종목은 후반 정식뉴스에서 제외해 한 종목당 방향뉴스 하나만 유지한다.
-    const earlyTargets = pickEarlySignalTargets(biases);
+    // 후보 선정·세기(magnitude)는 반드시 "개별" 편향(individualBiases) 기준이어야 한다.
+    // 결합(섹터 가산 후) 편향을 넘기면 섹터-only 종목이 top-2를 밀어내거나 개별+섹터
+    // 상쇄로 순편향이 낮은 종목이 뽑히는 리뷰 결함이 재발한다 (방향 자체는 아래 함수
+    // 내부에서 "노출 틱→종가 실제 방향"으로 실현 경로 기준 산출되므로 결합 편향의 영향을
+    // 받지 않는다).
+    const earlyTargets = pickEarlySignalTargets(individualBiases);
     news.push(
       ...generateEarlySignalNews(
         stockPaths,
         earlyTargets,
-        biases,
+        individualBiases,
         tomorrowDate,
         config.openHour,
         rng,
