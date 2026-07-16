@@ -8,7 +8,7 @@ import {
   loadIndices,
   loadPrevIndexCloses,
 } from "@/services/indexService";
-import type { IndexQuote, MarketState, StockQuote, StockTier } from "@/types/domain";
+import type { IndexQuote, MarketState, StockQuote, StockSector, StockTier } from "@/types/domain";
 
 export interface QuoteBoard {
   marketState: MarketState;
@@ -48,7 +48,7 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
 
   const { data: stocks, error: stocksError } = await supabase
     .from("stocks")
-    .select("code, name, tier, shares_outstanding")
+    .select("code, name, tier, sector, shares_outstanding")
     .eq("listed", true)
     .order("code");
   if (stocksError) throw stocksError;
@@ -155,6 +155,7 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
       code: stock.code,
       name: stock.name,
       tier: stock.tier as StockTier,
+      sector: stock.sector as StockSector,
       price,
       prevClose,
       change,

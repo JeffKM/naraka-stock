@@ -16,8 +16,21 @@ import { usePriceWiggle } from "@/hooks/usePriceWiggle";
 import { useQuotes } from "@/hooks/useQuotes";
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/market";
+import type { StockQuote } from "@/types/domain";
 
 const TIER_LABEL = { stable: "우량주", normal: "일반주", wild: "테마주" } as const;
+
+const SECTOR_LABEL: Record<StockQuote["sector"], string> = {
+  semiconductor: "반도체",
+  electronics: "전기전자",
+  it: "IT·플랫폼",
+  retail: "유통·소비재",
+  auto: "자동차",
+  media: "미디어·엔터",
+  finance: "금융",
+  defense: "방산·중공업",
+  bio: "바이오·제약",
+};
 
 // 종목 상세 (T-303/T-402/T-403)
 export default function StockDetailPage({
@@ -68,6 +81,7 @@ export default function StockDetailPage({
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-bold">{quote.name}</h1>
           <Badge variant="secondary">{TIER_LABEL[quote.tier]}</Badge>
+          <Badge variant="secondary">{SECTOR_LABEL[quote.sector]}</Badge>
           {quote.isUpperLimit && <Badge className="bg-bull">上</Badge>}
           {quote.isLowerLimit && <Badge className="bg-bear">下</Badge>}
           {quote.isHalted && <Badge variant="destructive">VI 정지</Badge>}

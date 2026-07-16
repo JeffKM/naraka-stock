@@ -21,7 +21,7 @@ import {
   adjustDivisorsForTierChange,
   indexCodeOfTier,
 } from "@/services/indexService";
-import type { AdminSignupRequest, Stock, StockTier } from "@/types/domain";
+import type { AdminSignupRequest, Stock, StockSector, StockTier } from "@/types/domain";
 
 // 어드민 서비스 (T-602~T-605) — 모든 진입점은 route에서 requireAdmin을 통과한 뒤 호출된다.
 
@@ -689,12 +689,13 @@ export async function listStocks(): Promise<Stock[]> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("stocks")
-    .select("code, name, tier, description, listed, shares_outstanding")
+    .select("code, name, tier, sector, description, listed, shares_outstanding")
     .order("code");
   if (error) throw error;
   return data.map(({ shares_outstanding, ...s }) => ({
     ...s,
     tier: s.tier as StockTier,
+    sector: s.sector as StockSector,
     sharesOutstanding: shares_outstanding,
   }));
 }
