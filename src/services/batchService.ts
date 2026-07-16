@@ -147,6 +147,7 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
         low: path.low,
         close: path.close,
         bias: biases[stock.code],
+        volume: path.ticks.reduce((sum, t) => sum + t.volume, 0),
       });
       ticks.push(
         ...path.ticks.map((t) => ({
@@ -154,6 +155,7 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
           tick_index: t.tickIndex,
           price: t.price,
           is_halted: t.isHalted,
+          volume: t.volume,
         }))
       );
       stockPaths.push({

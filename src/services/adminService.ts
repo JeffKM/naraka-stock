@@ -1,7 +1,12 @@
 import "server-only";
 import { ApiException } from "@/lib/api/response";
 import { realizeBias } from "@/lib/engine/bias";
-import { generateDailyPath, regenerateRemainingPath, type Tick } from "@/lib/engine/randomWalk";
+import {
+  generateDailyPath,
+  regenerateRemainingPath,
+  tickVolume,
+  type Tick,
+} from "@/lib/engine/randomWalk";
 import { createRng } from "@/lib/engine/rng";
 import {
   getKstParts,
@@ -375,6 +380,7 @@ export async function triggerSurpriseEvent(
       tick_index: t.tickIndex,
       price: t.price,
       is_halted: t.isHalted,
+      volume: t.volume,
     })),
     p_news_cutoff: newsCutoff,
     p_new_news: newNews.map((n) => ({
@@ -546,10 +552,17 @@ export async function reconcileTodayTicks(): Promise<ReconcileResult | null> {
       const currentTick = getTickIndex(now, hours, rules) ?? 0;
       const anchor = Math.min(currentTick, lastIndex);
       const anchorPrice = ticks[Math.min(anchor, ticks.length - 1)].price;
-      // 동결 구간(경로 끝 ~ 현재)은 표시·체결됐던 마지막 틱 가격 그대로 채운다
+      // 동결 구간(경로 끝 ~ 현재)은 표시·체결됐던 마지막 틱 가격 그대로 채운다.
+      // 가격 변화가 없어도(moveRate=0) baseline×noise로 거래량은 채운다 —
+      // 0으로 두면 거래량 히스토그램이 이 구간만 끊긴다.
       const flat: Tick[] = [];
       for (let i = lastIndex + 1; i <= Math.min(currentTick, totalTicks - 1); i++) {
-        flat.push({ tickIndex: i, price: anchorPrice, isHalted: false });
+        flat.push({
+          tickIndex: i,
+          price: anchorPrice,
+          isHalted: false,
+          volume: tickVolume(tier, anchorPrice, anchorPrice, rng),
+        });
       }
       fromTick = anchor;
       newTicks = [
@@ -594,6 +607,7 @@ export async function reconcileTodayTicks(): Promise<ReconcileResult | null> {
         tick_index: t.tickIndex,
         price: t.price,
         is_halted: t.isHalted,
+        volume: t.volume,
       })),
     });
     if (rpcError) throw rpcError;
@@ -772,6 +786,7 @@ export async function createStock(
       tick_index: t.tickIndex,
       price: t.price,
       is_halted: t.isHalted,
+      volume: t.volume,
     })),
   });
   if (rpcError) throw rpcError;
