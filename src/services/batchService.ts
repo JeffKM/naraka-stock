@@ -1,11 +1,12 @@
 import "server-only";
-import { drawDailyBiases, realizeBias } from "@/lib/engine/bias";
+import { applySectorEvent, drawDailyBiases, drawSectorEvent, realizeBias } from "@/lib/engine/bias";
 import { generateDailyPath, PRICE_LIMIT_RATE } from "@/lib/engine/randomWalk";
 import { createRng, hashSeed } from "@/lib/engine/rng";
 import {
   generateDisclosures,
   generateEarlySignalNews,
   generateRegularNews,
+  generateSectorNews,
   pickEarlySignalTargets,
   type DailyMove,
   type GeneratedNews,
@@ -94,7 +95,7 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
   // 종목 + 직전 종가 (가장 최근 daily_summary)
   const { data: stocks, error: stocksError } = await supabase
     .from("stocks")
-    .select("code, name, tier")
+    .select("code, name, tier, sector")
     .eq("listed", true);
   if (stocksError) throw stocksError;
 
@@ -111,10 +112,16 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
 
     // 시드: 날짜 + 서버 비밀 → 결정적이지만 외부에서 예측 불가
     const rng = createRng(hashSeed(`${process.env.SESSION_SECRET}|${tomorrowDate}`));
-    biases = drawDailyBiases(
-      stocks.map((s) => ({ code: s.code, tier: s.tier as StockTier })),
-      rng
-    );
+    const biasTargets = stocks.map((s) => ({
+      code: s.code,
+      tier: s.tier as StockTier,
+      sector: s.sector as string,
+    }));
+    biases = drawDailyBiases(biasTargets, rng);
+    // 섹터 이벤트 (피드백 3): 개별 편향 위에 섹터 공통 편향을 덧댄다. RNG 소비 순서상
+    // drawDailyBiases 직후·generateDailyPath 루프 진입 전에 호출해야 시드 재현성이 유지된다.
+    const sectorEvent = drawSectorEvent(biasTargets, rng);
+    biases = applySectorEvent(biases, biasTargets, sectorEvent);
 
     for (const stock of stocks) {
       const prevClose = prevCloses[stock.code];
@@ -182,6 +189,16 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
         1,
         undefined,
         new Set(earlyTargets)
+      )
+    );
+
+    // 섹터 뉴스 (피드백 3): 섹터 이벤트 발생 시 정식뉴스 1건(stock_code=null) 추가
+    news.push(
+      ...generateSectorNews(
+        sectorEvent ? { sector: sectorEvent.sector, direction: sectorEvent.direction } : null,
+        config.ticksPerDay,
+        tomorrowDate,
+        config.openHour
       )
     );
   }

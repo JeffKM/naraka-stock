@@ -5,11 +5,17 @@
 // 정기 휴장 없음이면 08-01~08-30 = 30일)을 1,000회 반복해 전략별 최종 자산 분포를 확인한다
 // (PRD §10 목표 검증).
 
-import { drawDailyBiases, realizeBias, type BiasMap } from "../src/lib/engine/bias";
+import {
+  applySectorEvent,
+  drawDailyBiases,
+  drawSectorEvent,
+  realizeBias,
+  type BiasMap,
+} from "../src/lib/engine/bias";
 import { generateDailyPath, type DailyPath } from "../src/lib/engine/randomWalk";
 import { createRng, hashSeed, type Rng } from "../src/lib/engine/rng";
 import { addDays, isOpenDate } from "../src/lib/market";
-import type { StockTier } from "../src/types/domain";
+import type { StockSector, StockTier } from "../src/types/domain";
 
 // --- 이벤트 설정 (시드 데이터와 동일) ---
 const EVENT_START = "2026-08-01";
@@ -19,34 +25,35 @@ const SELL_FEE_RATE = 0.005;
 const DIVIDEND_RATE = 0.01;
 
 // 등급·기준가는 운영 확정안 기준 (2026-07-14, migrations/20260714000000)
-const STOCKS: Array<{ code: string; tier: StockTier; initial: number }> = [
-  { code: "MLVD", tier: "stable", initial: 245000 },
-  { code: "OKHX", tier: "stable", initial: 198000 },
-  { code: "NRKE", tier: "stable", initial: 128000 },
-  { code: "MAPL", tier: "stable", initial: 172000 },
-  { code: "ALBN", tier: "stable", initial: 152000 },
-  { code: "BNZN", tier: "stable", initial: 135000 },
-  { code: "OKSL", tier: "stable", initial: 118000 },
-  { code: "NOMH", tier: "stable", initial: 105000 },
-  { code: "MLMT", tier: "stable", initial: 102000 },
-  { code: "MRSF", tier: "normal", initial: 92000 },
-  { code: "OKCT", tier: "normal", initial: 84000 },
-  { code: "MRCL", tier: "normal", initial: 76000 },
-  { code: "BNOC", tier: "normal", initial: 68000 },
-  { code: "OKFX", tier: "normal", initial: 62000 },
-  { code: "MIPA", tier: "normal", initial: 54000 },
-  { code: "BNSK", tier: "normal", initial: 46000 },
-  { code: "MRFI", tier: "normal", initial: 39000 },
-  { code: "NRKM", tier: "normal", initial: 33000 },
-  { code: "MHEN", tier: "wild", initial: 24500 },
-  { code: "BBNN", tier: "wild", initial: 19800 },
-  { code: "MLTA", tier: "wild", initial: 17500 },
-  { code: "SPCO", tier: "wild", initial: 14800 },
-  { code: "NRKB", tier: "wild", initial: 11200 },
-  { code: "MHBT", tier: "wild", initial: 9400 },
-  { code: "MELL", tier: "wild", initial: 7600 },
-  { code: "BNAS", tier: "wild", initial: 6200 },
-  { code: "OKCC", tier: "wild", initial: 4900 },
+// 섹터는 운영 확정안 기준 (2026-07-16, migrations/20260716010000_sector.sql)
+const STOCKS: Array<{ code: string; tier: StockTier; sector: StockSector; initial: number }> = [
+  { code: "MLVD", tier: "stable", sector: "semiconductor", initial: 245000 },
+  { code: "OKHX", tier: "stable", sector: "semiconductor", initial: 198000 },
+  { code: "NRKE", tier: "stable", sector: "electronics", initial: 128000 },
+  { code: "MAPL", tier: "stable", sector: "electronics", initial: 172000 },
+  { code: "ALBN", tier: "stable", sector: "it", initial: 152000 },
+  { code: "BNZN", tier: "stable", sector: "retail", initial: 135000 },
+  { code: "OKSL", tier: "stable", sector: "auto", initial: 118000 },
+  { code: "NOMH", tier: "stable", sector: "it", initial: 105000 },
+  { code: "MLMT", tier: "stable", sector: "retail", initial: 102000 },
+  { code: "MRSF", tier: "normal", sector: "it", initial: 92000 },
+  { code: "OKCT", tier: "normal", sector: "retail", initial: 84000 },
+  { code: "MRCL", tier: "normal", sector: "it", initial: 76000 },
+  { code: "BNOC", tier: "normal", sector: "defense", initial: 68000 },
+  { code: "OKFX", tier: "normal", sector: "media", initial: 62000 },
+  { code: "MIPA", tier: "normal", sector: "retail", initial: 54000 },
+  { code: "BNSK", tier: "normal", sector: "finance", initial: 46000 },
+  { code: "MRFI", tier: "normal", sector: "finance", initial: 39000 },
+  { code: "NRKM", tier: "normal", sector: "auto", initial: 33000 },
+  { code: "MHEN", tier: "wild", sector: "media", initial: 24500 },
+  { code: "BBNN", tier: "wild", sector: "it", initial: 19800 },
+  { code: "MLTA", tier: "wild", sector: "it", initial: 17500 },
+  { code: "SPCO", tier: "wild", sector: "defense", initial: 14800 },
+  { code: "NRKB", tier: "wild", sector: "bio", initial: 11200 },
+  { code: "MHBT", tier: "wild", sector: "retail", initial: 9400 },
+  { code: "MELL", tier: "wild", sector: "bio", initial: 7600 },
+  { code: "BNAS", tier: "wild", sector: "defense", initial: 6200 },
+  { code: "OKCC", tier: "wild", sector: "retail", initial: 4900 },
 ];
 
 // 개장일 목록
@@ -74,7 +81,10 @@ function simulateMarket(rng: Rng): DayMarket[] {
   const result: DayMarket[] = [];
 
   for (const date of openDays()) {
-    const biases = drawDailyBiases(STOCKS, rng);
+    let biases = drawDailyBiases(STOCKS, rng);
+    // 섹터 이벤트 (피드백 3): 배치와 동일하게 drawDailyBiases 직후·경로 생성 전에 가산한다.
+    const sectorEvent = drawSectorEvent(STOCKS, rng);
+    biases = applySectorEvent(biases, STOCKS, sectorEvent);
     const paths: Record<string, DailyPath> = {};
     const prevCloses = { ...closes };
     for (const stock of STOCKS) {

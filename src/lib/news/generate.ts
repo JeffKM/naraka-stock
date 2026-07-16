@@ -70,6 +70,15 @@ function levelOf(signedMagnitude: number): BiasLevel {
   return String(signedMagnitude) as BiasLevel;
 }
 
+// 결합 편향(개별 이벤트 + 섹터 이벤트 ±8%p)은 템플릿 세기(10/20/30)와 정확히
+// 일치하지 않을 수 있어(예: 10+8=18, 20-8=12) 가장 가까운 세기로 스냅한다.
+// 순수 개별 이벤트(10/20/30)는 그대로 자기 자신에 스냅되어 기존 동작과 동일하다.
+function snapMagnitudeLevel(magnitude: number): 10 | 20 | 30 {
+  if (magnitude < 15) return 10;
+  if (magnitude < 25) return 20;
+  return 30;
+}
+
 // 종목별 발행 이력 (제목 → 누적 사용 횟수) — 순환 추첨에 사용
 export type UsedTitles = Record<string, ReadonlyMap<string, number>>;
 
@@ -248,8 +257,9 @@ export function generateEarlySignalNews(
     const path = pathByCode.get(code);
     const templates = HINT_TEMPLATES[code];
     if (!path || !templates || path.ticks.length === 0) continue;
-    const magnitude = Math.abs(biases[code]); // 이벤트 종목이므로 10/20/30 중 하나
+    const magnitude = Math.abs(biases[code]); // 개별+섹터 결합 편향 (10/20/30이 아닐 수 있음)
     if (magnitude === 0) continue;
+    const level = snapMagnitudeLevel(magnitude); // 템플릿 세기(10/20/30)로 스냅
 
     const last = path.ticks.length - 1;
     const idx = Math.min(last, Math.max(0, Math.floor(last * EARLY_SIGNAL_RATIO)));
@@ -259,7 +269,7 @@ export function generateEarlySignalNews(
     const shownDir = rng() < EARLY_SIGNAL_ACCURACY ? actualDir : -actualDir;
     const template = pickUnused(
       rng,
-      templates[levelOf(shownDir * magnitude)],
+      templates[levelOf(shownDir * level)],
       usedTitles[code]
     );
     result.push({
@@ -271,6 +281,52 @@ export function generateEarlySignalNews(
     });
   }
   return result;
+}
+
+// 섹터 뉴스 (피드백 3): 섹터 이벤트를 설명하는 정식뉴스 1건. stock_code=null(섹터 전체).
+// 노출은 정식뉴스와 동일하게 장 후반(사후 설명 → 추종 이득 없음).
+const SECTOR_NEWS_LABEL: Record<string, string> = {
+  semiconductor: "반도체",
+  electronics: "전기전자",
+  it: "IT·플랫폼",
+  retail: "유통·소비재",
+  auto: "자동차",
+  media: "미디어·엔터",
+  finance: "금융",
+  defense: "방산·중공업",
+  bio: "바이오·제약",
+};
+
+export interface SectorNewsInput {
+  sector: string;
+  direction: 1 | -1;
+}
+
+// 섹터 뉴스 1건 생성. openHour 기준 장 후반(0.8 지점) 틱에 published_at 스탬프.
+export function generateSectorNews(
+  input: SectorNewsInput | null,
+  totalTicks: number,
+  tomorrowDate: string,
+  openHour: number
+): GeneratedNews[] {
+  if (!input) return [];
+  const label = SECTOR_NEWS_LABEL[input.sector] ?? input.sector;
+  const up = input.direction === 1;
+  const tick = Math.min(totalTicks - 1, Math.floor(totalTicks * 0.8));
+  const title = up ? `${label} 업종 전반 강세` : `${label} 업종 전반 약세`;
+  const body = up
+    ? `${label} 관련주들이 동반 상승하고 있다. 업종 전반에 매수세가 유입되는 분위기다.`
+    : `${label} 관련주들이 동반 하락하고 있다. 업종 전반에 차익 실현 매물이 나오고 있다.`;
+  return [
+    {
+      date: tomorrowDate,
+      stockCode: null,
+      grade: "news",
+      title,
+      body,
+      publishedAt: tickTimestamp(tomorrowDate, tick, openHour),
+    },
+  ];
 }
 
 export interface DailyMove {

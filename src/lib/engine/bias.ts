@@ -11,6 +11,7 @@ import type { Rng } from "./rng";
 export interface BiasTarget {
   code: string;
   tier: StockTier;
+  sector: string;
 }
 
 export type BiasMap = Record<string, number>; // code → bias %p (-30~+30, 0=중립)
@@ -93,4 +94,44 @@ export function drawDailyBiases(stocks: BiasTarget[], rng: Rng): BiasMap {
   }
 
   return biases;
+}
+
+// 섹터 이벤트 (피드백 3): 하루 확률적으로 섹터 1개를 골라 그 섹터 전 종목에
+// 공통 방향 편향을 개별 편향에 가산한다. 섹터 뉴스는 이 결과를 설명하는 정식뉴스로
+// 후반 노출된다(추종 이득 없음 — generate.ts 정책 준수).
+const SECTOR_EVENT_PROBABILITY = 0.5; // 하루 섹터 이벤트 발생 확률
+const SECTOR_MAGNITUDE = 8; // 섹터 공통 편향 세기(%p) — 개별 이벤트보다 작게(밸런스 튜닝 대상)
+const SECTOR_UP_PROBABILITY = 0.55;
+
+export interface SectorEvent {
+  sector: string;
+  direction: 1 | -1;
+  magnitude: number;
+}
+
+// 섹터 이벤트 추첨 (RNG 소비: 발생판정 1 + [발생 시 섹터선택 1 + 방향 1]).
+// 발생하지 않으면 null. 대상 섹터가 종목에 없으면 무효.
+export function drawSectorEvent(stocks: BiasTarget[], rng: Rng): SectorEvent | null {
+  if (rng() >= SECTOR_EVENT_PROBABILITY) return null;
+  const sectors = Array.from(new Set(stocks.map((s) => s.sector)));
+  if (sectors.length === 0) return null;
+  const sector = sectors[Math.floor(rng() * sectors.length)];
+  const direction = rng() < SECTOR_UP_PROBABILITY ? 1 : -1;
+  return { sector, direction, magnitude: SECTOR_MAGNITUDE };
+}
+
+// 개별 편향 맵에 섹터 공통 편향을 가산 (클램프 -30~+30)
+export function applySectorEvent(
+  biases: BiasMap,
+  stocks: BiasTarget[],
+  event: SectorEvent | null
+): BiasMap {
+  if (!event) return biases;
+  const merged: BiasMap = { ...biases };
+  for (const s of stocks) {
+    if (s.sector !== event.sector) continue;
+    const next = (merged[s.code] ?? 0) + event.direction * event.magnitude;
+    merged[s.code] = Math.max(-30, Math.min(30, next));
+  }
+  return merged;
 }
