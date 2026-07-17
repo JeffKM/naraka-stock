@@ -1,7 +1,7 @@
 // 일일 편향(bias) 추첨 (T-202, PRD §10)
 //
 // - 매일 종목 수의 약 15%(±1)에 이벤트 배정 — 로스터 규모에 비례 스케일
-//   (27종 기준 3~5개). 배정 가중치는 등급별(우량 1.2 / 일반 1 / 잡주 2)
+//   (42종 기준 ~6개). 배정 가중치는 등급별(우량 1.2 / 일반 1 / 잡주 2)
 // - 크기: ±10 (40%) / ±20 (35%) / ±30 (25%)
 // - 방향(등급별): 상승 확률 우량 60% / 일반 55% / 잡주 50% (우량 우상향)
 
@@ -96,12 +96,25 @@ export function drawDailyBiases(stocks: BiasTarget[], rng: Rng): BiasMap {
   return biases;
 }
 
-// 섹터 이벤트 (피드백 3): 하루 확률적으로 섹터 1개를 골라 그 섹터 전 종목에
-// 공통 방향 편향을 개별 편향에 가산한다. 섹터 뉴스는 이 결과를 설명하는 정식뉴스로
-// 후반 노출된다(추종 이득 없음 — generate.ts 정책 준수).
-const SECTOR_EVENT_PROBABILITY = 0.5; // 하루 섹터 이벤트 발생 확률
-const SECTOR_MAGNITUDE = 8; // 섹터 공통 편향 세기(%p) — 개별 이벤트보다 작게(밸런스 튜닝 대상)
-const SECTOR_UP_PROBABILITY = 0.55;
+// 섹터 이벤트 — 참여확률 모델 (섹터 개편 Plan 3, 스펙 §4)
+//
+// 좋은 섹터 뉴스라도 "다 오르진 않지만 대부분 체감"되게: 하루에 서로 다른 섹터를
+// 0~3개 뽑고(분포 추첨), 각 섹터 구성원은 각자 독립적으로 참여 판정(70%)해 참여한
+// 종목에만 큰 공통 편향(±15%p)을 개별 편향에 가산한다. 참여 판정 자체가 랜덤성을
+// 제공하므로 섹터 층에는 별도 방향 반전(flip)을 걸지 않는다(뉴스추종 방지는
+// generate.ts의 사후 후반 노출 타이밍이 담당). 뉴스는 이 결과를 설명하는 정식뉴스로
+// 후반 노출된다.
+const SECTOR_MAGNITUDE = 15; // 참여 종목에 가산되는 섹터 공통 편향 세기(%p) — 밸런스 튜닝 대상(Plan 5)
+const SECTOR_PARTICIPATION_PROB = 0.7; // 섹터 구성원 각자 참여할 확률
+const SECTOR_UP_PROBABILITY = 0.55; // 섹터 이벤트의 상승 방향 확률
+
+// 하루 섹터 이벤트 수 분포 (평균 ≈ 1.3) — 18섹터에서 각 섹터가 30일 내 2~3회 노출
+const SECTOR_EVENT_COUNT_TABLE: Array<{ value: number; weight: number }> = [
+  { value: 0, weight: 25 },
+  { value: 1, weight: 35 },
+  { value: 2, weight: 25 },
+  { value: 3, weight: 15 },
+];
 
 export interface SectorEvent {
   sector: string;
@@ -109,29 +122,41 @@ export interface SectorEvent {
   magnitude: number;
 }
 
-// 섹터 이벤트 추첨 (RNG 소비: 발생판정 1 + [발생 시 섹터선택 1 + 방향 1]).
-// 발생하지 않으면 null. 대상 섹터가 종목에 없으면 무효.
-export function drawSectorEvent(stocks: BiasTarget[], rng: Rng): SectorEvent | null {
-  if (rng() >= SECTOR_EVENT_PROBABILITY) return null;
-  const sectors = Array.from(new Set(stocks.map((s) => s.sector)));
-  if (sectors.length === 0) return null;
-  const sector = sectors[Math.floor(rng() * sectors.length)];
-  const direction = rng() < SECTOR_UP_PROBABILITY ? 1 : -1;
-  return { sector, direction, magnitude: SECTOR_MAGNITUDE };
+// 섹터 이벤트 추첨: 서로 다른 섹터 0~3개.
+// RNG 소비 순서: 개수 추첨 1회 → 이벤트마다 (섹터 선택 1 + 방향 1). 개수 0이면 1회만 소비.
+export function drawSectorEvents(stocks: BiasTarget[], rng: Rng): SectorEvent[] {
+  const count = pickWeighted(rng, SECTOR_EVENT_COUNT_TABLE);
+  const pool = Array.from(new Set(stocks.map((s) => s.sector)));
+  const n = Math.min(count, pool.length);
+  const events: SectorEvent[] = [];
+  for (let i = 0; i < n; i++) {
+    const idx = Math.floor(rng() * pool.length);
+    const sector = pool.splice(idx, 1)[0];
+    const direction: 1 | -1 = rng() < SECTOR_UP_PROBABILITY ? 1 : -1;
+    events.push({ sector, direction, magnitude: SECTOR_MAGNITUDE });
+  }
+  return events;
 }
 
-// 개별 편향 맵에 섹터 공통 편향을 가산 (클램프 -30~+30)
-export function applySectorEvent(
+// 개별 편향 맵에 섹터 이벤트를 참여확률로 가산 (클램프 -30~+30).
+// RNG 소비: 이벤트별로 소속 종목을 stocks 배열 순서(code 오름차순)로 순회하며 종목당 1회.
+// 비참여 종목은 변화 없음. 이벤트/종목 순회 순서가 batch·simulate에서 동일해야 재현성이 유지된다.
+export function applySectorEvents(
   biases: BiasMap,
   stocks: BiasTarget[],
-  event: SectorEvent | null
+  events: SectorEvent[],
+  rng: Rng
 ): BiasMap {
-  if (!event) return biases;
+  if (events.length === 0) return { ...biases };
   const merged: BiasMap = { ...biases };
-  for (const s of stocks) {
-    if (s.sector !== event.sector) continue;
-    const next = (merged[s.code] ?? 0) + event.direction * event.magnitude;
-    merged[s.code] = Math.max(-30, Math.min(30, next));
+  for (const event of events) {
+    for (const s of stocks) {
+      if (s.sector !== event.sector) continue;
+      if (rng() < SECTOR_PARTICIPATION_PROB) {
+        const next = (merged[s.code] ?? 0) + event.direction * event.magnitude;
+        merged[s.code] = Math.max(-30, Math.min(30, next));
+      }
+    }
   }
   return merged;
 }
