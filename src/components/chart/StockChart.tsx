@@ -17,7 +17,8 @@ import { formatMoney } from "@/lib/market";
 
 interface ChartDto {
   daily: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>;
-  today: Array<{ time: number; price: number; volume: number }>;
+  today: Array<{ time: number; price: number; volume: number }>; // 라인용: 오늘(없으면 직전 세션)
+  intraday: Array<{ time: number; price: number; volume: number }>; // 분봉 집계 소스: 다일 누적
 }
 
 // 다크 테마 차트 색 (globals.css 팔레트와 톤 일치)
@@ -156,7 +157,7 @@ export function StockChart({ code }: { code: string }) {
         ? data.daily.map((d) => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume }))
         : mode === "line"
           ? []
-          : aggregateCandles(data.today, MINUTES_BY_MODE[mode as "m15" | "m30" | "m60"]);
+          : aggregateCandles(data.intraday, MINUTES_BY_MODE[mode as "m15" | "m30" | "m60"]);
 
     if (mode === "line") {
       priceSeries.setData(
@@ -249,7 +250,12 @@ export function StockChart({ code }: { code: string }) {
     };
   }, [data, mode]);
 
-  const todayEmpty = mode !== "daily" && data && data.today.length === 0;
+  // 라인은 오늘(없으면 fallback) 세션, 분봉은 다일 누적을 소스로 쓴다.
+  // 각각 실제로 그릴 데이터가 하나도 없을 때만 빈 화면을 띄운다.
+  const chartEmpty =
+    data &&
+    ((mode === "line" && data.today.length === 0) ||
+      (mode !== "line" && mode !== "daily" && data.intraday.length === 0));
 
   return (
     <Card>
@@ -264,14 +270,14 @@ export function StockChart({ code }: { code: string }) {
           </TabsList>
         </Tabs>
         {isLoading && <Skeleton className="h-[220px] w-full" />}
-        {todayEmpty && (
+        {chartEmpty && (
           <div className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
-            아직 오늘 장이 열리지 않았습니다
+            곧 첫 장이 열려요
           </div>
         )}
         <div className="relative">
-          <div ref={containerRef} className={todayEmpty || isLoading ? "hidden" : ""} />
-          {hover && !todayEmpty && !isLoading && (
+          <div ref={containerRef} className={chartEmpty || isLoading ? "hidden" : ""} />
+          {hover && !chartEmpty && !isLoading && (
             <div className="pointer-events-none absolute left-2 top-2 rounded-md bg-background/90 px-2 py-1 text-xs tabular-nums shadow">
               {hover.o != null && (
                 <span>

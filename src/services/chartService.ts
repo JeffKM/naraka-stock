@@ -27,7 +27,8 @@ export interface IntradayPoint {
 
 export interface ChartData {
   daily: DailyCandle[];
-  today: IntradayPoint[];
+  today: IntradayPoint[]; // 라인용: 오늘 5분 틱 (없으면 직전 세션 fallback)
+  intraday: IntradayPoint[]; // 분봉 집계 소스: 이벤트 전 기간 누적 틱
 }
 
 // KST 게임 날짜 + 틱 인덱스 → 차트용 epoch 초 (개장 시각 기준, 5분 간격)
@@ -53,7 +54,7 @@ export async function getChartData(stockCode: string, now: Date = new Date()): P
     .order("date", { ascending: true });
   if (dailyError) throw dailyError;
 
-  // 당일 5분 라인: 현재 틱까지만
+  // 현재 노출 가능한 오늘 틱 상한 (미래 틱 차단)
   let maxTick: number | null = null;
   if (afterClose) {
     maxTick = ticksPerDay(hours) - 1;
@@ -61,22 +62,39 @@ export async function getChartData(stockCode: string, now: Date = new Date()): P
     maxTick = getTickIndex(now, hours, rules); // 장중이면 현재 틱, 그 외 null
   }
 
-  let todayPoints: IntradayPoint[] = [];
-  if (maxTick !== null) {
-    const { data: tickRows, error: tickError } = await supabase
-      .from("daily_ticks")
-      .select("tick_index, price, volume")
-      .eq("stock_code", stockCode)
-      .eq("date", today)
-      .lte("tick_index", maxTick)
-      .order("tick_index", { ascending: true });
-    if (tickError) throw tickError;
-    todayPoints = tickRows.map((t) => ({
-      time: tickTimeEpoch(today, t.tick_index, hours.openHour),
-      price: t.price,
-      volume: t.volume,
-    }));
+  // 다일 5분 틱: 미래 날짜는 아예 제외(date <= today), 오늘은 현재 틱까지만.
+  // 이벤트 기간이 짧아(종목 1개 × 최대 30일 × 144틱) 단일 쿼리 + JS 필터로 충분.
+  const { data: tickRows, error: tickError } = await supabase
+    .from("daily_ticks")
+    .select("date, tick_index, price, volume")
+    .eq("stock_code", stockCode)
+    .lte("date", today)
+    .order("date", { ascending: true })
+    .order("tick_index", { ascending: true })
+    .limit(10000);
+  if (tickError) throw tickError;
+
+  // 오늘 날짜 틱은 현재 틱(maxTick)까지만 노출. maxTick이 null이면 오늘 틱 전부 제외.
+  const visibleRows = (tickRows ?? []).filter((t) =>
+    t.date < today ? true : maxTick !== null && t.tick_index <= maxTick
+  );
+
+  const toPoint = (t: { date: string; tick_index: number; price: number; volume: number }): IntradayPoint => ({
+    time: tickTimeEpoch(t.date, t.tick_index, hours.openHour),
+    price: t.price,
+    volume: t.volume,
+  });
+
+  // 분봉 집계 소스: 여러 날 누적 전체
+  const intraday: IntradayPoint[] = visibleRows.map(toPoint);
+
+  // 라인용 오늘 세션. 오늘 틱이 없으면 직전 세션(마지막 날짜) 라인을 fallback으로 남긴다.
+  let lineRows = visibleRows.filter((t) => t.date === today);
+  if (lineRows.length === 0 && visibleRows.length > 0) {
+    const lastDate = visibleRows[visibleRows.length - 1].date;
+    lineRows = visibleRows.filter((t) => t.date === lastDate);
   }
+  const todayPoints: IntradayPoint[] = lineRows.map(toPoint);
 
   return {
     daily: dailyRows
@@ -90,6 +108,7 @@ export async function getChartData(stockCode: string, now: Date = new Date()): P
         volume: d.volume,
       })),
     today: todayPoints,
+    intraday,
   };
 }
 
