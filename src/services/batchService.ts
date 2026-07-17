@@ -6,11 +6,10 @@ import {
   generateDisclosures,
   generateEarlySignalNews,
   generateRegularNews,
-  generateSectorNews,
+  generateSectorRumors,
   pickEarlySignalTargets,
   type DailyMove,
   type GeneratedNews,
-  type SectorNewsInput,
   type StockDayPath,
   type UsedTitles,
 } from "@/lib/news/generate";
@@ -105,14 +104,6 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
     .eq("listed", true)
     .order("code");
   if (stocksError) throw stocksError;
-
-  // 섹터 한국어 라벨 (sectors 테이블 — 어드민이 관리하는 동적 데이터, quoteService.ts와 동일 패턴)
-  const { data: sectorRows, error: sectorsError } = await supabase
-    .from("sectors")
-    .select("code, label_ko");
-  if (sectorsError) throw sectorsError;
-  const sectorLabelMap: Record<string, string> = {};
-  for (const row of sectorRows ?? []) sectorLabelMap[row.code] = row.label_ko;
 
   let biases: Record<string, number> = {};
   const summaries: Array<Record<string, unknown>> = [];
@@ -218,24 +209,14 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
       )
     );
 
-    // 섹터 뉴스 (Plan 3): 이벤트별 1건. 실현 종가로 섹터 구성원 평균 등락을 계산해 등급화.
-    const closeByCode: Record<string, number> = {};
-    for (const s of summaries) closeByCode[s.stock_code as string] = s.close as number;
-    const sectorNewsInputs: SectorNewsInput[] = sectorEvents.map((event) => {
-      const members = biasTargets.filter((t) => t.sector === event.sector);
-      const changes = members.map((m) => {
-        const close = closeByCode[m.code];
-        const prev = prevCloses[m.code];
-        return prev > 0 ? ((close - prev) / prev) * 100 : 0;
-      });
-      const avg =
-        changes.length > 0 ? changes.reduce((a, b) => a + b, 0) / changes.length : 0;
-      return { sector: event.sector, avgChangePercent: avg };
-    });
+    // 섹터 찌라시 (v2): 진짜 이벤트 방향을 초반에 예고 + 이벤트 없는 섹터의 가짜 소문.
+    // 실현 결과가 아니라 이벤트 의도 방향을 예고하므로 평균 등락 계산이 불필요하다.
+    // RNG 소비는 경로 생성이 모두 끝난 뒤라 시세엔 무관하지만, simulate와 동일 지점에서 호출한다.
+    const allSectors = Array.from(new Set(biasTargets.map((t) => t.sector)));
     news.push(
-      ...generateSectorNews(
-        sectorNewsInputs,
-        sectorLabelMap,
+      ...generateSectorRumors(
+        sectorEvents,
+        allSectors,
         config.ticksPerDay,
         tomorrowDate,
         config.openHour,
