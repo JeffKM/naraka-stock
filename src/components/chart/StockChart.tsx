@@ -119,7 +119,8 @@ export function StockChart({ code }: { code: string }) {
     if (!containerRef.current || !data) return;
 
     const chart = createChart(containerRef.current, {
-      height: 220,
+      // 컨테이너 CSS 높이(반응형)를 따라감 — 너비·높이 모두 ResizeObserver로 자동 추종
+      autoSize: true,
       layout: {
         background: { color: "transparent" },
         textColor: CHART_COLORS.text,
@@ -129,7 +130,8 @@ export function StockChart({ code }: { code: string }) {
         vertLines: { color: CHART_COLORS.grid },
         horzLines: { color: CHART_COLORS.grid },
       },
-      rightPriceScale: { borderVisible: false },
+      // 가격 캔들을 하단 거래량 밴드 위로 띄워 가격축 라벨·거래량 겹침 방지
+      rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.1, bottom: 0.28 } },
       timeScale: { borderVisible: false, timeVisible: mode !== "daily" },
     });
     chartRef.current = chart;
@@ -234,15 +236,7 @@ export function StockChart({ code }: { code: string }) {
 
     chart.timeScale().fitContent();
 
-    const onResize = () => {
-      if (containerRef.current) {
-        chart.applyOptions({ width: containerRef.current.clientWidth });
-      }
-    };
-    onResize();
-    window.addEventListener("resize", onResize);
     return () => {
-      window.removeEventListener("resize", onResize);
       chart.unsubscribeCrosshairMove(handleCrosshairMove);
       chart.remove();
       chartRef.current = null;
@@ -269,14 +263,18 @@ export function StockChart({ code }: { code: string }) {
             <TabsTrigger value="daily">일봉</TabsTrigger>
           </TabsList>
         </Tabs>
-        {isLoading && <Skeleton className="h-[220px] w-full" />}
+        {isLoading && <Skeleton className="h-[280px] w-full md:h-[360px]" />}
         {chartEmpty && (
-          <div className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
+          <div className="flex h-[280px] items-center justify-center text-sm text-muted-foreground md:h-[360px]">
             곧 첫 장이 열려요
           </div>
         )}
         <div className="relative">
-          <div ref={containerRef} className={chartEmpty || isLoading ? "hidden" : ""} />
+          {/* autoSize가 이 컨테이너 높이를 따라감 — 반응형 높이(모바일 280 / PC 360) */}
+          <div
+            ref={containerRef}
+            className={chartEmpty || isLoading ? "hidden" : "h-[280px] md:h-[360px]"}
+          />
           {hover && !chartEmpty && !isLoading && (
             <div className="pointer-events-none absolute left-2 top-2 rounded-md bg-background/90 px-2 py-1 text-xs tabular-nums shadow">
               {hover.o != null && (
