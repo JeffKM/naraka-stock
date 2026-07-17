@@ -495,21 +495,31 @@ export async function reconcileTodayTicks(): Promise<ReconcileResult | null> {
 
   const totalTicks = ticksPerDay(hours);
 
-  // 오늘 경로 전체 로드 (종목 8~10개 × 최대 288틱 — 메모리 처리에 무리 없음)
-  const { data: tickRows, error: tickError } = await supabase
-    .from("daily_ticks")
-    .select("stock_code, tick_index, price")
-    .eq("date", today)
-    .order("tick_index", { ascending: true });
-  if (tickError) throw tickError;
-  if (!tickRows || tickRows.length === 0) return null; // 오늘 경로 없음 (배치 전)
-
+  // 오늘 경로 전체 로드 (전 종목 × 전 틱 = 42종목 × 최대 288틱). PostgREST
+  // max_rows(로컬 config.toml=1000) 상한을 넘으므로 range로 페이지네이션한다
+  // (단일 쿼리면 뒤쪽 틱이 잘려 재조정 시 종가가 오염된다).
+  // (stock_code, tick_index) 정렬로 페이지 경계를 안정화.
+  const PAGE = 1000;
   const byStock = new Map<string, Array<{ tick_index: number; price: number }>>();
-  for (const row of tickRows) {
-    const list = byStock.get(row.stock_code) ?? [];
-    list.push(row);
-    byStock.set(row.stock_code, list);
+  let loaded = 0;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("daily_ticks")
+      .select("stock_code, tick_index, price")
+      .eq("date", today)
+      .order("stock_code", { ascending: true })
+      .order("tick_index", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    for (const row of data) {
+      const list = byStock.get(row.stock_code) ?? [];
+      list.push({ tick_index: row.tick_index, price: row.price });
+      byStock.set(row.stock_code, list);
+    }
+    loaded += data.length;
+    if (data.length < PAGE) break;
   }
+  if (loaded === 0) return null; // 오늘 경로 없음 (배치 전)
 
   const [stocksRes, prevRes, todayRes] = await Promise.all([
     supabase.from("stocks").select("code, tier").eq("listed", true),
