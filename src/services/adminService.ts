@@ -26,7 +26,7 @@ import {
   adjustDivisorsForTierChange,
   indexCodeOfTier,
 } from "@/services/indexService";
-import type { AdminSignupRequest, Stock, StockSector, StockTier } from "@/types/domain";
+import type { AdminSignupRequest, Sector, Stock, StockSector, StockTier } from "@/types/domain";
 
 // 어드민 서비스 (T-602~T-605) — 모든 진입점은 route에서 requireAdmin을 통과한 뒤 호출된다.
 
@@ -984,4 +984,85 @@ export async function adjustUserCash(
     throw error;
   }
   return { cash: data as number };
+}
+
+// ── 섹터 관리 (섹터 개편) ──────────────────────────────────────
+// 섹터는 sectors 테이블 데이터. 어드민이 추가·이름수정·정렬·삭제·종목배치를 한다.
+
+export async function listSectors(): Promise<Sector[]> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("sectors")
+    .select("code, label_ko, sort_order")
+    .order("sort_order");
+  if (error) throw error;
+  return data.map((s) => ({
+    code: s.code,
+    labelKo: s.label_ko,
+    sortOrder: s.sort_order,
+  }));
+}
+
+export interface CreateSectorInput {
+  code: string;
+  labelKo: string;
+  sortOrder: number;
+}
+
+export async function createSector(input: CreateSectorInput): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.from("sectors").insert({
+    code: input.code,
+    label_ko: input.labelKo,
+    sort_order: input.sortOrder,
+  });
+  if (error) {
+    if (error.code === "23505") {
+      throw new ApiException("VALIDATION", "이미 존재하는 섹터 코드입니다.");
+    }
+    throw error;
+  }
+}
+
+export async function updateSector(
+  code: string,
+  patch: { labelKo?: string; sortOrder?: number }
+): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const update: Record<string, unknown> = {};
+  if (patch.labelKo !== undefined) update.label_ko = patch.labelKo;
+  if (patch.sortOrder !== undefined) update.sort_order = patch.sortOrder;
+  if (Object.keys(update).length === 0) return;
+  const { error } = await supabase.from("sectors").update(update).eq("code", code);
+  if (error) throw error;
+}
+
+export async function deleteSector(code: string): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { count, error: countError } = await supabase
+    .from("stocks")
+    .select("code", { count: "exact", head: true })
+    .eq("sector", code);
+  if (countError) throw countError;
+  if ((count ?? 0) > 0) {
+    throw new ApiException("VALIDATION", "종목이 배치된 섹터는 삭제할 수 없습니다.");
+  }
+  const { error } = await supabase.from("sectors").delete().eq("code", code);
+  if (error) throw error;
+}
+
+// 종목 재배치. FK가 무결성을 강제하지만 없는 섹터엔 친절한 에러를 준다.
+export async function setStockSector(code: string, sector: string): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { data: sec, error: secError } = await supabase
+    .from("sectors")
+    .select("code")
+    .eq("code", sector)
+    .maybeSingle();
+  if (secError) throw secError;
+  if (!sec) {
+    throw new ApiException("NOT_FOUND", "없는 섹터입니다.");
+  }
+  const { error } = await supabase.from("stocks").update({ sector }).eq("code", code);
+  if (error) throw error;
 }
