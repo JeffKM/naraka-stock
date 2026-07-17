@@ -270,6 +270,7 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
       grade: n.grade,
       title: n.title,
       body: n.body,
+      source: n.source ?? null,
       published_at: n.publishedAt,
     })),
   });

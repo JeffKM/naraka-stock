@@ -40,6 +40,7 @@ export interface GeneratedNews {
   grade: NewsGrade;
   title: string;
   body: string;
+  source?: string | null; // 제보자·매체 (섹터 찌라시만 사용, 나머지는 undefined→null)
   publishedAt: string; // ISO timestamptz — 이 시각부터 피드에 노출
 }
 
