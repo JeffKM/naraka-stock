@@ -296,6 +296,17 @@ git commit -m "docs: 초기자금·방문보너스 안내 문구 10배 갱신"
 
 ---
 
+## ⚠️ Plan 1 최종 리뷰 이월 항목 (Plan 2 착수 전 범위에 포함할 것)
+
+Plan 1(sectors 데이터화) 최종 whole-branch 리뷰(opus)가 지적한 **순서 위험**: 공개 UI의 섹터 라벨 맵이 기존 9섹터로 하드코딩돼 있다.
+
+- 대상: `src/app/page.tsx:25`, `src/app/stocks/[code]/page.tsx:25` — `SECTOR_LABEL: Record<StockQuote["sector"], string>` 9개 하드코딩.
+- 문제: Plan 1에서 `StockSector`가 `string`으로 완화됐고 `noUncheckedIndexedAccess` 미설정이라 빌드는 통과하지만, **신규 섹터(energy·materials·food·…)에 속한 종목은 홈/종목상세에서 섹터 배지가 빈칸으로 렌더**된다.
+- 왜 Plan 2 문제인가: Plan 1은 신규섹터에 종목이 0개라 오늘은 안전. **그러나 이 Plan 2의 Task 1이 15종을 신규섹터에 넣고 5종을 재배치**하므로, Plan 2 머지 시점부터 Plan 3(라벨맵 제거 예정) 사이에 공개 UI 라벨 공백이 생긴다.
+- 조치: 라벨맵 제거(= `sectors` 테이블/공개 조회로 라벨 주입)를 원래 Plan 3에서 **Plan 2 범위로 당긴다**. Plan 1에서 `sectors_read` RLS 정책(공개 select)을 이미 깔아둬 추가 RLS 작업은 불필요. 두 페이지를 `sectors` 라벨 조회로 전환하는 태스크를 Task 1과 함께(또는 직후) 넣을 것.
+
+---
+
 ## 다음 (다음 세션)
 
 - **Plan 3 — 엔진**: `bias.ts` 참여확률 모델, `generateSectorNews` 다건·등급화, 라벨 DB 주입.
