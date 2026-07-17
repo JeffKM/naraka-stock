@@ -83,7 +83,7 @@ export interface NewsItem {
   grade: NewsGrade;
   title: string;
   body: string;
-  source: string | null; // 수동 찌라시 출처(기자·매체명). 자동 뉴스는 null
+  source: string | null; // 찌라시 출처(기자·매체명). 수동 찌라시·자동 섹터 찌라시가 사용, 공시·정식뉴스는 null
   publishedAt: string;
 }
 
