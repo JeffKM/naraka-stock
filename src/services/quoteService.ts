@@ -157,6 +157,9 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
   // 상세 차트 라인 fallback과 동일 UX. 색·등락률도 그 세션 시가→종가 기준으로
   // 표시해 라인 모양·색·숫자가 모두 같은 기준으로 일치하게 한다.
   const fallbackChange: Record<string, { open: number; close: number }> = {};
+  // 지수 fallback용: 직전 세션의 틱 인덱스별 가격 경로 + 마지막 틱
+  const fallbackPathByStock: Record<string, Record<number, number>> = {};
+  let fallbackMaxTick: number | null = null;
   if (tickIndex === null) {
     const { data: lastDateRow, error: lastDateError } = await supabase
       .from("daily_ticks")
@@ -170,6 +173,10 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
       const prevTicks = await loadSessionTicks(supabase, lastDateRow.date);
       for (const row of prevTicks) {
         (sparks[row.stock_code] ??= []).push(row.price);
+        (fallbackPathByStock[row.stock_code] ??= {})[row.tick_index] = row.price;
+        if (fallbackMaxTick === null || row.tick_index > fallbackMaxTick) {
+          fallbackMaxTick = row.tick_index;
+        }
       }
       for (const [code, arr] of Object.entries(sparks)) {
         if (arr.length > 0) {
@@ -195,6 +202,8 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
     pathByStock,
     tickIndex,
     prevIndexCloses,
+    fallbackPathByStock,
+    fallbackMaxTick,
   });
 
   const quotes: StockQuote[] = stocks.map((stock) => {
