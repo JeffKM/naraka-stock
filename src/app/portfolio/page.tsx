@@ -81,7 +81,7 @@ export default function PortfolioPage() {
     setClaiming(true);
     try {
       const { cash } = await postJson<{ cash: number }>("/api/bonus", { code: bonusCode });
-      toast.success(`방문 보너스 +100,000원! 잔고 ${formatMoney(cash)}`);
+      toast.success(`방문 보너스 +1,000,000원! 잔고 ${formatMoney(cash)}`);
       setBonusCode("");
       queryClient.invalidateQueries({ queryKey: ["portfolio"] });
       queryClient.invalidateQueries({ queryKey: ["me"] });
@@ -158,7 +158,7 @@ export default function PortfolioPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">
-            매장에 게시된 오늘의 코드를 입력하면 +100,000원 (1일 1회)
+            매장에 게시된 오늘의 코드를 입력하면 +1,000,000원 (1일 1회)
           </p>
           <div className="flex gap-2">
             <Input

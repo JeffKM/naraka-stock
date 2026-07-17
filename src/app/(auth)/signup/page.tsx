@@ -53,7 +53,7 @@ export default function SignupPage() {
       }
       // 어드민 코드는 자동 로그인이므로 캐시된 비로그인 상태(me 등)를 비워 헤더가 즉시 갱신되게 한다
       queryClient.clear();
-      toast.success("계좌 개설 완료! 1,000,000원이 지급되었습니다");
+      toast.success("계좌 개설 완료! 10,000,000원이 지급되었습니다");
       router.push("/");
       router.refresh();
     } catch (error) {
