@@ -27,12 +27,14 @@ import type { NewsGrade } from "@/types/domain";
 import {
   DISCLOSURE_TEMPLATES,
   HINT_TEMPLATES,
-  SECTOR_NEWS_TEMPLATES,
+  RUMORMONGERS,
+  SECTOR_RUMOR_TEMPLATES,
   type BiasLevel,
   type DisclosureKind,
   type NewsTemplate,
-  type SectorNewsGrade,
+  type SectorRumorDirection,
 } from "./templates";
+import type { SectorEvent } from "@/lib/engine/bias";
 
 export interface GeneratedNews {
   date: string;
@@ -286,52 +288,69 @@ export function generateEarlySignalNews(
   return result;
 }
 
-// 섹터 뉴스 (섹터 개편 Plan 3, 스펙 §4.4): 섹터 이벤트를 설명하는 정식뉴스.
-// 이벤트당 1건(stock_code=null, 섹터 전체). 세기는 그 섹터 구성원의 실현 일간 평균
-// 등락으로 등급화하고, 방향은 실현 결과 기준이다. 노출은 정식뉴스와 동일하게 장
-// 후반(0.8 지점) — 사후 설명이라 추종 이득이 없다. 라벨은 sectors.label_ko를 주입받는다.
-export interface SectorNewsInput {
-  sector: string; // 섹터 코드
-  avgChangePercent: number; // 그 섹터 구성원의 실현 평균 등락률(%)
+// 섹터 찌라시 (섹터 개편 v2, spec 2026-07-17): 장 초반 예고성 소문.
+// 진짜 = 이벤트 방향 그대로 예고(참여확률 탓 자연 적중<100%). 가짜 = 이벤트 없는 섹터
+// 랜덤 fakeMin~fakeMax개를 랜덤 방향으로 예고. grade='rumor'(55%)·stock_code=null.
+// 노출은 장 초반 창(0~RUMOR_WINDOW_RATIO)에 균등+지터 분산. source=찌라시꾼 랜덤.
+const RUMOR_WINDOW_RATIO = 0.2; // 초반 노출 창 상한 (0~20% 지점). 밸런스 시 후퇴 가능
+
+function dirKey(direction: number): SectorRumorDirection {
+  return direction >= 0 ? "up" : "down";
 }
 
-// 실현 평균 등락률 → 등급. 임계 ±4%(콘텐츠 파라미터, 밸런스 무관).
-function gradeSector(avg: number): SectorNewsGrade {
-  if (avg >= 4) return "surgeUp";
-  if (avg >= 0) return "up";
-  if (avg > -4) return "down";
-  return "plungeDown";
-}
-
-// 섹터 이벤트 목록 → 섹터 뉴스 다건. 라벨맵으로 코드→한국어 치환.
-export function generateSectorNews(
-  inputs: SectorNewsInput[],
-  labelMap: Record<string, string>,
+export function generateSectorRumors(
+  events: SectorEvent[],
+  allSectors: string[],
   totalTicks: number,
   tomorrowDate: string,
   openHour: number,
-  rng: Rng
+  rng: Rng,
+  fakeMin: number = 1,
+  fakeMax: number = 2
 ): GeneratedNews[] {
-  const tick = Math.min(totalTicks - 1, Math.floor(totalTicks * 0.8));
-  // 같은 등급이 여러 건이면 같은 배치 안에서 제목 중복을 피한다.
-  const usedByGrade: Record<SectorNewsGrade, Map<string, number>> = {
-    surgeUp: new Map(),
+  // 진짜 소문: 이벤트 방향 예고
+  const rumors: Array<{ sector: string; direction: SectorRumorDirection }> = events
+    .filter((e) => SECTOR_RUMOR_TEMPLATES[e.sector])
+    .map((e) => ({ sector: e.sector, direction: dirKey(e.direction) }));
+
+  // 가짜 소문: 이벤트 없는 섹터 중 랜덤 N개, 랜덤 방향
+  const eventSectors = new Set(events.map((e) => e.sector));
+  const fakePool = allSectors.filter(
+    (s) => !eventSectors.has(s) && SECTOR_RUMOR_TEMPLATES[s]
+  );
+  const fakeCount = Math.min(
+    fakePool.length,
+    fakeMin + Math.floor(rng() * (fakeMax - fakeMin + 1))
+  );
+  for (let i = 0; i < fakeCount; i++) {
+    const idx = Math.floor(rng() * fakePool.length);
+    const sector = fakePool.splice(idx, 1)[0];
+    const direction: SectorRumorDirection = rng() < 0.5 ? "up" : "down";
+    rumors.push({ sector, direction });
+  }
+
+  // 초반 창에 균등 슬롯 + ±1틱 지터로 분산 (개장 직후 한 틱 몰림 방지)
+  const windowTicks = Math.max(1, Math.floor(totalTicks * RUMOR_WINDOW_RATIO));
+  const n = rumors.length;
+  const usedByDir: Record<SectorRumorDirection, Map<string, number>> = {
     up: new Map(),
     down: new Map(),
-    plungeDown: new Map(),
   };
-  return inputs.map((input) => {
-    const label = labelMap[input.sector] ?? input.sector;
-    const grade = gradeSector(input.avgChangePercent);
-    const used = usedByGrade[grade];
-    const tmpl = pickUnused(rng, SECTOR_NEWS_TEMPLATES[grade], used);
+  return rumors.map((r, i) => {
+    const used = usedByDir[r.direction];
+    const tmpl = pickUnused(rng, SECTOR_RUMOR_TEMPLATES[r.sector][r.direction], used);
     used.set(tmpl.title, (used.get(tmpl.title) ?? 0) + 1);
+    const center = Math.floor((windowTicks * (i + 0.5)) / Math.max(1, n));
+    const jitter = Math.floor(rng() * 3) - 1; // -1..+1
+    const tick = Math.max(0, Math.min(windowTicks, center + jitter));
+    const source = RUMORMONGERS[Math.floor(rng() * RUMORMONGERS.length)];
     return {
       date: tomorrowDate,
       stockCode: null,
-      grade: "news" as const,
-      title: tmpl.title.replaceAll("{sector}", label),
-      body: tmpl.body.replaceAll("{sector}", label),
+      grade: "rumor" as const,
+      title: tmpl.title,
+      body: tmpl.body,
+      source,
       publishedAt: tickTimestamp(tomorrowDate, tick, openHour),
     };
   });
