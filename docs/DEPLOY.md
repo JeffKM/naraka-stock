@@ -3,7 +3,7 @@
 > ✅ **배포 완료 (2026-07-12)**: https://naraka-stock.vercel.app
 > Supabase `suowtstolxzpnjdolfrn` (ap-northeast-2) · pg_cron `naraka-daily-batch` 폐장 시각 등록됨 (폐장 시각 변경 시 자동 재조정).
 > 아래 §1~3은 완료된 절차의 기록이고, 남은 것은 **§4 어드민 승격 + §5 리허설**이다.
-> 일정: 07-15(수)부터 리허설 장 가능 → 08-01 15:00 개장
+> 일정: 07-15(수)부터 리허설 장 가능 → 08-01 개장 (개장/폐장 시각 논의 중 — 현행 12:00~24:00 유지, 8월 시각 확정 시 어드민 config 조정)
 
 ## 1. Supabase 프로덕션 프로젝트
 
@@ -124,11 +124,11 @@ update users set is_admin = true where nickname = '<사장님닉네임>';
 - [ ] 서킷브레이커·깜짝 이벤트 발동 테스트 (장중)
 - [ ] **지정가 예약주문 점검** → 별도 체크리스트 `docs/rehearsal-limit-orders.md` (핵심: 실시간 소급 체결·폐장 정산)
 - [ ] 리허설 데이터 초기화: `delete from orders; delete from trades; delete from holdings; delete from visit_claims;`
-  `update users set cash = 1000000 where is_admin = false;` (또는 테스트 계정 삭제)
+  `update users set cash = 10000000 where is_admin = false;` (또는 테스트 계정 삭제 — 초기 자금 1,000만, 섹터 개편 반영)
   `delete from daily_ticks where date < '2026-08-01'; delete from daily_summary where date < '2026-07-31'; delete from news;`
   `update signup_codes set used_by = null, used_at = null where ...;` — 필요 시 선별 초기화
 
 ## 6. 개장일 (08-01)
 
-- 15:00 자동 개장 (07-31 배치가 만든 경로 사용)
+- 개장 시각에 자동 개장 (07-31 배치가 만든 경로 사용) — 현행 config **12:00 개장 / 24:00 폐장**. ⚠️ 8월 개장/폐장 시각은 논의 중이며, 확정 시 어드민 콘솔에서 config(`market_open_hour`/`market_close_hour`) 또는 당일 오버라이드(`market_hours_override`)로 조정. 미조정 시 12~24시 그대로 개장.
 - 첫날은 공시 없음(전일 데이터 없음), 힌트 뉴스는 07-31 배치가 발행
