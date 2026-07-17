@@ -1,5 +1,5 @@
 import "server-only";
-import { applySectorEvent, drawDailyBiases, drawSectorEvent, realizeBias } from "@/lib/engine/bias";
+import { applySectorEvents, drawDailyBiases, drawSectorEvents, realizeBias } from "@/lib/engine/bias";
 import { generateDailyPath, PRICE_LIMIT_RATE } from "@/lib/engine/randomWalk";
 import { createRng, hashSeed } from "@/lib/engine/rng";
 import {
@@ -10,6 +10,7 @@ import {
   pickEarlySignalTargets,
   type DailyMove,
   type GeneratedNews,
+  type SectorNewsInput,
   type StockDayPath,
   type UsedTitles,
 } from "@/lib/news/generate";
@@ -105,6 +106,14 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
     .order("code");
   if (stocksError) throw stocksError;
 
+  // 섹터 한국어 라벨 (sectors 테이블 — 어드민이 관리하는 동적 데이터, quoteService.ts와 동일 패턴)
+  const { data: sectorRows, error: sectorsError } = await supabase
+    .from("sectors")
+    .select("code, label_ko");
+  if (sectorsError) throw sectorsError;
+  const sectorLabelMap: Record<string, string> = {};
+  for (const row of sectorRows ?? []) sectorLabelMap[row.code] = row.label_ko;
+
   let biases: Record<string, number> = {};
   const summaries: Array<Record<string, unknown>> = [];
   const ticks: Array<Record<string, unknown>> = [];
@@ -124,13 +133,14 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
       sector: s.sector as string,
     }));
     const individualBiases = drawDailyBiases(biasTargets, rng);
-    // 섹터 이벤트 (피드백 3): 개별 편향 위에 섹터 공통 편향을 덧댄다. RNG 소비 순서상
-    // drawDailyBiases 직후·generateDailyPath 루프 진입 전에 호출해야 시드 재현성이 유지된다.
-    // applySectorEvent는 RNG를 소비하지 않는 순수 병합이라 아래 배정은 RNG 스트림에 영향 없다.
-    const sectorEvent = drawSectorEvent(biasTargets, rng);
-    // 가격 경로·요약·섹터 판정용 결합 편향 (개별 + 섹터 가산). 조기 방향뉴스 후보
-    // 선정에는 쓰지 않는다 — 아래 pickEarlySignalTargets 호출부 주석 참고 (리뷰 결함 수정).
-    biases = applySectorEvent(individualBiases, biasTargets, sectorEvent);
+    // 섹터 이벤트 (참여확률 모델, Plan 3): 서로 다른 섹터 0~3개를 뽑고 구성원 각자
+    // 70% 확률로 참여시킨다. RNG 소비 순서상 drawDailyBiases 직후·경로 생성 루프
+    // 진입 전에 호출해야 시드 재현성이 유지된다. applySectorEvents는 참여 판정으로
+    // RNG를 소비하므로(구 단수 버전과 달리 순수 병합이 아님) 이 순서가 중요하다.
+    const sectorEvents = drawSectorEvents(biasTargets, rng);
+    // 가격 경로·요약·섹터 판정용 결합 편향(개별 + 섹터 참여분). 조기 방향뉴스 후보
+    // 선정에는 쓰지 않는다 — 아래 pickEarlySignalTargets 호출부 주석 참고.
+    biases = applySectorEvents(individualBiases, biasTargets, sectorEvents, rng);
 
     for (const stock of stocks) {
       const prevClose = prevCloses[stock.code];
@@ -208,13 +218,28 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
       )
     );
 
-    // 섹터 뉴스 (피드백 3): 섹터 이벤트 발생 시 정식뉴스 1건(stock_code=null) 추가
+    // 섹터 뉴스 (Plan 3): 이벤트별 1건. 실현 종가로 섹터 구성원 평균 등락을 계산해 등급화.
+    const closeByCode: Record<string, number> = {};
+    for (const s of summaries) closeByCode[s.stock_code as string] = s.close as number;
+    const sectorNewsInputs: SectorNewsInput[] = sectorEvents.map((event) => {
+      const members = biasTargets.filter((t) => t.sector === event.sector);
+      const changes = members.map((m) => {
+        const close = closeByCode[m.code];
+        const prev = prevCloses[m.code];
+        return prev > 0 ? ((close - prev) / prev) * 100 : 0;
+      });
+      const avg =
+        changes.length > 0 ? changes.reduce((a, b) => a + b, 0) / changes.length : 0;
+      return { sector: event.sector, avgChangePercent: avg };
+    });
     news.push(
       ...generateSectorNews(
-        sectorEvent ? { sector: sectorEvent.sector, direction: sectorEvent.direction } : null,
+        sectorNewsInputs,
+        sectorLabelMap,
         config.ticksPerDay,
         tomorrowDate,
-        config.openHour
+        config.openHour,
+        rng
       )
     );
   }
