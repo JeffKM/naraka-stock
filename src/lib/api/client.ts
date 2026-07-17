@@ -33,7 +33,11 @@ export async function getJson<T>(url: string): Promise<T> {
   return parseResponse<T>(res);
 }
 
-export async function deleteJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { method: "DELETE" });
+export async function deleteJson<T>(url: string, body?: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
   return parseResponse<T>(res);
 }

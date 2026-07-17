@@ -1,16 +1,15 @@
 // 도메인 타입 — DB 스키마(PRD §9.2)와 1:1 대응하는 기본 타입과 화면용 파생 타입.
 
 export type StockTier = "stable" | "normal" | "wild";
-export type StockSector =
-  | "semiconductor"
-  | "electronics"
-  | "it"
-  | "retail"
-  | "auto"
-  | "media"
-  | "finance"
-  | "defense"
-  | "bio";
+// 섹터는 이제 sectors 테이블의 동적 데이터다(어드민 관리). 코드는 소문자 slug.
+export type StockSector = string;
+
+export interface Sector {
+  code: string;
+  labelKo: string;
+  sortOrder: number;
+}
+
 export type NewsGrade = "disclosure" | "news" | "rumor";
 export type TradeSide = "buy" | "sell";
 
@@ -33,6 +32,7 @@ export interface StockQuote {
   name: string;
   tier: StockTier;
   sector: StockSector;
+  sectorLabel: string; // 섹터 한국어 라벨 (sectors 테이블에서 주입)
   price: number; // 현재 틱 가격 (원)
   prevClose: number; // 직전 개장일 종가
   change: number; // 등락액

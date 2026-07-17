@@ -14,9 +14,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { getJson, postJson } from "@/lib/api/client";
+import { getJson, patchJson, postJson } from "@/lib/api/client";
 import { formatMoney } from "@/lib/market";
 import { useQuotes } from "@/hooks/useQuotes";
+import type { Sector } from "@/types/domain";
 
 const TIER_OPTIONS = [
   { value: "stable", label: "우량주" },
@@ -37,6 +38,7 @@ interface AdminStock {
   code: string;
   name: string;
   tier: string;
+  sector: string;
 }
 
 // 종목 관리: 검색 + 종목별 상세(등급 변경·시세 조정) + 신규 상장
@@ -137,11 +139,27 @@ function StockDialog({
 }) {
   const queryClient = useQueryClient();
   const { data: quotes } = useQuotes();
+  const { data: sectorData } = useQuery({
+    queryKey: ["admin-sectors"],
+    queryFn: () => getJson<{ sectors: Sector[] }>("/api/admin/sectors"),
+  });
+  const sectors = sectorData?.sectors ?? [];
   const [bias, setBias] = useState("-30");
   const [duration, setDuration] = useState("");
   const [busy, setBusy] = useState(false);
 
   const quote = stock ? quotes?.quotes.find((q) => q.code === stock.code) : undefined;
+
+  async function changeSector(sector: string) {
+    if (!stock) return;
+    try {
+      await patchJson("/api/admin/stocks/sector", { code: stock.code, sector });
+      toast.success(`${stock.name} 섹터를 변경했습니다`);
+      queryClient.invalidateQueries({ queryKey: ["admin-stocks"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "섹터 변경 실패");
+    }
+  }
 
   async function changeTier(tier: string) {
     if (!stock) return;
@@ -225,6 +243,21 @@ function StockDialog({
                   {TIER_OPTIONS.map((t) => (
                     <option key={t.value} value={t.value}>
                       {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="w-16 shrink-0 text-sm text-muted-foreground">섹터</span>
+                <select
+                  value={stock.sector}
+                  onChange={(e) => changeSector(e.target.value)}
+                  className="flex-1 rounded-lg border bg-background px-2 py-1.5 text-sm"
+                >
+                  {sectors.map((s) => (
+                    <option key={s.code} value={s.code}>
+                      {s.labelKo}
                     </option>
                   ))}
                 </select>

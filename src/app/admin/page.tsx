@@ -10,6 +10,7 @@ import { ManualNewsSection } from "@/components/admin/ManualNewsSection";
 import { MarketSection } from "@/components/admin/MarketSection";
 import { RankingSection } from "@/components/admin/RankingSection";
 import { ResetSection } from "@/components/admin/ResetSection";
+import { SectorSection } from "@/components/admin/SectorSection";
 import { SignupCodeSection } from "@/components/admin/SignupCodeSection";
 import { SignupRequestSection } from "@/components/admin/SignupRequestSection";
 import { StockSection } from "@/components/admin/StockSection";
@@ -123,6 +124,7 @@ export default function AdminPage() {
         </TabsContent>
 
         <TabsContent value="manage" className="flex flex-col gap-4">
+          <SectorSection />
           <StockSection />
           <EventSection />
           <ManualNewsSection />

@@ -22,18 +22,6 @@ import type { StockQuote } from "@/types/domain";
 
 const TIER_LABEL = { stable: "우량주", normal: "일반주", wild: "테마주" } as const;
 
-const SECTOR_LABEL: Record<StockQuote["sector"], string> = {
-  semiconductor: "반도체",
-  electronics: "전기전자",
-  it: "IT·플랫폼",
-  retail: "유통·소비재",
-  auto: "자동차",
-  media: "미디어·엔터",
-  finance: "금융",
-  defense: "방산·중공업",
-  bio: "바이오·제약",
-};
-
 const WEEKDAY_LABEL = ["", "월", "화", "수", "목", "금", "토", "일"];
 
 // 장 운영 안내 문구: "매일 12:00~24:00" / 휴장 요일 지정 시 "12:00~24:00 (월 휴장)" 등
@@ -113,7 +101,7 @@ function QuoteRow({
         <div>
           <p className="font-medium leading-tight">{q.name}</p>
           <p className="text-xs text-muted-foreground">
-            {TIER_LABEL[q.tier]} · {SECTOR_LABEL[q.sector]}
+            {TIER_LABEL[q.tier]} · {q.sectorLabel}
           </p>
         </div>
         {q.isUpperLimit && <Badge className="bg-bull px-1.5 text-xs">上</Badge>}
