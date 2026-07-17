@@ -292,26 +292,35 @@ export function generateEarlySignalNews(
 // 진짜 = 이벤트 방향 그대로 예고(참여확률 탓 자연 적중<100%). 가짜 = 이벤트 없는 섹터
 // 랜덤 fakeMin~fakeMax개를 랜덤 방향으로 예고. grade='rumor'(55%)·stock_code=null.
 // 노출은 장 초반 창(0~RUMOR_WINDOW_RATIO)에 균등+지터 분산. source=찌라시꾼 랜덤.
-const RUMOR_WINDOW_RATIO = 0.2; // 초반 노출 창 상한 (0~20% 지점). 밸런스 시 후퇴 가능
+// 초반 노출 창 상한 (0~20% 지점). 시뮬 2000회(2026-07-17): 적중 55.1%(진짜 61%/가짜 50%)·
+// 하루 2.8개, 섹터소문추종 중앙값 10.92배(존버 대비 +7~11% 약우위·비지배)로 현행 확정(사장님 승인).
+const RUMOR_WINDOW_RATIO = 0.2;
 
 function dirKey(direction: number): SectorRumorDirection {
   return direction >= 0 ? "up" : "down";
 }
 
-export function generateSectorRumors(
+// 추첨된 섹터 소문 한 건 (뉴스 렌더 전 메타). 시뮬레이터가 적중률·추종 전략에 쓴다.
+export interface SectorRumor {
+  sector: string; // 섹터 코드
+  direction: SectorRumorDirection; // 예고 방향
+  isFake: boolean; // true=이벤트 없는 섹터의 헛소문, false=진짜 이벤트 방향
+}
+
+// 진짜(이벤트 방향 예고) + 가짜(이벤트 없는 섹터 랜덤 방향) 소문을 추첨한다.
+// RNG 소비: 가짜 개수 1회 + 가짜당 (섹터 선택 1 + 방향 1). 진짜 소문은 RNG를 쓰지 않는다.
+// batchService·simulate가 이 순수 함수를 공유해 추첨 결과를 일치시킨다.
+export function drawSectorRumors(
   events: SectorEvent[],
   allSectors: string[],
-  totalTicks: number,
-  tomorrowDate: string,
-  openHour: number,
   rng: Rng,
   fakeMin: number = 1,
   fakeMax: number = 2
-): GeneratedNews[] {
+): SectorRumor[] {
   // 진짜 소문: 이벤트 방향 예고
-  const rumors: Array<{ sector: string; direction: SectorRumorDirection }> = events
+  const rumors: SectorRumor[] = events
     .filter((e) => SECTOR_RUMOR_TEMPLATES[e.sector])
-    .map((e) => ({ sector: e.sector, direction: dirKey(e.direction) }));
+    .map((e) => ({ sector: e.sector, direction: dirKey(e.direction), isFake: false }));
 
   // 가짜 소문: 이벤트 없는 섹터 중 랜덤 N개, 랜덤 방향
   const eventSectors = new Set(events.map((e) => e.sector));
@@ -326,8 +335,22 @@ export function generateSectorRumors(
     const idx = Math.floor(rng() * fakePool.length);
     const sector = fakePool.splice(idx, 1)[0];
     const direction: SectorRumorDirection = rng() < 0.5 ? "up" : "down";
-    rumors.push({ sector, direction });
+    rumors.push({ sector, direction, isFake: true });
   }
+  return rumors;
+}
+
+export function generateSectorRumors(
+  events: SectorEvent[],
+  allSectors: string[],
+  totalTicks: number,
+  tomorrowDate: string,
+  openHour: number,
+  rng: Rng,
+  fakeMin: number = 1,
+  fakeMax: number = 2
+): GeneratedNews[] {
+  const rumors = drawSectorRumors(events, allSectors, rng, fakeMin, fakeMax);
 
   // 초반 창에 균등 슬롯 + ±1틱 지터로 분산 (개장 직후 한 틱 몰림 방지)
   const windowTicks = Math.max(1, Math.floor(totalTicks * RUMOR_WINDOW_RATIO));
