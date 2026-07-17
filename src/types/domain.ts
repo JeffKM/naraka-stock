@@ -32,6 +32,7 @@ export interface StockQuote {
   name: string;
   tier: StockTier;
   sector: StockSector;
+  sectorLabel: string; // 섹터 한국어 라벨 (sectors 테이블에서 주입)
   price: number; // 현재 틱 가격 (원)
   prevClose: number; // 직전 개장일 종가
   change: number; // 등락액

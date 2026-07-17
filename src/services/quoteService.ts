@@ -53,6 +53,14 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
     .order("code");
   if (stocksError) throw stocksError;
 
+  // 섹터 한국어 라벨 (sectors 테이블 — 어드민이 관리하는 동적 데이터)
+  const { data: sectorRows, error: sectorError } = await supabase
+    .from("sectors")
+    .select("code, label_ko");
+  if (sectorError) throw sectorError;
+  const sectorLabels: Record<string, string> = {};
+  for (const row of sectorRows) sectorLabels[row.code] = row.label_ko;
+
   // 직전 개장일 종가 (오늘 이전 가장 최근 요약) — 등락률 기준
   const { data: prevRows, error: prevError } = await supabase
     .from("daily_summary")
@@ -145,6 +153,7 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
       name: stock.name,
       tier: stock.tier as StockTier,
       sector: stock.sector as StockSector,
+      sectorLabel: sectorLabels[stock.sector] ?? stock.sector,
       price,
       prevClose,
       change,
