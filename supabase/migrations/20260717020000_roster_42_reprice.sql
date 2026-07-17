@@ -10,7 +10,7 @@ insert into stocks (code, name, tier, sector, description, shares_outstanding) v
   ('NRKR','나라카로보틱스','stable','robotics','협동로봇의 선두. 자동화 붐마다 급등락 단골.',40000000),
   ('NRKC','나라카화학','normal','materials','플라스틱부터 배터리 소재까지, 나라카 화학의 자존심.',27000000),
   ('NRKH','나라카중공업','normal','defense','거대 엔진과 결계 설비를 찍어내는 중공업 강자.',26000000),
-  ('OKTL','OKT','normal','telecom','혼백 통신망을 깐 통신 1위. 요금제·5G 소식에 반응한다.',27000000),
+  ('OKTL','OKT','normal','telecom','요괴 통신망을 깐 통신 1위. 요금제·5G 소식에 반응한다.',27000000),
   ('MHRN','미호리온','normal','food','과자 봉지 하나로 입맛을 평정한 국민 간식 회사.',22000000),
   ('BNEN','바나나에너빌리티','normal','energy','원자로와 발전 설비의 명가. 나라카에 불을 대는 에너지주.',30000000),
   ('NRKG','나라카건설','normal','construction','탑과 다리를 올리는 건설 대장. 수주 소식에 들썩인다.',23000000),
