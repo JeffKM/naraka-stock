@@ -19,6 +19,42 @@ export interface QuoteBoard {
   quotes: StockQuote[];
 }
 
+interface SessionTick {
+  stock_code: string;
+  tick_index: number;
+  price: number;
+  is_halted: boolean;
+  volume: number;
+}
+
+// 전 종목 × 한 세션 틱을 페이지네이션으로 로드.
+// PostgREST max_rows(로컬 config.toml=1000) 상한에 걸리지 않도록 range로 쪼갠다
+// (42종목 × 144틱 = 6048행이라 단일 쿼리는 잘린다). (stock_code, tick_index)
+// 고정 정렬이라 페이지 경계가 안정적이다. maxTick 지정 시 그 틱까지만.
+async function loadSessionTicks(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  date: string,
+  maxTick?: number
+): Promise<SessionTick[]> {
+  const PAGE = 1000;
+  const rows: SessionTick[] = [];
+  for (let from = 0; ; from += PAGE) {
+    let query = supabase
+      .from("daily_ticks")
+      .select("stock_code, tick_index, price, is_halted, volume")
+      .eq("date", date);
+    if (maxTick !== undefined) query = query.lte("tick_index", maxTick);
+    const { data, error } = await query
+      .order("stock_code", { ascending: true })
+      .order("tick_index", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    rows.push(...data);
+    if (data.length < PAGE) break;
+  }
+  return rows;
+}
+
 // 전 종목 현재가 일괄 조회 (T-205)
 // - 장중: 현재 틱 인덱스의 사전 생성 가격
 // - 장 마감 후: 오늘 종가 (틱 83)
@@ -101,14 +137,9 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
   // 당일 누적 시뮬 시장 거래량 (사전 생성 틱의 volume 합 — 참가자 체결과 무관)
   const volumes: Record<string, number> = {};
   if (tickIndex !== null) {
-    // 현재 틱까지의 오늘 경로 전체 (현재가 + 스파크라인 + 거래량을 한 번에)
-    const { data: tickRows, error: tickError } = await supabase
-      .from("daily_ticks")
-      .select("stock_code, tick_index, price, is_halted, volume")
-      .eq("date", today)
-      .lte("tick_index", tickIndex)
-      .order("tick_index", { ascending: true });
-    if (tickError) throw tickError;
+    // 현재 틱까지의 오늘 경로 전체 (현재가 + 스파크라인 + 거래량을 한 번에).
+    // 전 종목 × 현재 틱까지가 1000행을 넘을 수 있어 페이지네이션 로드.
+    const tickRows = await loadSessionTicks(supabase, today, tickIndex);
     for (const row of tickRows) {
       (sparks[row.stock_code] ??= []).push(row.price);
       (pathByStock[row.stock_code] ??= {})[row.tick_index] = row.price;
@@ -119,6 +150,32 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
         price: row.price,
         isHalted: row.tick_index === tickIndex && row.is_halted,
       };
+    }
+  }
+
+  // 개장 전·휴장일(오늘 틱 없음): 직전 세션 라인을 스파크라인 fallback으로 남긴다.
+  // 상세 차트 라인 fallback과 동일 UX. 색·등락률도 그 세션 시가→종가 기준으로
+  // 표시해 라인 모양·색·숫자가 모두 같은 기준으로 일치하게 한다.
+  const fallbackChange: Record<string, { open: number; close: number }> = {};
+  if (tickIndex === null) {
+    const { data: lastDateRow, error: lastDateError } = await supabase
+      .from("daily_ticks")
+      .select("date")
+      .lt("date", today)
+      .order("date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (lastDateError) throw lastDateError;
+    if (lastDateRow?.date) {
+      const prevTicks = await loadSessionTicks(supabase, lastDateRow.date);
+      for (const row of prevTicks) {
+        (sparks[row.stock_code] ??= []).push(row.price);
+      }
+      for (const [code, arr] of Object.entries(sparks)) {
+        if (arr.length > 0) {
+          fallbackChange[code] = { open: arr[0], close: arr[arr.length - 1] };
+        }
+      }
     }
   }
 
@@ -144,7 +201,12 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
     const prevClose = prevCloses[stock.code] ?? 0;
     const current = prices[stock.code];
     const price = current?.price ?? prevClose;
-    const change = prevClose > 0 ? price - prevClose : 0;
+    // 오늘 틱이 있으면 직전 종가 대비. 없으면(개장 전·휴장) 직전 세션 시가→종가
+    // 기준으로 표시해 fallback 스파크라인과 등락 방향·색을 일치시킨다.
+    const fb = current ? undefined : fallbackChange[stock.code];
+    const change =
+      fb && fb.open > 0 ? fb.close - fb.open : prevClose > 0 ? price - prevClose : 0;
+    const changeBase = fb && fb.open > 0 ? fb.open : prevClose;
     const upperLimit = prevClose > 0 ? Math.round(prevClose * (1 + PRICE_LIMIT_RATE)) : 0;
     const lowerLimit = prevClose > 0 ? Math.round(prevClose * (1 - PRICE_LIMIT_RATE)) : 0;
 
@@ -157,7 +219,7 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
       price,
       prevClose,
       change,
-      changePercent: prevClose > 0 ? Math.round((change / prevClose) * 10000) / 100 : 0,
+      changePercent: changeBase > 0 ? Math.round((change / changeBase) * 10000) / 100 : 0,
       isHalted: current?.isHalted ?? false,
       // 반올림 오차를 감안해 ±10원 이내면 상·하한 도달로 표시
       isUpperLimit: prevClose > 0 && price >= upperLimit - 10,

@@ -44,7 +44,7 @@ export interface StockQuote {
   lowerLimit: number; // 오늘 하한가 (직전 종가 -30%)
   marketCap: number; // 시가총액 (현재가 × 발행주식수)
   volume: number; // 당일 누적 시뮬 시장 거래량 (사전 생성 틱 합)
-  spark: number[]; // 오늘 개장~현재 틱의 가격 경로 (스파크라인용, 장외엔 빈 배열)
+  spark: number[]; // 오늘 개장~현재 틱의 가격 경로 (스파크라인용, 개장 전·휴장엔 직전 세션 경로 fallback)
 }
 
 // 시장 지수 스냅샷 (나스피/나스닥 — 시총가중 체인, 기준 1,000pt)
