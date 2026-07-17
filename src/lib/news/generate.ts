@@ -27,9 +27,11 @@ import type { NewsGrade } from "@/types/domain";
 import {
   DISCLOSURE_TEMPLATES,
   HINT_TEMPLATES,
+  SECTOR_NEWS_TEMPLATES,
   type BiasLevel,
   type DisclosureKind,
   type NewsTemplate,
+  type SectorNewsGrade,
 } from "./templates";
 
 export interface GeneratedNews {
@@ -70,8 +72,8 @@ function levelOf(signedMagnitude: number): BiasLevel {
   return String(signedMagnitude) as BiasLevel;
 }
 
-// 결합 편향(개별 이벤트 + 섹터 이벤트 ±8%p)은 템플릿 세기(10/20/30)와 정확히
-// 일치하지 않을 수 있어(예: 10+8=18, 20-8=12) 가장 가까운 세기로 스냅한다.
+// 결합 편향(개별 이벤트 + 섹터 참여분 ±15%p)은 템플릿 세기(10/20/30)와 정확히
+// 일치하지 않을 수 있어(예: 10+15=25, 20-15=5) 가장 가까운 세기로 스냅한다.
 // 순수 개별 이벤트(10/20/30)는 그대로 자기 자신에 스냅되어 기존 동작과 동일하다.
 function snapMagnitudeLevel(magnitude: number): 10 | 20 | 30 {
   if (magnitude < 15) return 10;
@@ -283,50 +285,55 @@ export function generateEarlySignalNews(
   return result;
 }
 
-// 섹터 뉴스 (피드백 3): 섹터 이벤트를 설명하는 정식뉴스 1건. stock_code=null(섹터 전체).
-// 노출은 정식뉴스와 동일하게 장 후반(사후 설명 → 추종 이득 없음).
-const SECTOR_NEWS_LABEL: Record<string, string> = {
-  semiconductor: "반도체",
-  electronics: "전기전자",
-  it: "IT·플랫폼",
-  retail: "유통·소비재",
-  auto: "자동차",
-  media: "미디어·엔터",
-  finance: "금융",
-  defense: "방산·중공업",
-  bio: "바이오·제약",
-};
-
+// 섹터 뉴스 (섹터 개편 Plan 3, 스펙 §4.4): 섹터 이벤트를 설명하는 정식뉴스.
+// 이벤트당 1건(stock_code=null, 섹터 전체). 세기는 그 섹터 구성원의 실현 일간 평균
+// 등락으로 등급화하고, 방향은 실현 결과 기준이다. 노출은 정식뉴스와 동일하게 장
+// 후반(0.8 지점) — 사후 설명이라 추종 이득이 없다. 라벨은 sectors.label_ko를 주입받는다.
 export interface SectorNewsInput {
-  sector: string;
-  direction: 1 | -1;
+  sector: string; // 섹터 코드
+  avgChangePercent: number; // 그 섹터 구성원의 실현 평균 등락률(%)
 }
 
-// 섹터 뉴스 1건 생성. openHour 기준 장 후반(0.8 지점) 틱에 published_at 스탬프.
+// 실현 평균 등락률 → 등급. 임계 ±4%(콘텐츠 파라미터, 밸런스 무관).
+function gradeSector(avg: number): SectorNewsGrade {
+  if (avg >= 4) return "surgeUp";
+  if (avg >= 0) return "up";
+  if (avg > -4) return "down";
+  return "plungeDown";
+}
+
+// 섹터 이벤트 목록 → 섹터 뉴스 다건. 라벨맵으로 코드→한국어 치환.
 export function generateSectorNews(
-  input: SectorNewsInput | null,
+  inputs: SectorNewsInput[],
+  labelMap: Record<string, string>,
   totalTicks: number,
   tomorrowDate: string,
-  openHour: number
+  openHour: number,
+  rng: Rng
 ): GeneratedNews[] {
-  if (!input) return [];
-  const label = SECTOR_NEWS_LABEL[input.sector] ?? input.sector;
-  const up = input.direction === 1;
   const tick = Math.min(totalTicks - 1, Math.floor(totalTicks * 0.8));
-  const title = up ? `${label} 업종 전반 강세` : `${label} 업종 전반 약세`;
-  const body = up
-    ? `${label} 관련주들이 동반 상승하고 있다. 업종 전반에 매수세가 유입되는 분위기다.`
-    : `${label} 관련주들이 동반 하락하고 있다. 업종 전반에 차익 실현 매물이 나오고 있다.`;
-  return [
-    {
+  // 같은 등급이 여러 건이면 같은 배치 안에서 제목 중복을 피한다.
+  const usedByGrade: Record<SectorNewsGrade, Map<string, number>> = {
+    surgeUp: new Map(),
+    up: new Map(),
+    down: new Map(),
+    plungeDown: new Map(),
+  };
+  return inputs.map((input) => {
+    const label = labelMap[input.sector] ?? input.sector;
+    const grade = gradeSector(input.avgChangePercent);
+    const used = usedByGrade[grade];
+    const tmpl = pickUnused(rng, SECTOR_NEWS_TEMPLATES[grade], used);
+    used.set(tmpl.title, (used.get(tmpl.title) ?? 0) + 1);
+    return {
       date: tomorrowDate,
       stockCode: null,
-      grade: "news",
-      title,
-      body,
+      grade: "news" as const,
+      title: tmpl.title.replaceAll("{sector}", label),
+      body: tmpl.body.replaceAll("{sector}", label),
       publishedAt: tickTimestamp(tomorrowDate, tick, openHour),
-    },
-  ];
+    };
+  });
 }
 
 export interface DailyMove {
