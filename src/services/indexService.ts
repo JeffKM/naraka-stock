@@ -65,29 +65,67 @@ export function computeIndexQuotes(params: {
   pathByStock: Record<string, Record<number, number>>;
   tickIndex: number | null;
   prevIndexCloses: Record<string, number>;
+  // 개장 전·휴장(tickIndex null)일 때 직전 세션 지수 라인 fallback용 경로·마지막 틱.
+  // 종목 스파크라인 fallback과 동일 기준(직전 세션 시가→종가)으로 채운다.
+  fallbackPathByStock?: Record<string, Record<number, number>>;
+  fallbackMaxTick?: number | null;
 }): IndexQuote[] {
-  const { indices, members, prevCloses, pathByStock, tickIndex, prevIndexCloses } = params;
+  const {
+    indices,
+    members,
+    prevCloses,
+    pathByStock,
+    tickIndex,
+    prevIndexCloses,
+    fallbackPathByStock,
+    fallbackMaxTick,
+  } = params;
 
   return indices.map((index) => {
     const constituents = members.filter((m) => indexCodeOfTier(m.tier) === index.code);
+    const round2 = (v: number) => Math.round(v * 100) / 100;
 
-    const capAt = (tick: number | null): number =>
-      constituents.reduce((sum, m) => {
+    // 특정 경로·틱의 지수 값. tick이 null이면 직전 종가 기준가로 대체.
+    const indexAt = (
+      path: Record<string, Record<number, number>>,
+      tick: number | null
+    ): number => {
+      const cap = constituents.reduce((sum, m) => {
         const price =
-          (tick !== null ? pathByStock[m.code]?.[tick] : undefined) ?? prevCloses[m.code] ?? 0;
+          (tick !== null ? path[m.code]?.[tick] : undefined) ?? prevCloses[m.code] ?? 0;
         return sum + price * m.sharesOutstanding;
       }, 0);
+      return round2(cap / index.divisor);
+    };
 
-    const round2 = (v: number) => Math.round(v * 100) / 100;
+    // 개장 전·휴장: 직전 세션 지수 라인을 스파크라인 fallback으로 남기고,
+    // 값·등락률도 그 세션 시가→종가 기준으로 계산해 종목 카드와 기준을 일치시킨다.
+    if (tickIndex === null && fallbackPathByStock && fallbackMaxTick != null) {
+      const spark: number[] = [];
+      for (let t = 0; t <= fallbackMaxTick; t++) {
+        spark.push(indexAt(fallbackPathByStock, t));
+      }
+      const open = spark[0] ?? INDEX_BASE;
+      const value = spark[spark.length - 1] ?? open;
+      const change = round2(value - open);
+      return {
+        code: index.code,
+        name: index.name,
+        value,
+        change,
+        changePercent: open > 0 ? Math.round((change / open) * 10000) / 100 : 0,
+        spark,
+      };
+    }
 
     const spark: number[] = [];
     if (tickIndex !== null) {
       for (let t = 0; t <= tickIndex; t++) {
-        spark.push(round2(capAt(t) / index.divisor));
+        spark.push(indexAt(pathByStock, t));
       }
     }
 
-    const value = round2(capAt(tickIndex) / index.divisor);
+    const value = indexAt(pathByStock, tickIndex);
     const prevClose = prevIndexCloses[index.code] ?? INDEX_BASE;
     const change = round2(value - prevClose);
     return {
