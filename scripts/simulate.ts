@@ -14,6 +14,7 @@ import {
 } from "../src/lib/engine/bias";
 import { generateDailyPath, type DailyPath } from "../src/lib/engine/randomWalk";
 import { createRng, hashSeed, type Rng } from "../src/lib/engine/rng";
+import { drawSectorRumors, type SectorRumor } from "../src/lib/news/generate";
 import { addDays, isOpenDate } from "../src/lib/market";
 import type { StockSector, StockTier } from "../src/types/domain";
 
@@ -92,6 +93,8 @@ interface DayMarket {
   biases: BiasMap;
   paths: Record<string, DailyPath>;
   prevCloses: Record<string, number>;
+  rumors: SectorRumor[]; // 그날 장 초반 섹터 찌라시 (예고 섹터·방향)
+  sectorActualUp: Record<string, boolean>; // 섹터별 실제 평균 방향(종가 기준) — 소문 적중 판정용
 }
 
 // 한 회차의 시장 전체 시뮬레이션 (배치와 동일한 절차)
@@ -121,12 +124,33 @@ function simulateMarket(rng: Rng): DayMarket[] {
       paths[stock.code] = path;
       closes[stock.code] = path.close;
     }
+    // 섹터 찌라시 (v2): 경로 생성이 끝난 뒤 추첨한다(배치도 경로·정식뉴스 뒤에 소문 생성).
+    // 진짜 소문은 sectorEvents 방향을 그대로, 가짜는 이벤트 없는 섹터에서 랜덤 추첨.
+    // 주의: 위 sectorEvents/bias/path 구간과 달리 이 소문 추첨은 batchService와의 "동일 시드
+    // 동일 결과" 대상이 아니다(시드 스킴 자체가 다르고, 배치는 하루 단위·시뮬은 연속 스트림).
+    // 가격 경로가 소문 추첨 전에 이미 확정되므로 시세엔 무관하고, 균등 RNG 소비라 적중률의
+    // 통계적 대표성만 유지하면 충분하다.
+    const allSectors = Array.from(new Set(STOCKS.map((s) => s.sector)));
+    const rumors = drawSectorRumors(sectorEvents, allSectors, rng);
+    // 섹터별 실제 방향: 구성원 (종가-전일종가)/전일종가 평균의 부호 (소문 적중 판정 기준)
+    const sectorActualUp: Record<string, boolean> = {};
+    for (const sec of allSectors) {
+      const members = STOCKS.filter((s) => s.sector === sec);
+      const avg =
+        members.reduce(
+          (sum, m) => sum + (closes[m.code] - prevCloses[m.code]) / prevCloses[m.code],
+          0
+        ) / members.length;
+      sectorActualUp[sec] = avg >= 0;
+    }
     result.push({
       date,
       isFriday: new Date(`${date}T12:00:00Z`).getUTCDay() === 5,
       biases,
       paths,
       prevCloses,
+      rumors,
+      sectorActualUp,
     });
   }
   return result;
@@ -386,6 +410,35 @@ const STRATEGIES: Strategy[] = [
   bracketStrategy("지정가브라켓(잡주6/6)", "wild", 0.06, 0.06),
   bracketStrategy("지정가브라켓(잡주8/8)", "wild", 0.08, 0.08),
   bracketStrategy("지정가브라켓(전종목6)", "all", 0.06, 0.06),
+  {
+    // 섹터소문추종: 장 초반 'up' 찌라시가 뜬 섹터의 구성원 전부를 개장가에 균등 매수 →
+    // 종가 청산. 소문이 예측력을 가지면(적중>50%) 이 전략이 이득을 봐야 하고, 그 이득이
+    // 존버·본전을 지배하면 밸런스 붕괴 신호다. 노출 창을 뒤로 미루거나 가짜를 늘려 억제한다.
+    name: "섹터소문추종",
+    run: (market) => {
+      const p: Portfolio = { cash: INITIAL_CASH, qty: {} };
+      for (const day of market) {
+        const upSectors = new Set(
+          day.rumors.filter((r) => r.direction === "up").map((r) => r.sector)
+        );
+        const targets = STOCKS.filter((s) => upSectors.has(s.sector));
+        if (targets.length > 0) {
+          const budget = Math.floor(p.cash / targets.length); // 종목별 균등 예약
+          for (const stock of targets) {
+            const price = day.paths[stock.code].open;
+            const qty = Math.floor(budget / price);
+            if (qty > 0) {
+              p.cash -= qty * price;
+              p.qty[stock.code] = (p.qty[stock.code] ?? 0) + qty;
+            }
+          }
+        }
+        for (const stock of STOCKS) sellAll(p, stock.code, day.paths[stock.code].close);
+        payDividends(p, day);
+      }
+      return p.cash;
+    },
+  },
 ];
 
 // --- 실행 ---
@@ -407,9 +460,26 @@ function main() {
     STRATEGIES.map((s) => [s.name, []])
   );
 
+  // 섹터 소문 적중 집계 (예고 방향 == 그 섹터 실제 평균 방향). 진짜/가짜 분리 측정.
+  const rumorStat = {
+    all: { hit: 0, total: 0 },
+    real: { hit: 0, total: 0 },
+    fake: { hit: 0, total: 0 },
+  };
+
   for (let run = 0; run < runs; run++) {
     const marketRng = createRng(hashSeed(`market|${run}`));
     const market = simulateMarket(marketRng);
+    for (const day of market) {
+      for (const r of day.rumors) {
+        const correct = (r.direction === "up") === day.sectorActualUp[r.sector];
+        rumorStat.all.total++;
+        if (correct) rumorStat.all.hit++;
+        const kind = r.isFake ? rumorStat.fake : rumorStat.real;
+        kind.total++;
+        if (correct) kind.hit++;
+      }
+    }
     for (const strategy of STRATEGIES) {
       const rng = createRng(hashSeed(`${strategy.name}|${run}`));
       results[strategy.name].push(strategy.run(market, rng));
@@ -430,6 +500,22 @@ function main() {
       )} / ${fmt(sorted[sorted.length - 1])} / ${(lossRate * 100).toFixed(1)}%`
     );
   }
+
+  // 섹터 소문 적중률 (목표: 전체 55~70%) + 하루 평균 소문 수
+  const pct = (h: number, t: number) => (t > 0 ? ((h / t) * 100).toFixed(1) : "-");
+  const daysTotal = openDays().length * runs;
+  console.log("\n섹터 소문 적중률 (예고 방향 == 섹터 실제 평균 방향)");
+  console.log(
+    `  전체 ${pct(rumorStat.all.hit, rumorStat.all.total)}% (n=${rumorStat.all.total})` +
+      ` / 진짜 ${pct(rumorStat.real.hit, rumorStat.real.total)}% (n=${rumorStat.real.total})` +
+      ` / 가짜 ${pct(rumorStat.fake.hit, rumorStat.fake.total)}% (n=${rumorStat.fake.total})`
+  );
+  console.log(
+    `  하루 평균 소문 수 ${(rumorStat.all.total / daysTotal).toFixed(2)}개` +
+      ` (진짜 ${(rumorStat.real.total / daysTotal).toFixed(2)} / 가짜 ${(
+        rumorStat.fake.total / daysTotal
+      ).toFixed(2)})`
+  );
 }
 
 main();
