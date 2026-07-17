@@ -6,9 +6,9 @@
 // (PRD §10 목표 검증).
 
 import {
-  applySectorEvent,
+  applySectorEvents,
   drawDailyBiases,
-  drawSectorEvent,
+  drawSectorEvents,
   realizeBias,
   type BiasMap,
 } from "../src/lib/engine/bias";
@@ -26,7 +26,7 @@ const DIVIDEND_RATE = 0.01;
 
 // 등급·기준가는 운영 확정안 기준 (2026-07-14, migrations/20260714000000)
 // 섹터는 운영 확정안 기준 (2026-07-16, migrations/20260716010000_sector.sql)
-// 배열 순서는 code 오름차순(리뷰 결함 수정, 2026-07-17): drawDailyBiases·drawSectorEvent가
+// 배열 순서는 code 오름차순(리뷰 결함 수정, 2026-07-17): drawDailyBiases·drawSectorEvents가
 // 이 배열 순서로 RNG를 소비하므로, 운영 배치(batchService.ts)의 종목 조회 쿼리가 쓰는
 // `.order("code")`와 순서를 맞춰야 두 경로가 동일 시드에서 동일 결과를 낸다. 원래 이
 // 배열은 마이그레이션 INSERT 순서(시가총액 순)를 따랐으나, Postgres는 ORDER BY 없는
@@ -88,9 +88,11 @@ function simulateMarket(rng: Rng): DayMarket[] {
 
   for (const date of openDays()) {
     let biases = drawDailyBiases(STOCKS, rng);
-    // 섹터 이벤트 (피드백 3): 배치와 동일하게 drawDailyBiases 직후·경로 생성 전에 가산한다.
-    const sectorEvent = drawSectorEvent(STOCKS, rng);
-    biases = applySectorEvent(biases, STOCKS, sectorEvent);
+    // 섹터 이벤트 (참여확률 모델, Plan 3): 배치와 동일하게 drawDailyBiases 직후·경로
+    // 생성 전에 뽑고 가산한다. applySectorEvents는 참여 판정으로 RNG를 소비하므로
+    // 이 순서·소비량이 batchService와 정확히 일치해야 동일 시드에서 동일 결과가 난다.
+    const sectorEvents = drawSectorEvents(STOCKS, rng);
+    biases = applySectorEvents(biases, STOCKS, sectorEvents, rng);
     const paths: Record<string, DailyPath> = {};
     const prevCloses = { ...closes };
     for (const stock of STOCKS) {

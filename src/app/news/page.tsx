@@ -22,7 +22,7 @@ export default function NewsPage() {
       {/* 피드 헤더 — 상단 고정 (SNS 타임라인 감성)
           배경과 같은 색이면 묻히므로 카드 표면(bg-card) + 그림자로 바(bar)임을 명확히 */}
       <div className="sticky top-14 z-20 -mx-4 border-b border-border bg-card/95 px-4 pb-2 pt-2 shadow-sm backdrop-blur">
-        {/* 종목 필터 — 27종을 한 줄 가로 스크롤로 (여러 줄 wrap 방지) */}
+        {/* 종목 필터 — 42종을 한 줄 가로 스크롤로 (여러 줄 wrap 방지) */}
         <div className="-mx-4 px-4">
           <div className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <FilterChip active={filter === null} onClick={() => selectFilter(null)}>
