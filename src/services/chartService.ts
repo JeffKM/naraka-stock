@@ -63,19 +63,29 @@ export async function getChartData(stockCode: string, now: Date = new Date()): P
   }
 
   // 다일 5분 틱: 미래 날짜는 아예 제외(date <= today), 오늘은 현재 틱까지만.
-  // 이벤트 기간이 짧아(종목 1개 × 최대 30일 × 144틱) 단일 쿼리 + JS 필터로 충분.
-  const { data: tickRows, error: tickError } = await supabase
-    .from("daily_ticks")
-    .select("date, tick_index, price, volume")
-    .eq("stock_code", stockCode)
-    .lte("date", today)
-    .order("date", { ascending: true })
-    .order("tick_index", { ascending: true })
-    .limit(10000);
-  if (tickError) throw tickError;
+  // 종목 1개라도 이벤트 30일 누적이면 30일 × 144틱 = 4320행이라 PostgREST
+  // max_rows(로컬 config.toml=1000) 상한을 넘어 단일 쿼리로는 초반 ~7일치만
+  // 반환된다. range로 페이지네이션해 전 기간을 모은다. (date, tick_index)
+  // 정렬이라 페이지 경계가 날짜 중간에 걸려도 순서가 유지된다.
+  const PAGE = 1000;
+  type TickRow = { date: string; tick_index: number; price: number; volume: number };
+  const tickRows: TickRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from("daily_ticks")
+      .select("date, tick_index, price, volume")
+      .eq("stock_code", stockCode)
+      .lte("date", today)
+      .order("date", { ascending: true })
+      .order("tick_index", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    tickRows.push(...data);
+    if (data.length < PAGE) break;
+  }
 
   // 오늘 날짜 틱은 현재 틱(maxTick)까지만 노출. maxTick이 null이면 오늘 틱 전부 제외.
-  const visibleRows = (tickRows ?? []).filter((t) =>
+  const visibleRows = tickRows.filter((t) =>
     t.date < today ? true : maxTick !== null && t.tick_index <= maxTick
   );
 
