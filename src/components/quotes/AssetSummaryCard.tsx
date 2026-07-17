@@ -40,7 +40,7 @@ export function AssetSummaryCard() {
           <CardContent className="flex items-center justify-between py-3">
             <div>
               <p className="text-sm font-medium">로그인하고 거래를 시작하세요</p>
-              <p className="text-xs text-muted-foreground">매장 가입 코드로 100만원 지급</p>
+              <p className="text-xs text-muted-foreground">매장 가입 코드로 1,000만원 지급</p>
             </div>
             <ChevronRight className="size-4 text-muted-foreground" />
           </CardContent>
