@@ -126,6 +126,10 @@ function simulateMarket(rng: Rng): DayMarket[] {
     }
     // 섹터 찌라시 (v2): 경로 생성이 끝난 뒤 추첨한다(배치도 경로·정식뉴스 뒤에 소문 생성).
     // 진짜 소문은 sectorEvents 방향을 그대로, 가짜는 이벤트 없는 섹터에서 랜덤 추첨.
+    // 주의: 위 sectorEvents/bias/path 구간과 달리 이 소문 추첨은 batchService와의 "동일 시드
+    // 동일 결과" 대상이 아니다(시드 스킴 자체가 다르고, 배치는 하루 단위·시뮬은 연속 스트림).
+    // 가격 경로가 소문 추첨 전에 이미 확정되므로 시세엔 무관하고, 균등 RNG 소비라 적중률의
+    // 통계적 대표성만 유지하면 충분하다.
     const allSectors = Array.from(new Set(STOCKS.map((s) => s.sector)));
     const rumors = drawSectorRumors(sectorEvents, allSectors, rng);
     // 섹터별 실제 방향: 구성원 (종가-전일종가)/전일종가 평균의 부호 (소문 적중 판정 기준)
