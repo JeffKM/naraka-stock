@@ -204,3 +204,44 @@ export async function toggleCommentLike(
 
   return { liked: !existing, likeCount: count ?? 0 };
 }
+
+// 토론뷰용: 전 종목 댓글을 시간순으로 합쳐 종목 태그와 함께 돌려준다 (읽기 전용 집약 뷰).
+export interface DiscussionComment extends StockComment {
+  stockCode: string;
+  stockName: string;
+}
+
+export async function listAllComments(
+  viewerId: number | null,
+  page: number
+): Promise<DiscussionComment[]> {
+  const supabase = getSupabaseAdmin();
+  const from = (page - 1) * PAGE_SIZE;
+  const { data, error } = await supabase
+    .from("stock_comments")
+    .select("id, user_id, stock_code, content, created_at, users(nickname), stocks(name)")
+    .order("created_at", { ascending: false })
+    .range(from, from + PAGE_SIZE - 1);
+  if (error) throw error;
+
+  const likes = await likeSummary(
+    data.map((row) => row.id),
+    viewerId
+  );
+  return data.map((row) => {
+    const like = likes.get(row.id);
+    return {
+      id: row.id,
+      nickname:
+        (row.users as unknown as { nickname: string } | null)?.nickname ?? "(탈퇴)",
+      content: row.content,
+      createdAt: row.created_at,
+      mine: viewerId !== null && row.user_id === viewerId,
+      likeCount: like?.count ?? 0,
+      likedByMe: like?.mine ?? false,
+      stockCode: row.stock_code,
+      stockName:
+        (row.stocks as unknown as { name: string } | null)?.name ?? row.stock_code,
+    };
+  });
+}
