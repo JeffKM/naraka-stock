@@ -249,7 +249,6 @@ export default function Home() {
       {tab === "watch" && quotes?.length === 0 && (
         watchlist.loggedOut ? (
           <EmptyState
-            pose="wave"
             title="로그인하면 관심종목을 등록할 수 있어요."
             action={
               <Link
@@ -270,9 +269,11 @@ export default function Home() {
 
       <NewsHighlight />
 
-      <p className="text-center text-xs text-muted-foreground">
-        시세는 5분마다 갱신됩니다{data?.market ? ` · 장 시간 ${marketHoursLabel(data.market)}` : ""}
-      </p>
+      {data?.market ? (
+        <p className="text-center text-xs text-muted-foreground">
+          장 시간 {marketHoursLabel(data.market)}
+        </p>
+      ) : null}
     </div>
   );
 }

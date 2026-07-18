@@ -18,7 +18,7 @@ interface SignupCodesData {
 
 export function SignupCodeSection() {
   const queryClient = useQueryClient();
-  const [count, setCount] = useState("20");
+  const [count, setCount] = useState("1");
   const [adminCount, setAdminCount] = useState("1");
   const [newCodes, setNewCodes] = useState<string[]>([]);
   const [newAdminCodes, setNewAdminCodes] = useState<string[]>([]);

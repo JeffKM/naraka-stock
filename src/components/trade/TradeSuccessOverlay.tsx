@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Mascot } from "@/components/mascot/Mascot";
 import { formatMoney, formatQty } from "@/lib/market";
 
 export interface TradeSuccessInfo {
@@ -70,9 +69,8 @@ export function TradeSuccessOverlay({
           ))}
         </div>
 
-        {/* 보밤이 축하 + 초록 체크 드로우 */}
+        {/* 초록 체크 드로우 */}
         <div className="relative flex size-16 items-center justify-center rounded-full bg-[oklch(0.72_0.19_145)]/15">
-          <Mascot pose="cheer" size={48} className="absolute -top-11" />
           <svg viewBox="0 0 32 32" className="size-9" fill="none" aria-hidden>
             <path
               d="M7 17 L13.5 23.5 L25 10"

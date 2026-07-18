@@ -142,7 +142,6 @@ export default function PortfolioPage() {
         <CardContent className="flex flex-col gap-1">
           {portfolio && portfolio.holdings.length === 0 && (
             <EmptyState
-              mascotSize={80}
               className="py-6"
               title="아직 보유한 주식이 없어요."
               description="시세판에서 첫 주식을 사보세요."
