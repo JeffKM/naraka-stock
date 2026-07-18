@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Check, Pencil, X } from "lucide-react";
+import { Check, Pencil, ThumbsUp, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,8 @@ interface StockComment {
   content: string;
   createdAt: string;
   mine: boolean;
+  likeCount: number;
+  likedByMe: boolean;
 }
 
 function relativeTime(iso: string): string {
@@ -110,6 +112,17 @@ export function StockComments({ stockCode }: { stockCode: string }) {
     }
   }
 
+  async function toggleLike(c: StockComment) {
+    try {
+      await postJson<{ liked: boolean; likeCount: number }>(
+        `/api/comments/${c.id}/like`
+      );
+      queryClient.invalidateQueries({ queryKey: ["comments", stockCode] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "반응에 실패했습니다.");
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -161,7 +174,23 @@ export function StockComments({ stockCode }: { stockCode: string }) {
                     />
                   </div>
                 ) : (
-                  <p className="mt-0.5 break-words text-sm">{c.content}</p>
+                  <>
+                    <p className="mt-0.5 break-words text-sm">{c.content}</p>
+                    <button
+                      onClick={() => toggleLike(c)}
+                      aria-label={c.likedByMe ? "엄지업 취소" : "엄지업"}
+                      className={`mt-1 inline-flex items-center gap-1 text-xs transition-colors ${
+                        c.likedByMe
+                          ? "text-primary-accent"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <ThumbsUp
+                        className={`size-3.5 ${c.likedByMe ? "fill-current" : ""}`}
+                      />
+                      {c.likeCount > 0 && <span>{c.likeCount}</span>}
+                    </button>
+                  </>
                 )}
               </div>
               {(c.mine || isAdmin) &&

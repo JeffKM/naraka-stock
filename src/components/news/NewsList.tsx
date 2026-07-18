@@ -2,17 +2,26 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { BadgeCheck } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { BadgeCheck, ThumbsDown, ThumbsUp } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getJson } from "@/lib/api/client";
+import { getJson, postJson } from "@/lib/api/client";
 import { outletForNewsId } from "@/lib/news/outlets";
 import { cn } from "@/lib/utils";
 import type { NewsGrade, NewsItem } from "@/types/domain";
 
+type NewsReactionKind = "up" | "down";
+
+interface NewsFeedItem extends NewsItem {
+  upCount: number;
+  downCount: number;
+  myReaction: NewsReactionKind | null;
+}
+
 export interface NewsPageDto {
-  items: NewsItem[];
+  items: NewsFeedItem[];
   page: number;
   hasMore: boolean;
 }
@@ -106,6 +115,8 @@ export function NewsList({
   isLast?: boolean;
   onMore?: () => void;
 }) {
+  const queryClient = useQueryClient();
+
   const { data, isLoading } = useQuery({
     queryKey: ["news", stock ?? "all", outlet ?? "all", page],
     queryFn: () =>
@@ -116,6 +127,16 @@ export function NewsList({
       ),
     staleTime: 60_000,
   });
+
+  // 엄지업/다운 토글 — 같은 방향 재클릭 시 취소, 반대 방향 클릭 시 전환
+  async function react(n: NewsFeedItem, kind: NewsReactionKind) {
+    try {
+      await postJson(`/api/news/${n.id}/reaction`, { kind });
+      queryClient.invalidateQueries({ queryKey: ["news"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "반응에 실패했습니다.");
+    }
+  }
 
   // compact(카드 내부)는 얇은 구분선, 전체 피드는 카드 사이 간격
   const containerClass = compact
@@ -235,6 +256,42 @@ export function NewsList({
                   >
                     ${n.stockName}
                   </Link>
+                </div>
+              )}
+
+              {/* 반응 — 전 등급 엄지업/엄지다운 (아이콘만, 라벨 없음) */}
+              {!compact && (
+                <div className="mt-2 flex items-center gap-3">
+                  <button
+                    onClick={() => react(n, "up")}
+                    aria-label={n.myReaction === "up" ? "엄지업 취소" : "엄지업"}
+                    className={cn(
+                      "inline-flex items-center gap-1 text-xs transition-colors",
+                      n.myReaction === "up"
+                        ? "text-primary-accent"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <ThumbsUp
+                      className={cn("size-3.5", n.myReaction === "up" && "fill-current")}
+                    />
+                    {n.upCount > 0 && <span>{n.upCount}</span>}
+                  </button>
+                  <button
+                    onClick={() => react(n, "down")}
+                    aria-label={n.myReaction === "down" ? "엄지다운 취소" : "엄지다운"}
+                    className={cn(
+                      "inline-flex items-center gap-1 text-xs transition-colors",
+                      n.myReaction === "down"
+                        ? "text-destructive"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <ThumbsDown
+                      className={cn("size-3.5", n.myReaction === "down" && "fill-current")}
+                    />
+                    {n.downCount > 0 && <span>{n.downCount}</span>}
+                  </button>
                 </div>
               )}
             </div>

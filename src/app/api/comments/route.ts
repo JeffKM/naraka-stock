@@ -1,23 +1,18 @@
 import { apiOk, handleApiError } from "@/lib/api/response";
 import { getSession } from "@/lib/auth/session";
-import { getNewsFeed } from "@/services/newsService";
+import { listAllComments } from "@/services/commentService";
 
-// 뉴스 피드 (공개 API) — 로그인 시 본인 반응(myReaction) 표시
+// 전 종목 댓글 모아보기 (토론 세그먼트) — 비로그인도 조회, 로그인 시 mine/likedByMe 표시
 export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
-    const stock = params.get("stock");
-    const outlet = params.get("outlet");
     const pageParam = Number(params.get("page") ?? "1");
     const page = Number.isInteger(pageParam) && pageParam >= 1 ? pageParam : 1;
     const session = await getSession();
-    return apiOk(
-      await getNewsFeed(
-        { stockCode: stock ? stock.toUpperCase() : null, outletSlug: outlet },
-        page,
-        session?.uid ?? null
-      )
-    );
+    return apiOk({
+      comments: await listAllComments(session?.uid ?? null, page),
+      viewerIsAdmin: session?.isAdmin ?? false,
+    });
   } catch (error) {
     return handleApiError(error);
   }
