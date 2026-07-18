@@ -178,7 +178,8 @@ export default function Home() {
 
       <PopularStocks />
 
-      <div className="flex items-center justify-between">
+      {/* 스크롤해도 종목 필터·정렬을 잃지 않도록 상단 고정 (뉴스 세그먼트와 동일 패턴) */}
+      <div className="sticky top-14 z-20 -mx-4 flex items-center justify-between border-b border-border bg-card/95 px-4 py-2 backdrop-blur">
         <div className="flex gap-1">
           <Button
             variant="ghost"
