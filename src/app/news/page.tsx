@@ -6,6 +6,7 @@ import { DiscussionList } from "@/components/news/DiscussionList";
 import { NewsList } from "@/components/news/NewsList";
 import { useQuotes } from "@/hooks/useQuotes";
 import { cn } from "@/lib/utils";
+import { SegmentButton } from "@/components/ui/SegmentButton";
 
 // 뉴스 피드 (T-503): 등급 배지 + 종목 필터
 export default function NewsPage() {
@@ -106,29 +107,5 @@ function FilterChip({
     >
       {children}
     </Badge>
-  );
-}
-
-function SegmentButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-        active
-          ? "bg-card text-foreground shadow-sm"
-          : "text-muted-foreground hover:text-foreground"
-      )}
-    >
-      {children}
-    </button>
   );
 }
