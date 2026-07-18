@@ -235,36 +235,19 @@ export async function updateComment(
 }
 
 // 삭제 공용: 답글이 있으면 묘비(소프트), 없으면 하드 삭제.
+// count-확인과 삭제를 DB 함수 한 트랜잭션으로 묶어 경합 시 답글 유실을 막는다.
 // restrictUserId가 있으면 본인 것만(비어드민), null이면 무제한(어드민).
 async function performDelete(
   commentId: number,
   restrictUserId: number | null
 ): Promise<void> {
   const supabase = getSupabaseAdmin();
-
-  const { count, error: countError } = await supabase
-    .from("stock_comments")
-    .select("id", { count: "exact", head: true })
-    .eq("parent_id", commentId);
-  if (countError) throw countError;
-  const hasReplies = (count ?? 0) > 0;
-
-  let query;
-  if (hasReplies) {
-    // 묘비: 답글 보존, 본문·스티커 비우고 deleted_at 세팅
-    query = supabase
-      .from("stock_comments")
-      .update({ deleted_at: new Date().toISOString(), content: null, sticker_id: null })
-      .eq("id", commentId)
-      .is("deleted_at", null);
-  } else {
-    query = supabase.from("stock_comments").delete().eq("id", commentId);
-  }
-  if (restrictUserId !== null) query = query.eq("user_id", restrictUserId);
-
-  const { data, error } = await query.select("id").maybeSingle();
+  const { data, error } = await supabase.rpc("delete_comment", {
+    p_comment_id: commentId,
+    p_restrict_user_id: restrictUserId,
+  });
   if (error) throw error;
-  if (!data) {
+  if (data === null) {
     throw new ApiException("NOT_FOUND", "삭제할 수 없는 댓글입니다.");
   }
 }
