@@ -17,6 +17,7 @@ import {
   addDays,
   getKstParts,
   isOpenDate,
+  isoWeekdayOfDate,
   tickTimestamp,
   ticksPerDay,
   MARKET_CLOSE_HOUR,
@@ -260,6 +261,22 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
   // 지수 종가 기록 (마지막 틱 기준, upsert라 재실행 안전) — 정산일에만 의미 있음
   if (todayOpen) {
     await recordIndexCloses(today);
+
+    // 주간 배지: 매 개장일 총자산 스냅샷 → 그 주 마지막 개장일이면 정산
+    await supabase.rpc("snapshot_user_assets", { p_date: today });
+    if (
+      today >= config.eventStart &&
+      today <= config.eventEnd &&
+      isLastOpenDayOfWeek(today, config.rules)
+    ) {
+      const monday = mondayOf(today);
+      const weekStart = monday < config.eventStart ? config.eventStart : monday;
+      const { error: settleError } = await supabase.rpc("settle_weekly_badges", {
+        p_week_start: weekStart,
+        p_week_end: today,
+      });
+      if (settleError) throw settleError;
+    }
   }
 
   return {
@@ -386,4 +403,20 @@ async function loadPrevCloses(
     if (!(row.stock_code in closes)) closes[row.stock_code] = row.close;
   }
   return closes;
+}
+
+// 그 날짜가 속한 달력 주(월~일)의 월요일 날짜
+function mondayOf(dateStr: string): string {
+  return addDays(dateStr, -(isoWeekdayOfDate(dateStr) - 1));
+}
+
+// today가 이 주(월~일)의 마지막 개장일인가: 오늘 이후~그 주 일요일까지 개장일이 없으면 true
+function isLastOpenDayOfWeek(today: string, rules: OpenDayRules): boolean {
+  const sunday = addDays(mondayOf(today), 6);
+  let d = addDays(today, 1);
+  while (d <= sunday) {
+    if (isOpenDate(d, rules)) return false;
+    d = addDays(d, 1);
+  }
+  return true;
 }
