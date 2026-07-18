@@ -38,3 +38,6 @@ begin
   return p_comment_id;
 end;
 $$;
+
+-- 다른 RPC들과 동일하게 service_role에만 실행 권한 부여 (하우스 컨벤션)
+grant execute on function delete_comment(bigint, bigint) to service_role;
