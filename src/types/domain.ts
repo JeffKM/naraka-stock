@@ -140,6 +140,7 @@ export interface RankingEntry {
   rank: number;
   nickname: string;
   totalAssets: number; // 현금 + 보유주식 평가액 (원)
+  representativeBadge?: WeeklyBadge | null; // 작성자 이번 주 대표 배지 (없으면 null)
 }
 
 // 고객센터 게시글
@@ -168,4 +169,25 @@ export interface AdminSignupRequest {
   nickname: string;
   code: string;
   createdAt: string;
+}
+
+// 주간 시그니처 배지 (매주 리셋되는 경쟁형 리더보드 배지)
+export type WeeklyBadgeCategory = "asset" | "story" | "activity" | "character";
+
+export interface WeeklyBadge {
+  id: string;
+  name: string;
+  description: string;
+  tieBreakNote: string;
+  concept: string;
+  category: WeeklyBadgeCategory;
+  iconUrl: string; // 현재는 icon_symbol, 일러스트 도입 시 자산 URL
+  isUnique: boolean;
+  sortOrder: number;
+}
+
+export interface UserWeeklyBadge extends WeeklyBadge {
+  weekStart: string;
+  awardedAt: string;
+  metricValue: number | null;
 }

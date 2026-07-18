@@ -1,9 +1,11 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { BadgeChip } from "@/components/badges/BadgeChip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getJson } from "@/lib/api/client";
 import { formatMoney } from "@/lib/market";
+import type { WeeklyBadge } from "@/types/domain";
 
 // 총자산 랭킹 (운영자 전용 — 순위는 매장에서 발표)
 export function RankingSection() {
@@ -11,7 +13,12 @@ export function RankingSection() {
     queryKey: ["admin-ranking"],
     queryFn: () =>
       getJson<{
-        top: Array<{ rank: number; nickname: string; totalAssets: number }>;
+        top: Array<{
+          rank: number;
+          nickname: string;
+          totalAssets: number;
+          representativeBadge: WeeklyBadge | null;
+        }>;
         totalUsers: number;
       }>("/api/ranking"),
     refetchInterval: 60_000,
@@ -38,6 +45,12 @@ export function RankingSection() {
                 {entry.rank}
               </span>
               {entry.nickname}
+              {entry.representativeBadge && (
+                <>
+                  {" "}
+                  <BadgeChip badge={entry.representativeBadge} />
+                </>
+              )}
             </span>
             <span className="tabular-nums text-sm">{formatMoney(entry.totalAssets)}</span>
           </div>

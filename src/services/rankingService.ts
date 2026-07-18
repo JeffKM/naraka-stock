@@ -1,6 +1,7 @@
 import "server-only";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getQuoteBoard } from "@/services/quoteService";
+import { getRepresentativeBadges, resolveDisplayWeekStart } from "@/services/weeklyBadgeService";
 import type { RankingEntry } from "@/types/domain";
 
 export interface RankingBoard {
@@ -39,14 +40,29 @@ export async function getRanking(): Promise<RankingBoard> {
   const ranked = users
     .filter((u) => !u.is_admin) // 운영자 계정은 참가자가 아니다
     .map((u) => ({
+      userId: u.id,
       nickname: u.nickname,
       totalAssets: u.cash + (holdingValue.get(u.id) ?? 0),
     }))
     .sort((a, b) => b.totalAssets - a.totalAssets)
     .map((entry, index) => ({ ...entry, rank: index + 1 }));
 
+  const top = ranked.slice(0, TOP_SIZE);
+
+  // 대표 배지는 임베드하지 않고 user_id 집합으로 별도 배치 조회해 합성한다 (N+1 방지, PostgREST 임베드 회피).
+  const weekStart = await resolveDisplayWeekStart();
+  const badges = await getRepresentativeBadges(
+    top.map((e) => e.userId),
+    weekStart
+  );
+
   return {
-    top: ranked.slice(0, TOP_SIZE),
+    top: top.map((e) => ({
+      rank: e.rank,
+      nickname: e.nickname,
+      totalAssets: e.totalAssets,
+      representativeBadge: badges.get(e.userId) ?? null,
+    })),
     totalUsers: ranked.length,
   };
 }

@@ -4,12 +4,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Check, Pencil, ThumbsUp, X } from "lucide-react";
 import { toast } from "sonner";
+import { BadgeChip } from "@/components/badges/BadgeChip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getJson, patchJson, postJson } from "@/lib/api/client";
 import { StickerPicker } from "@/components/trade/StickerPicker";
 import { useStickers, type CatalogSticker } from "@/hooks/useStickers";
+import type { WeeklyBadge } from "@/types/domain";
 
 interface StockComment {
   id: number;
@@ -19,6 +21,7 @@ interface StockComment {
   mine: boolean;
   likeCount: number;
   likedByMe: boolean;
+  representativeBadge: WeeklyBadge | null;
   stickerId: string | null;
 }
 
@@ -185,6 +188,7 @@ export function StockComments({ stockCode }: { stockCode: string }) {
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-muted-foreground">
                   <span className="font-medium text-foreground">{c.nickname}</span>{" "}
+                  {c.representativeBadge && <BadgeChip badge={c.representativeBadge} />}{" "}
                   · {relativeTime(c.createdAt)}
                 </p>
                 {editingId === c.id ? (

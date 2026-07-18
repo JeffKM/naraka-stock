@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ThumbsUp } from "lucide-react";
 import { toast } from "sonner";
+import { BadgeChip } from "@/components/badges/BadgeChip";
 import { Badge } from "@/components/ui/badge";
 import { getJson, postJson } from "@/lib/api/client";
 import { useStickers } from "@/hooks/useStickers";
+import type { WeeklyBadge } from "@/types/domain";
 
 interface DiscussionComment {
   id: number;
@@ -18,6 +20,7 @@ interface DiscussionComment {
   likedByMe: boolean;
   stockCode: string;
   stockName: string;
+  representativeBadge: WeeklyBadge | null;
   stickerId: string | null;
 }
 
@@ -75,6 +78,7 @@ export function DiscussionList() {
         >
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="font-medium text-foreground">{c.nickname}</span>
+            {c.representativeBadge && <BadgeChip badge={c.representativeBadge} />}
             <span>·</span>
             <span>{relativeTime(c.createdAt)}</span>
             <Link href={`/stocks/${c.stockCode}`} className="ml-auto">
