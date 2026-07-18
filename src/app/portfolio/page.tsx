@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SegmentButton } from "@/components/ui/SegmentButton";
 import { EmptyState } from "@/components/mascot/EmptyState";
 import { TradeHistoryCard } from "@/components/portfolio/TradeHistoryCard";
 import { MyOrdersCard } from "@/components/order/MyOrdersCard";
@@ -64,6 +65,7 @@ export default function PortfolioPage() {
   const queryClient = useQueryClient();
   const [bonusCode, setBonusCode] = useState("");
   const [claiming, setClaiming] = useState(false);
+  const [tab, setTab] = useState<"assets" | "activity" | "history">("assets");
 
   const { data: me } = useQuery({
     queryKey: ["me"],
@@ -105,6 +107,7 @@ export default function PortfolioPage() {
     <div className="flex flex-col gap-4">
       <h1 className="text-xl font-bold">내 지갑</h1>
 
+      {/* 총자산 요약 — 세그먼트 밖, 항상 표시 */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
@@ -135,54 +138,79 @@ export default function PortfolioPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">보유 종목</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-1">
-          {portfolio && portfolio.holdings.length === 0 && (
-            <EmptyState
-              className="py-6"
-              title="아직 보유한 주식이 없어요."
-              description="시세판에서 첫 주식을 사보세요."
-            />
-          )}
-          {portfolio?.holdings.map((h) => (
-            <HoldingRow key={h.stockCode} holding={h} />
-          ))}
-        </CardContent>
-      </Card>
+      {/* 자산 | 활동 | 내역 세그먼트 */}
+      <div className="flex gap-1 rounded-lg bg-muted p-0.5">
+        <SegmentButton active={tab === "assets"} onClick={() => setTab("assets")}>
+          자산
+        </SegmentButton>
+        <SegmentButton active={tab === "activity"} onClick={() => setTab("activity")}>
+          활동
+        </SegmentButton>
+        <SegmentButton active={tab === "history"} onClick={() => setTab("history")}>
+          내역
+        </SegmentButton>
+      </div>
 
-      <MyOrdersCard />
+      {/* 자산 탭 — 보유 종목 + 내 주문 */}
+      {tab === "assets" && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">보유 종목</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-1">
+              {portfolio && portfolio.holdings.length === 0 && (
+                <EmptyState
+                  className="py-6"
+                  title="아직 보유한 주식이 없어요."
+                  description="시세판에서 첫 주식을 사보세요."
+                />
+              )}
+              {portfolio?.holdings.map((h) => (
+                <HoldingRow key={h.stockCode} holding={h} />
+              ))}
+            </CardContent>
+          </Card>
 
-      <AttendanceCard />
+          <MyOrdersCard />
+        </>
+      )}
 
-      <BadgeGrid />
+      {/* 활동 탭 — 출석 + 배지 + 방문 보너스 */}
+      {tab === "activity" && (
+        <>
+          <AttendanceCard />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">매장 방문 보너스</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">
-            매장에 게시된 오늘의 코드를 입력하면 +1,000,000원 (1일 1회)
-          </p>
-          <div className="flex gap-2">
-            <Input
-              placeholder="오늘의 방문 코드"
-              value={bonusCode}
-              onChange={(e) => setBonusCode(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && claimBonus()}
-            />
-            <Button onClick={claimBonus} disabled={claiming || !bonusCode.trim()}>
-              받기
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          <BadgeGrid />
 
-      <TradeHistoryCard />
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">매장 방문 보너스</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <p className="text-sm text-muted-foreground">
+                매장에 게시된 오늘의 코드를 입력하면 +1,000,000원 (1일 1회)
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="오늘의 방문 코드"
+                  value={bonusCode}
+                  onChange={(e) => setBonusCode(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && claimBonus()}
+                />
+                <Button onClick={claimBonus} disabled={claiming || !bonusCode.trim()}>
+                  받기
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
+      {/* 내역 탭 — 거래 내역 */}
+      {tab === "history" && <TradeHistoryCard />}
+
+      {/* 로그아웃 — 세그먼트 밖, 항상 표시 */}
       <Button variant="outline" onClick={logout}>
         로그아웃
       </Button>
