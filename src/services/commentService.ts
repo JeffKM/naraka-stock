@@ -47,7 +47,7 @@ export async function listComments(
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("stock_comments")
-    .select("id, user_id, content, created_at, users(nickname)")
+    .select("id, user_id, content, created_at, users!stock_comments_user_id_fkey(nickname)")
     .eq("stock_code", stockCode)
     .order("created_at", { ascending: false })
     .limit(PAGE_SIZE);
@@ -219,7 +219,9 @@ export async function listAllComments(
   const from = (page - 1) * PAGE_SIZE;
   const { data, error } = await supabase
     .from("stock_comments")
-    .select("id, user_id, stock_code, content, created_at, users(nickname), stocks(name)")
+    .select(
+      "id, user_id, stock_code, content, created_at, users!stock_comments_user_id_fkey(nickname), stocks(name)"
+    )
     .order("created_at", { ascending: false })
     .range(from, from + PAGE_SIZE - 1);
   if (error) throw error;
