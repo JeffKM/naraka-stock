@@ -1,6 +1,7 @@
 import "server-only";
 import { ApiException } from "@/lib/api/response";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { assertValidStickerId } from "@/services/stickerService";
 
 // 종목 토론방 — 댓글 조회/작성/본인 삭제
 
@@ -15,6 +16,7 @@ export interface StockComment {
   mine: boolean; // 내가 쓴 댓글 (삭제 버튼 노출용)
   likeCount: number; // 엄지업 수
   likedByMe: boolean; // 내가 엄지업 눌렀는지 (미로그인 시 항상 false)
+  stickerId: string | null; // 첨부 스티커 id (없으면 null)
 }
 
 // 댓글 id 목록의 엄지업 수 + 뷰어 본인 반응 여부를 한 번에 집계한다.
@@ -47,7 +49,7 @@ export async function listComments(
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("stock_comments")
-    .select("id, user_id, content, created_at, users!stock_comments_user_id_fkey(nickname)")
+    .select("id, user_id, content, created_at, sticker_id, users!stock_comments_user_id_fkey(nickname)")
     .eq("stock_code", stockCode)
     .order("created_at", { ascending: false })
     .limit(PAGE_SIZE);
@@ -67,6 +69,7 @@ export async function listComments(
       mine: viewerId !== null && row.user_id === viewerId,
       likeCount: like?.count ?? 0,
       likedByMe: like?.mine ?? false,
+      stickerId: row.sticker_id ?? null,
     };
   });
 }
@@ -74,9 +77,15 @@ export async function listComments(
 export async function createComment(
   userId: number,
   stockCode: string,
-  content: string
+  content: string | null,
+  stickerId: string | null
 ): Promise<void> {
   const supabase = getSupabaseAdmin();
+
+  // 텍스트·스티커 중 최소 하나는 있어야 한다 (API에서도 막지만 서비스에서 재확인)
+  if (!content && !stickerId) {
+    throw new ApiException("VALIDATION", "내용이나 스티커를 입력해주세요.");
+  }
 
   const { data: stock, error: stockError } = await supabase
     .from("stocks")
@@ -87,6 +96,8 @@ export async function createComment(
   if (!stock) {
     throw new ApiException("NOT_FOUND", "없는 종목입니다.");
   }
+
+  if (stickerId) await assertValidStickerId(stickerId);
 
   // 도배 방지: 최근 1분 작성 수 제한
   const since = new Date(Date.now() - 60_000).toISOString();
@@ -102,7 +113,7 @@ export async function createComment(
 
   const { error } = await supabase
     .from("stock_comments")
-    .insert({ user_id: userId, stock_code: stockCode, content });
+    .insert({ user_id: userId, stock_code: stockCode, content, sticker_id: stickerId });
   if (error) throw error;
 }
 
@@ -220,7 +231,7 @@ export async function listAllComments(
   const { data, error } = await supabase
     .from("stock_comments")
     .select(
-      "id, user_id, stock_code, content, created_at, users!stock_comments_user_id_fkey(nickname), stocks(name)"
+      "id, user_id, stock_code, content, created_at, sticker_id, users!stock_comments_user_id_fkey(nickname), stocks(name)"
     )
     .order("created_at", { ascending: false })
     .range(from, from + PAGE_SIZE - 1);
@@ -241,6 +252,7 @@ export async function listAllComments(
       mine: viewerId !== null && row.user_id === viewerId,
       likeCount: like?.count ?? 0,
       likedByMe: like?.mine ?? false,
+      stickerId: row.sticker_id ?? null,
       stockCode: row.stock_code,
       stockName:
         (row.stocks as unknown as { name: string } | null)?.name ?? row.stock_code,
