@@ -16,6 +16,7 @@ export type ApiErrorCode =
   | "NICKNAME_TAKEN" // 닉네임 중복
   | "REQUEST_DUPLICATE" // 가입요청 중복 접수 (승인 대기 중)
   | "REQUEST_INVALID" // 이미 처리된 가입요청
+  | "ATTENDANCE_ALREADY_CLAIMED" // 오늘 출석 보너스 이미 수령
   | "BANNED" // 정지 계정
   | "INTERNAL"; // 서버 내부 오류
 

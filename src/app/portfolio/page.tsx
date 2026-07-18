@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TradeHistoryCard } from "@/components/portfolio/TradeHistoryCard";
 import { MyOrdersCard } from "@/components/order/MyOrdersCard";
+import { AttendanceCard } from "@/components/portfolio/AttendanceCard";
 import { LiveTotalAssets } from "@/components/quotes/LiveTotalAssets";
 import { usePriceWiggle } from "@/hooks/usePriceWiggle";
 import { useQuotes } from "@/hooks/useQuotes";
@@ -151,6 +152,8 @@ export default function PortfolioPage() {
       </Card>
 
       <MyOrdersCard />
+
+      <AttendanceCard />
 
       <Card>
         <CardHeader>
