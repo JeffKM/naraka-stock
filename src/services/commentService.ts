@@ -1,7 +1,7 @@
 import "server-only";
 import { ApiException } from "@/lib/api/response";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { getRepresentativeBadges, resolveCurrentWeekStart } from "@/services/weeklyBadgeService";
+import { getRepresentativeBadges, resolveDisplayWeekStart } from "@/services/weeklyBadgeService";
 import type { WeeklyBadge } from "@/types/domain";
 
 // 종목 토론방 — 댓글 조회/작성/본인 삭제
@@ -27,7 +27,7 @@ async function representativeBadgesFor(
 ): Promise<Map<number, WeeklyBadge | null>> {
   const uniqueIds = [...new Set(userIds)];
   if (uniqueIds.length === 0) return new Map();
-  const weekStart = await resolveCurrentWeekStart();
+  const weekStart = await resolveDisplayWeekStart();
   return getRepresentativeBadges(uniqueIds, weekStart);
 }
 

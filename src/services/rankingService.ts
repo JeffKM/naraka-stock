@@ -1,7 +1,7 @@
 import "server-only";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getQuoteBoard } from "@/services/quoteService";
-import { getRepresentativeBadges, resolveCurrentWeekStart } from "@/services/weeklyBadgeService";
+import { getRepresentativeBadges, resolveDisplayWeekStart } from "@/services/weeklyBadgeService";
 import type { RankingEntry } from "@/types/domain";
 
 export interface RankingBoard {
@@ -50,7 +50,7 @@ export async function getRanking(): Promise<RankingBoard> {
   const top = ranked.slice(0, TOP_SIZE);
 
   // 대표 배지는 임베드하지 않고 user_id 집합으로 별도 배치 조회해 합성한다 (N+1 방지, PostgREST 임베드 회피).
-  const weekStart = await resolveCurrentWeekStart();
+  const weekStart = await resolveDisplayWeekStart();
   const badges = await getRepresentativeBadges(
     top.map((e) => e.userId),
     weekStart

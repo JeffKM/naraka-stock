@@ -36,9 +36,26 @@ export function currentWeekStart(today: string, eventStart: string): string {
   return monday < eventStart ? eventStart : monday;
 }
 
-// 서버 기준 이번 주 시작일: KST 오늘 + config.event_start로 clamp.
-export async function resolveCurrentWeekStart(): Promise<string> {
+// 표시용 주차 = 가장 최근 정산 완료 주(weekly_badge_awards의 today 이하 최대 week_start).
+// 폴백: 아직 정산된 주가 없으면(이벤트 첫 주 정산 전) 진행 중인 주(config.event_start 기반 계산).
+// 배지는 "그 주 마지막 개장일" 폐장 정산 때 삽입되는데, 그 시점 시계는 이미 다음 주라
+// 진행 중 주 기준으로는 방금 확정된 배지가 화면에 한 번도 노출되지 않는다.
+// "지난주 우승자를 이번 주 내내 착용" UX를 위해 표시 경로(랭킹/댓글/그리드/대표배지 선택)는
+// 항상 이 함수를 통해 같은 주차를 바라본다.
+export async function resolveDisplayWeekStart(): Promise<string> {
   const supabase = getSupabaseAdmin();
+  const today = getKstParts().date;
+
+  const { data: latestAward, error: awardError } = await supabase
+    .from("weekly_badge_awards")
+    .select("week_start")
+    .lte("week_start", today)
+    .order("week_start", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (awardError) throw awardError;
+  if (latestAward) return latestAward.week_start as string;
+
   const { data, error } = await supabase
     .from("config")
     .select("value")
@@ -46,7 +63,6 @@ export async function resolveCurrentWeekStart(): Promise<string> {
     .maybeSingle();
   if (error) throw error;
   const eventStart = (data?.value as string) ?? "2026-08-01";
-  const today = getKstParts().date;
   return currentWeekStart(today, eventStart);
 }
 
