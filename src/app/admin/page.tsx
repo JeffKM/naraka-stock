@@ -13,6 +13,7 @@ import { ResetSection } from "@/components/admin/ResetSection";
 import { SectorSection } from "@/components/admin/SectorSection";
 import { SignupCodeSection } from "@/components/admin/SignupCodeSection";
 import { SignupRequestSection } from "@/components/admin/SignupRequestSection";
+import { StickerSection } from "@/components/admin/StickerSection";
 import { StockSection } from "@/components/admin/StockSection";
 import { SupportSection } from "@/components/admin/SupportSection";
 import { UserSection } from "@/components/admin/UserSection";
@@ -126,6 +127,7 @@ export default function AdminPage() {
         <TabsContent value="manage" className="flex flex-col gap-4">
           <SectorSection />
           <StockSection />
+          <StickerSection />
           <EventSection />
           <ManualNewsSection />
           <ResetSection />

@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getJson, patchJson, postJson } from "@/lib/api/client";
+import { StickerPicker } from "@/components/trade/StickerPicker";
+import { useStickers, type CatalogSticker } from "@/hooks/useStickers";
 
 interface StockComment {
   id: number;
@@ -17,6 +19,7 @@ interface StockComment {
   mine: boolean;
   likeCount: number;
   likedByMe: boolean;
+  stickerId: string | null;
 }
 
 function relativeTime(iso: string): string {
@@ -38,6 +41,8 @@ function relativeTime(iso: string): string {
 export function StockComments({ stockCode }: { stockCode: string }) {
   const queryClient = useQueryClient();
   const [content, setContent] = useState("");
+  const [sticker, setSticker] = useState<CatalogSticker | null>(null);
+  const { byId } = useStickers();
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -56,11 +61,15 @@ export function StockComments({ stockCode }: { stockCode: string }) {
 
   async function submit() {
     const trimmed = content.trim();
-    if (!trimmed || submitting) return;
+    if ((!trimmed && !sticker) || submitting) return;
     setSubmitting(true);
     try {
-      await postJson(`/api/stocks/${stockCode}/comments`, { content: trimmed });
+      await postJson(`/api/stocks/${stockCode}/comments`, {
+        content: trimmed || undefined,
+        stickerId: sticker?.id,
+      });
       setContent("");
+      setSticker(null);
       queryClient.invalidateQueries({ queryKey: ["comments", stockCode] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "댓글 작성에 실패했습니다.");
@@ -134,17 +143,35 @@ export function StockComments({ stockCode }: { stockCode: string }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="flex gap-2">
-          <Input
-            placeholder="한마디 남기기 (200자)"
-            value={content}
-            maxLength={200}
-            onChange={(e) => setContent(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && submit()}
-          />
-          <Button onClick={submit} disabled={submitting || !content.trim()}>
-            등록
-          </Button>
+        <div className="flex flex-col gap-2">
+          {sticker && (
+            <div className="flex items-center gap-2 rounded-md border border-border/60 p-1.5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={sticker.imageUrl} alt={sticker.label} className="size-12 object-contain" />
+              <span className="text-xs text-muted-foreground">{sticker.label}</span>
+              <button
+                type="button"
+                onClick={() => setSticker(null)}
+                aria-label="스티커 제거"
+                className="ml-auto text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <StickerPicker onSelect={setSticker} />
+            <Input
+              placeholder="한마디 남기기 (200자)"
+              value={content}
+              maxLength={200}
+              onChange={(e) => setContent(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && submit()}
+            />
+            <Button onClick={submit} disabled={submitting || (!content.trim() && !sticker)}>
+              등록
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-col divide-y divide-border/60">
@@ -175,7 +202,15 @@ export function StockComments({ stockCode }: { stockCode: string }) {
                   </div>
                 ) : (
                   <>
-                    <p className="mt-0.5 break-words text-sm">{c.content}</p>
+                    {c.content && <p className="mt-0.5 break-words text-sm">{c.content}</p>}
+                    {c.stickerId && byId.get(c.stickerId) && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={byId.get(c.stickerId)!.imageUrl}
+                        alt={byId.get(c.stickerId)!.label}
+                        className="mt-1 size-24 object-contain"
+                      />
+                    )}
                     <button
                       onClick={() => toggleLike(c)}
                       aria-label={c.likedByMe ? "엄지업 취소" : "엄지업"}
@@ -215,7 +250,7 @@ export function StockComments({ stockCode }: { stockCode: string }) {
                 ) : (
                   <div className="mt-1 flex shrink-0 gap-1.5">
                     {/* 수정은 본인 댓글만, 삭제는 본인 또는 어드민 */}
-                    {c.mine && (
+                    {c.mine && !!c.content && (
                       <button
                         onClick={() => startEdit(c)}
                         aria-label="내 댓글 수정"
