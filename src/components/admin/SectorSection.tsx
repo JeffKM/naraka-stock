@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { deleteJson, getJson, patchJson, postJson } from "@/lib/api/client";
 import type { Sector } from "@/types/domain";
@@ -62,69 +63,78 @@ export function SectorSection() {
   });
 
   return (
-    <section className="space-y-4">
-      <h2 className="text-lg font-semibold">섹터 관리</h2>
-
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">코드(slug)</label>
-          <Input
-            value={newCode}
-            onChange={(e) => setNewCode(e.target.value)}
-            placeholder="예: energy"
-            className="w-40"
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">라벨</label>
-          <Input
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="예: 에너지·원자력"
-            className="w-48"
-          />
-        </div>
-        <Button
-          onClick={() => create.mutate()}
-          disabled={!newCode.trim() || !newLabel.trim() || create.isPending}
-        >
-          <Plus className="mr-1 size-4" />
-          추가
-        </Button>
-      </div>
-
-      <ul className="max-h-[24rem] divide-y overflow-y-auto rounded-md border">
-        {sectors.map((s) => (
-          <li key={s.code} className="flex items-center gap-3 px-3 py-2">
-            <span className="w-32 font-mono text-xs text-muted-foreground">
-              {s.code}
-            </span>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">섹터 관리</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">코드(slug)</label>
             <Input
-              defaultValue={s.labelKo}
-              className="w-48"
-              onBlur={(e) => {
-                const labelKo = e.target.value.trim();
-                if (labelKo && labelKo !== s.labelKo) {
-                  rename.mutate({ code: s.code, labelKo });
-                }
-              }}
+              value={newCode}
+              onChange={(e) => setNewCode(e.target.value)}
+              placeholder="예: energy"
+              className="w-40"
             />
-            <span className="text-xs text-muted-foreground">정렬 {s.sortOrder}</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="ml-auto"
-              onClick={() => {
-                if (confirm(`섹터 "${s.labelKo}" 삭제? (종목이 배치돼 있으면 실패)`)) {
-                  remove.mutate(s.code);
-                }
-              }}
-            >
-              <Trash2 className="size-4" />
-            </Button>
-          </li>
-        ))}
-      </ul>
-    </section>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">라벨</label>
+            <Input
+              value={newLabel}
+              onChange={(e) => setNewLabel(e.target.value)}
+              placeholder="예: 에너지·원자력"
+              className="w-48"
+            />
+          </div>
+          <Button
+            onClick={() => create.mutate()}
+            disabled={!newCode.trim() || !newLabel.trim() || create.isPending}
+          >
+            <Plus className="mr-1 size-4" />
+            추가
+          </Button>
+        </div>
+
+        <ul className="max-h-[24rem] divide-y overflow-y-auto rounded-md border">
+          {sectors.map((s) => (
+            <li key={s.code} className="flex items-center gap-3 px-3 py-2">
+              <span className="w-32 font-mono text-xs text-muted-foreground">
+                {s.code}
+              </span>
+              <Input
+                defaultValue={s.labelKo}
+                className="w-48"
+                onBlur={(e) => {
+                  const labelKo = e.target.value.trim();
+                  if (labelKo && labelKo !== s.labelKo) {
+                    rename.mutate({ code: s.code, labelKo });
+                  }
+                }}
+              />
+              <span className="text-xs text-muted-foreground">
+                정렬 {s.sortOrder}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="ml-auto"
+                onClick={() => {
+                  if (
+                    confirm(
+                      `섹터 "${s.labelKo}" 삭제? (종목이 배치돼 있으면 실패)`,
+                    )
+                  ) {
+                    remove.mutate(s.code);
+                  }
+                }}
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }

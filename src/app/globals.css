@@ -97,7 +97,7 @@
    배경은 순검정 대신 살짝 붉은 기가 도는 웜 차콜(먹색),
    텍스트는 크림/한지색, 포인트는 로고의 핏빛 레드(깊은 버건디 톤). */
 .dark {
-  /* 무드 "보라밤" (Phase C 확정) — 웜 차콜에서 보랏빛 밤으로. 지옥 분위기 레이어의 불씨·안개와 공명 */
+  /* 무드 "보라밤" (Phase C 확정) — 웜 차콜에서 보랏빛 밤으로. */
   --background: oklch(0.185 0.04 315);
   --foreground: oklch(0.93 0.02 85);
   --card: oklch(0.22 0.015 25);
@@ -328,104 +328,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .market-drift {
-    animation: none;
-  }
-}
-
-/* "아기자기한 지옥" 분위기 레이어 (HellAtmosphereLayer, 무드: 보라밤)
-   — 불씨(canvas) + 안개(radial 블롭). MarketGridBackdrop 위, 콘텐츠 아래.
-   중앙 dim / 사이드 살림 마스크로 가독성과 "허전한 사이드"를 동시에 해결한다. */
-.hell-atmosphere {
-  /* 콘텐츠 밴드(512px = max-w-lg)를 중심으로 좌우 120px 페더.
-     밴드 안쪽은 마스크 알파를 낮춰(≈0.14) 감쇠, 바깥은 1로 살린다.
-     모바일은 밴드가 뷰포트보다 넓어 전역이 잠잠해진다. */
-  --band: 512px;
-  --feather: 120px;
-  --dim: 0.14;
-  -webkit-mask-image: linear-gradient(
-    to right,
-    black 0,
-    black calc(50% - var(--band) / 2 - var(--feather)),
-    rgba(0, 0, 0, var(--dim)) calc(50% - var(--band) / 2),
-    rgba(0, 0, 0, var(--dim)) calc(50% + var(--band) / 2),
-    black calc(50% + var(--band) / 2 + var(--feather)),
-    black 100%
-  );
-  mask-image: linear-gradient(
-    to right,
-    black 0,
-    black calc(50% - var(--band) / 2 - var(--feather)),
-    rgba(0, 0, 0, var(--dim)) calc(50% - var(--band) / 2),
-    rgba(0, 0, 0, var(--dim)) calc(50% + var(--band) / 2),
-    black calc(50% + var(--band) / 2 + var(--feather)),
-    black 100%
-  );
-}
-
-/* 라이트 테마(한지)에서는 지옥 무드가 어울리지 않으므로 숨긴다 — 다크 전용 장식 */
-.hell-atmosphere {
-  display: none;
-}
-.dark .hell-atmosphere {
-  display: block;
-}
-
-/* 안개 — 하단에서 피어오르는 3블롭. screen 블렌드로 어두운 배경 위에서만 밝게 더해진다.
-   강도(불투명도) 기준값 15 → 0.15 안팎. 아주 느린 부유로 살아있는 느낌만. */
-.hell-fog {
-  position: absolute;
-  inset: auto -10% -25% -10%;
-  height: 75%;
-  mix-blend-mode: screen;
-  will-change: transform;
-  filter: blur(8px);
-}
-.hell-fog-a {
-  background: radial-gradient(
-    50% 60% at 25% 100%,
-    rgba(168, 104, 206, 0.16) 0%,
-    rgba(168, 104, 206, 0) 70%
-  );
-  animation: hell-fog-drift-a 34s ease-in-out infinite;
-}
-.hell-fog-b {
-  background: radial-gradient(
-    55% 65% at 78% 100%,
-    rgba(120, 80, 168, 0.15) 0%,
-    rgba(120, 80, 168, 0) 72%
-  );
-  animation: hell-fog-drift-b 41s ease-in-out infinite;
-}
-.hell-fog-c {
-  background: radial-gradient(
-    45% 55% at 52% 100%,
-    rgba(168, 104, 206, 0.1) 0%,
-    rgba(168, 104, 206, 0) 68%
-  );
-  animation: hell-fog-drift-a 47s ease-in-out infinite reverse;
-}
-
-@keyframes hell-fog-drift-a {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(4%, -3%, 0) scale(1.08);
-  }
-}
-@keyframes hell-fog-drift-b {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1.05);
-  }
-  50% {
-    transform: translate3d(-5%, -4%, 0) scale(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hell-fog {
     animation: none;
   }
 }

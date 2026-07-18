@@ -82,7 +82,6 @@ function TradePageBlock({
     <>
       {page === 1 && data.trades.length === 0 && (
         <EmptyState
-          mascotSize={72}
           title="아직 거래 기록이 없어요."
           description="첫 거래를 기다리고 있어요."
         />

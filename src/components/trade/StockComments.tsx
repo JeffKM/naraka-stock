@@ -169,7 +169,6 @@ export function StockComments({ stockCode }: { stockCode: string }) {
         <div className="flex flex-col divide-y divide-border/60">
           {data?.comments.length === 0 && (
             <EmptyState
-              mascotSize={72}
               className="py-6"
               title="아직 댓글이 없어요."
               description="첫 밈을 남겨보세요."

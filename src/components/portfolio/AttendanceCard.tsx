@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Mascot } from "@/components/mascot/Mascot";
 import { getJson, postJson } from "@/lib/api/client";
 import { formatMoney } from "@/lib/market";
 
@@ -65,13 +64,10 @@ export function AttendanceCard() {
           </p>
         ) : (
           <>
-            <div className="flex items-center gap-3">
-              <Mascot pose="wave" size={56} />
-              <p className="text-sm text-muted-foreground">
-                오늘도 와줬네요! {status.nextStreak}일차 출석 보너스 {formatMoney(status.nextAmount)}
-                {status.currentStreak === 0 && " (매일 오면 점점 커져요)"}
-              </p>
-            </div>
+            <p className="text-sm text-muted-foreground">
+              오늘도 와줬네요! {status.nextStreak}일차 출석 보너스 {formatMoney(status.nextAmount)}
+              {status.currentStreak === 0 && " (매일 오면 점점 커져요)"}
+            </p>
             <Button onClick={claim} disabled={claiming}>
               출석 보너스 받기
             </Button>
