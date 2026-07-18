@@ -31,6 +31,7 @@ interface GradeMeta {
   verified: boolean;
   avatarClass: string;
   checkClass: string;
+  label?: string; // 미인증 등급 경고 칩 문구 (없으면 미표시)
 }
 
 const GRADE_META: Record<NewsGrade, GradeMeta> = {
@@ -48,6 +49,7 @@ const GRADE_META: Record<NewsGrade, GradeMeta> = {
     verified: false,
     avatarClass: "border border-border bg-muted text-muted-foreground",
     checkClass: "",
+    label: "미확인",
   },
 };
 
@@ -232,6 +234,11 @@ export function NewsList({
                 )}
                 {meta.verified && (
                   <BadgeCheck className={cn("size-4 shrink-0", meta.checkClass)} />
+                )}
+                {meta.label && (
+                  <span className="rounded-full border border-border px-1.5 py-px text-[10px] font-medium leading-none text-muted-foreground">
+                    {meta.label}
+                  </span>
                 )}
                 <span className="truncate text-muted-foreground">{author.handle}</span>
                 <span className="text-muted-foreground">·</span>
