@@ -140,6 +140,7 @@ export interface RankingEntry {
   rank: number;
   nickname: string;
   totalAssets: number; // 현금 + 보유주식 평가액 (원)
+  representativeBadge?: WeeklyBadge | null; // 작성자 이번 주 대표 배지 (없으면 null)
 }
 
 // 고객센터 게시글

@@ -1,6 +1,8 @@
 import "server-only";
 import { ApiException } from "@/lib/api/response";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { getRepresentativeBadges, resolveCurrentWeekStart } from "@/services/weeklyBadgeService";
+import type { WeeklyBadge } from "@/types/domain";
 
 // 종목 토론방 — 댓글 조회/작성/본인 삭제
 
@@ -15,6 +17,18 @@ export interface StockComment {
   mine: boolean; // 내가 쓴 댓글 (삭제 버튼 노출용)
   likeCount: number; // 엄지업 수
   likedByMe: boolean; // 내가 엄지업 눌렀는지 (미로그인 시 항상 false)
+  representativeBadge: WeeklyBadge | null; // 작성자 이번 주 대표 배지 (없으면 null)
+}
+
+// 댓글 rows의 작성자 user_id 집합으로 대표 배지를 배치 조회한다 (N+1 방지).
+// PostgREST 임베드 금지 — 별도 조회 후 앱에서 합성.
+async function representativeBadgesFor(
+  userIds: number[]
+): Promise<Map<number, WeeklyBadge | null>> {
+  const uniqueIds = [...new Set(userIds)];
+  if (uniqueIds.length === 0) return new Map();
+  const weekStart = await resolveCurrentWeekStart();
+  return getRepresentativeBadges(uniqueIds, weekStart);
 }
 
 // 댓글 id 목록의 엄지업 수 + 뷰어 본인 반응 여부를 한 번에 집계한다.
@@ -56,6 +70,7 @@ export async function listComments(
     data.map((row) => row.id),
     viewerId
   );
+  const badges = await representativeBadgesFor(data.map((row) => row.user_id));
   return data.map((row) => {
     const like = likes.get(row.id);
     return {
@@ -67,6 +82,7 @@ export async function listComments(
       mine: viewerId !== null && row.user_id === viewerId,
       likeCount: like?.count ?? 0,
       likedByMe: like?.mine ?? false,
+      representativeBadge: badges.get(row.user_id) ?? null,
     };
   });
 }
@@ -230,6 +246,7 @@ export async function listAllComments(
     data.map((row) => row.id),
     viewerId
   );
+  const badges = await representativeBadgesFor(data.map((row) => row.user_id));
   return data.map((row) => {
     const like = likes.get(row.id);
     return {
@@ -241,6 +258,7 @@ export async function listAllComments(
       mine: viewerId !== null && row.user_id === viewerId,
       likeCount: like?.count ?? 0,
       likedByMe: like?.mine ?? false,
+      representativeBadge: badges.get(row.user_id) ?? null,
       stockCode: row.stock_code,
       stockName:
         (row.stocks as unknown as { name: string } | null)?.name ?? row.stock_code,
