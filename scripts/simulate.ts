@@ -25,6 +25,18 @@ const INITIAL_CASH = 10_000_000;
 const SELL_FEE_RATE = 0.005;
 const DIVIDEND_RATE = 0.01;
 
+// 출석 스트릭 보너스 (2026-07-18 몰입 스펙): 개근 가정 시 dayIdx(0-based)별 지급액.
+// 1~2일차 30만 / 3~6일차 50만 / 7일차+ 70만. --attendance 플래그로만 활성(기본 off, 기존 동작 보존).
+// 각 전략은 그날 루프 시작에 이 현금을 받아 전략대로 굴린다(존버는 방치=현금 적립, 매일매매는 재투자).
+const WITH_ATTENDANCE = process.argv.includes("--attendance");
+function attendanceBonus(dayIdx: number): number {
+  if (!WITH_ATTENDANCE) return 0;
+  const streak = dayIdx + 1; // 개근(무결석) 가정 → dayIdx=스트릭-1
+  if (streak <= 2) return 300_000;
+  if (streak <= 6) return 500_000;
+  return 700_000;
+}
+
 // 등급·기준가·섹터는 42종 개편 확정안 기준 (2026-07-17, migrations/20260717020000_roster_42_reprice)
 // — 이 배열은 로컬 DB(마이그레이션 적용본)에서 code 오름차순으로 생성해 붙였다(스펙 §7).
 // 배열 순서는 code 오름차순(리뷰 결함 수정, 2026-07-17): drawDailyBiases·drawSectorEvents가
@@ -263,7 +275,9 @@ function bracketStrategy(
     run: (market) => {
       const p: Portfolio = { cash: INITIAL_CASH, qty: {} };
       const targets = tier === "all" ? STOCKS : STOCKS.filter((s) => s.tier === tier);
+      let dayIdx = 0;
       for (const day of market) {
+        p.cash += attendanceBonus(dayIdx++);
         const budget = Math.floor(p.cash / targets.length); // 종목별 균등 예약
         let spent = 0;
         let proceeds = 0;
@@ -320,7 +334,11 @@ const STRATEGIES: Strategy[] = [
         p.cash -= qty * price;
         p.qty[stock.code] = qty;
       }
-      for (const day of market) payDividends(p, day);
+      let dayIdx = 0;
+      for (const day of market) {
+        p.cash += attendanceBonus(dayIdx++);
+        payDividends(p, day);
+      }
       const lastCloses = Object.fromEntries(
         STOCKS.map((s) => [s.code, market[market.length - 1].paths[s.code].close])
       );
@@ -341,7 +359,11 @@ const STRATEGIES: Strategy[] = [
         p.cash -= qty * price;
         p.qty[stock.code] = qty;
       }
-      for (const day of market) payDividends(p, day);
+      let dayIdx = 0;
+      for (const day of market) {
+        p.cash += attendanceBonus(dayIdx++);
+        payDividends(p, day);
+      }
       const lastCloses = Object.fromEntries(
         STOCKS.map((s) => [s.code, market[market.length - 1].paths[s.code].close])
       );
@@ -353,7 +375,9 @@ const STRATEGIES: Strategy[] = [
     name: "단타(무작위)",
     run: (market, rng) => {
       const p: Portfolio = { cash: INITIAL_CASH, qty: {} };
+      let dayIdx = 0;
       for (const day of market) {
+        p.cash += attendanceBonus(dayIdx++);
         const stock = STOCKS[Math.floor(rng() * STOCKS.length)];
         buyAll(p, stock.code, day.paths[stock.code].open);
         sellAll(p, stock.code, day.paths[stock.code].close);
@@ -370,7 +394,9 @@ const STRATEGIES: Strategy[] = [
     name: "뉴스추종",
     run: (market, rng) => {
       const p: Portfolio = { cash: INITIAL_CASH, qty: {} };
+      let dayIdx = 0;
       for (const day of market) {
+        p.cash += attendanceBonus(dayIdx++);
         let best: { code: string; hint: number } | null = null;
         for (const stock of STOCKS) {
           const bias = day.biases[stock.code];
@@ -397,7 +423,9 @@ const STRATEGIES: Strategy[] = [
     run: (market, rng) => {
       const p: Portfolio = { cash: INITIAL_CASH, qty: {} };
       const wilds = STOCKS.filter((s) => s.tier === "wild");
+      let dayIdx = 0;
       for (const day of market) {
+        p.cash += attendanceBonus(dayIdx++);
         const stock = wilds[Math.floor(rng() * wilds.length)];
         buyAll(p, stock.code, day.paths[stock.code].open);
         sellAll(p, stock.code, day.paths[stock.code].close);
@@ -417,7 +445,9 @@ const STRATEGIES: Strategy[] = [
     name: "섹터소문추종",
     run: (market) => {
       const p: Portfolio = { cash: INITIAL_CASH, qty: {} };
+      let dayIdx = 0;
       for (const day of market) {
+        p.cash += attendanceBonus(dayIdx++);
         const upSectors = new Set(
           day.rumors.filter((r) => r.direction === "up").map((r) => r.sector)
         );
@@ -453,7 +483,8 @@ function main() {
   const runs = runsArg >= 0 ? Number(process.argv[runsArg + 1]) : 1000;
 
   console.log(
-    `개장일 ${openDays().length}일 × ${runs}회 몬테카를로 시뮬레이션 (뉴스 타이밍=${NEWS_TIMING})\n`
+    `개장일 ${openDays().length}일 × ${runs}회 몬테카를로 시뮬레이션 ` +
+      `(뉴스 타이밍=${NEWS_TIMING}, 출석보너스=${WITH_ATTENDANCE ? "개근 반영" : "없음"})\n`
   );
 
   const results: Record<string, number[]> = Object.fromEntries(
