@@ -127,6 +127,21 @@ export async function setStickerActive(id: string, active: boolean): Promise<voi
 
 export async function deleteSticker(id: string): Promise<void> {
   const supabase = getSupabaseAdmin();
+  // stock_comments.sticker_id는 on delete set null FK이고, stock_comments엔
+  // "content is not null or sticker_id is not null" 체크(has_body)가 걸려 있다.
+  // 스티커 단독 댓글(content NULL, sticker_id=이 스티커)이 있는 상태로 스티커를
+  // 곧장 삭제하면 SET NULL이 sticker_id를 지우면서 has_body를 위반해 DELETE 전체가
+  // 실패한다. 그래서 스티커 삭제 전에 "텍스트 없이 스티커만 있던" 댓글을 먼저 지운다
+  // (스티커가 사라지면 어차피 빈 댓글이 되므로 삭제가 맞다). 텍스트+스티커 댓글은
+  // 그대로 두면 FK의 set null로 sticker_id만 NULL이 되어 텍스트만 남는다(has_body 충족).
+  // admin-only 액션이라 두 단계 사이의 원자성(트랜잭션)은 요구하지 않는다.
+  const { error: purgeError } = await supabase
+    .from("stock_comments")
+    .delete()
+    .eq("sticker_id", id)
+    .is("content", null);
+  if (purgeError) throw purgeError;
+
   const { data, error } = await supabase
     .from("stickers")
     .delete()
