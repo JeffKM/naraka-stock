@@ -30,12 +30,14 @@ export function AttendanceCard() {
     if (claiming || status?.claimedToday) return;
     setClaiming(true);
     try {
-      const { amount, streak } = await postJson<{
+      const { amount, streak, cash } = await postJson<{
         cash: number;
         streak: number;
         amount: number;
       }>("/api/attendance");
-      toast.success(`출석 보너스 +${formatMoney(amount)}원! ${streak}일 연속 출석 중`);
+      toast.success(
+        `출석 보너스 +${formatMoney(amount)}! 잔고 ${formatMoney(cash)} · ${streak}일 연속 출석 중`
+      );
       queryClient.invalidateQueries({ queryKey: ["attendance"] });
       queryClient.invalidateQueries({ queryKey: ["portfolio"] });
       queryClient.invalidateQueries({ queryKey: ["me"] });
@@ -58,12 +60,12 @@ export function AttendanceCard() {
           <p className="text-sm text-muted-foreground">
             오늘 출석 완료 · {status.currentStreak}일 연속 출석 중
             <br />
-            내일 오면 {formatMoney(status.nextAmount)}원을 받아요
+            내일 오면 {formatMoney(status.nextAmount)}을 받아요
           </p>
         ) : (
           <>
             <p className="text-sm text-muted-foreground">
-              오늘 접속하면 {status.nextStreak}일차 출석 보너스 {formatMoney(status.nextAmount)}원
+              오늘 접속하면 {status.nextStreak}일차 출석 보너스 {formatMoney(status.nextAmount)}
               {status.currentStreak === 0 && " (매일 오면 점점 커져요)"}
             </p>
             <Button onClick={claim} disabled={claiming}>
