@@ -180,12 +180,19 @@ export async function toggleCommentLike(
       .eq("user_id", userId);
     if (error) throw error;
   } else {
-    // 없는 댓글이면 FK 위반 → NOT_FOUND로 변환
     const { error } = await supabase
       .from("comment_reactions")
       .insert({ comment_id: commentId, user_id: userId });
     if (error) {
-      throw new ApiException("NOT_FOUND", "없는 댓글입니다.");
+      // FK 위반(23503) = 없는 댓글 → NOT_FOUND.
+      // 유니크 위반(23505)은 동시 더블탭 경합으로 이미 좋아요가 기록된 것이라 성공 처리.
+      // 그 외 에러는 그대로 던져 handleApiError가 로깅·INTERNAL 응답하게 둔다.
+      if (error.code === "23503") {
+        throw new ApiException("NOT_FOUND", "없는 댓글입니다.");
+      }
+      if (error.code !== "23505") {
+        throw error;
+      }
     }
   }
 
