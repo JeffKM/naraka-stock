@@ -6,6 +6,7 @@ import { BottomNav } from "@/components/layout/BottomNav";
 import { FetchIndicator } from "@/components/layout/FetchIndicator";
 import { Header } from "@/components/layout/Header";
 import { HoldingAlertWatcher } from "@/components/layout/HoldingAlertWatcher";
+import { HellAtmosphereLayer } from "@/components/layout/HellAtmosphereLayer";
 import { MarketGridBackdrop } from "@/components/layout/MarketGridBackdrop";
 import { MarketHaltBanner } from "@/components/quotes/MarketHaltBanner";
 import { Toaster } from "@/components/ui/sonner";
@@ -29,7 +30,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#241a18",
+  themeColor: "#1d1726",
 };
 
 // 다크 테마 기본 (아기자기한 지옥 무드 — PRD §6.1), 설정 모달에서 라이트 전환 가능.
@@ -47,6 +48,7 @@ export default function RootLayout({
     >
       <body className="flex min-h-dvh flex-col">
         <MarketGridBackdrop />
+        <HellAtmosphereLayer />
         <Providers>
           <FetchIndicator />
           <HoldingAlertWatcher />

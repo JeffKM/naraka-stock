@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/mascot/EmptyState";
 import { getJson } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 import { formatMoney, formatQty } from "@/lib/market";
@@ -80,9 +81,11 @@ function TradePageBlock({
   return (
     <>
       {page === 1 && data.trades.length === 0 && (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          아직 거래 기록이 없습니다
-        </p>
+        <EmptyState
+          mascotSize={72}
+          title="아직 거래 기록이 없어요."
+          description="첫 거래를 기다리고 있어요."
+        />
       )}
       {data.trades.map((t) => (
         <div key={t.id} className="flex items-center justify-between py-2.5">

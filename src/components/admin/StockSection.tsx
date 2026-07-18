@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ interface AdminStock {
 export function StockSection() {
   const [search, setSearch] = useState("");
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const [listingOpen, setListingOpen] = useState(false);
   const { data: quotes } = useQuotes();
 
   const { data } = useQuery({
@@ -67,63 +69,75 @@ export function StockSection() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">종목 관리</CardTitle>
+      <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
+        <CardTitle className="text-base">
+          종목 관리
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
+            {data?.stocks.length ?? 0}종
+          </span>
+        </CardTitle>
+        <Button size="sm" variant="outline" onClick={() => setListingOpen(true)}>
+          <Plus className="mr-1 size-4" />
+          신규 상장
+        </Button>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="flex flex-col gap-3">
         <Input
           placeholder="종목명·코드 검색"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
 
-        <div className="flex flex-col divide-y divide-border/60">
-          {filtered.map((s) => {
-            const quote = quoteOf(s.code);
-            return (
-              <button
-                key={s.code}
-                onClick={() => setSelectedCode(s.code)}
-                className="flex items-center justify-between gap-2 py-2.5 text-left transition-colors hover:bg-accent/40"
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <span className="truncate font-medium">{s.name}</span>
-                  <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                    {s.code}
-                  </span>
-                  <Badge variant="secondary" className="shrink-0 text-[10px]">
-                    {TIER_LABEL[s.tier] ?? s.tier}
-                  </Badge>
-                </span>
-                {quote && (
-                  <span className="flex shrink-0 items-center text-sm tabular-nums">
-                    <span className="text-right">{formatMoney(quote.price)}</span>
-                    <span
-                      className={`w-16 text-right ${
-                        quote.changePercent > 0
-                          ? "text-bull"
-                          : quote.changePercent < 0
-                            ? "text-bear"
-                            : "text-muted-foreground"
-                      }`}
-                    >
-                      {quote.changePercent > 0 ? "+" : ""}
-                      {quote.changePercent}%
+        {/* 42종이 아래 섹션을 밀어내지 않도록 리스트 자체를 스크롤 영역으로 가둔다 */}
+        <div className="max-h-[24rem] overflow-y-auto rounded-lg border">
+          <div className="flex flex-col divide-y divide-border/60">
+            {filtered.map((s) => {
+              const quote = quoteOf(s.code);
+              return (
+                <button
+                  key={s.code}
+                  onClick={() => setSelectedCode(s.code)}
+                  className="flex items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-accent/40"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-medium">{s.name}</span>
+                    <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                      {s.code}
                     </span>
+                    <Badge variant="secondary" className="shrink-0 text-[10px]">
+                      {TIER_LABEL[s.tier] ?? s.tier}
+                    </Badge>
                   </span>
-                )}
-              </button>
-            );
-          })}
-          {filtered.length === 0 && (
-            <p className="py-4 text-center text-sm text-muted-foreground">
-              검색 결과가 없습니다
-            </p>
-          )}
+                  {quote && (
+                    <span className="flex shrink-0 items-center text-sm tabular-nums">
+                      <span className="text-right">{formatMoney(quote.price)}</span>
+                      <span
+                        className={`w-16 text-right ${
+                          quote.changePercent > 0
+                            ? "text-bull"
+                            : quote.changePercent < 0
+                              ? "text-bear"
+                              : "text-muted-foreground"
+                        }`}
+                      >
+                        {quote.changePercent > 0 ? "+" : ""}
+                        {quote.changePercent}%
+                      </span>
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+            {filtered.length === 0 && (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                검색 결과가 없습니다
+              </p>
+            )}
+          </div>
         </div>
 
         <StockDialog stock={selected} onClose={() => setSelectedCode(null)} />
-        <ListingForm />
+        <ListingDialog open={listingOpen} onOpenChange={setListingOpen} />
       </CardContent>
     </Card>
   );
@@ -302,8 +316,14 @@ function StockDialog({
   );
 }
 
-// 신규 상장 폼
-function ListingForm() {
+// 신규 상장 다이얼로그: 리스트 아래에 붙어 42줄만큼 밀리던 폼을 모달로 분리
+function ListingDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
     code: "",
@@ -332,6 +352,7 @@ function ListingForm() {
       setForm({ code: "", name: "", tier: "normal", description: "", price: "", shares: "" });
       queryClient.invalidateQueries({ queryKey: ["admin-stocks"] });
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
+      onOpenChange(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "상장 실패");
     }
@@ -344,59 +365,65 @@ function ListingForm() {
     Number(form.shares) >= 10_000;
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-dashed p-3">
-      <p className="text-sm font-medium">신규 상장</p>
-      <div className="flex gap-2">
-        <Input
-          placeholder="코드 (예: DKBI)"
-          value={form.code}
-          onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
-          className="w-32 font-mono"
-          maxLength={6}
-        />
-        <Input
-          placeholder="종목명"
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-        />
-      </div>
-      <div className="flex gap-2">
-        <select
-          value={form.tier}
-          onChange={(e) => setForm({ ...form, tier: e.target.value })}
-          className="rounded-lg border bg-background px-2 text-sm"
-        >
-          {TIER_OPTIONS.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-        <Input
-          type="number"
-          placeholder="상장가 (원)"
-          value={form.price}
-          onChange={(e) => setForm({ ...form, price: e.target.value })}
-        />
-        <Input
-          type="number"
-          placeholder="발행주식수"
-          value={form.shares}
-          onChange={(e) => setForm({ ...form, shares: e.target.value })}
-        />
-      </div>
-      <Input
-        placeholder="한 줄 소개 (선택)"
-        value={form.description}
-        onChange={(e) => setForm({ ...form, description: e.target.value })}
-      />
-      <Button onClick={listStock} disabled={!canSubmit}>
-        상장하기
-      </Button>
-      <p className="text-xs text-muted-foreground">
-        장중 상장 시 즉시 거래 가능. 신규 종목은 자동 힌트 뉴스가 없으니 수동 뉴스로
-        띄워주세요.
-      </p>
-    </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>신규 상장</DialogTitle>
+          <DialogDescription>
+            장중 상장 시 즉시 거래 가능. 신규 종목은 자동 힌트 뉴스가 없으니 수동 뉴스로
+            띄워주세요.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <Input
+              placeholder="코드 (예: DKBI)"
+              value={form.code}
+              onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
+              className="w-32 font-mono"
+              maxLength={6}
+            />
+            <Input
+              placeholder="종목명"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          </div>
+          <div className="flex gap-2">
+            <select
+              value={form.tier}
+              onChange={(e) => setForm({ ...form, tier: e.target.value })}
+              className="rounded-lg border bg-background px-2 text-sm"
+            >
+              {TIER_OPTIONS.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+            <Input
+              type="number"
+              placeholder="상장가 (원)"
+              value={form.price}
+              onChange={(e) => setForm({ ...form, price: e.target.value })}
+            />
+            <Input
+              type="number"
+              placeholder="발행주식수"
+              value={form.shares}
+              onChange={(e) => setForm({ ...form, shares: e.target.value })}
+            />
+          </div>
+          <Input
+            placeholder="한 줄 소개 (선택)"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+          />
+          <Button onClick={listStock} disabled={!canSubmit}>
+            상장하기
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Mascot } from "@/components/mascot/Mascot";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { postJson } from "@/lib/api/client";
@@ -63,8 +64,9 @@ export default function SignupPage() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>계좌 개설</CardTitle>
+      <CardHeader className="items-center text-center">
+        <Mascot pose="wave" size={96} />
+        <CardTitle>나라카에 온 걸 환영해요</CardTitle>
         <CardDescription>
           매장에서 받은 가입 코드로 나라카증권 계좌를 만들어보세요
         </CardDescription>

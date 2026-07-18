@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import { Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,6 +30,21 @@ export default function StockDetailPage({
   const { code } = use(params);
   const { data, isLoading } = useQuotes();
   const watchlist = useWatchlist();
+
+  // 전체 요약 블록이 헤더 위로 스크롤되면 한 줄 요약 바를 상단에 고정.
+  // 콜백 ref로 노드 마운트 시점(로딩 스켈레톤 이후 실제 요약이 나타날 때)에 붙인다.
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const [pinned, setPinned] = useState(false);
+  const summaryRef = useCallback((node: HTMLDivElement | null) => {
+    observerRef.current?.disconnect();
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setPinned(!entry.isIntersecting),
+      { rootMargin: "-56px 0px 0px 0px" } // 헤더(h-14=56px) 아래 기준
+    );
+    observer.observe(node);
+    observerRef.current = observer;
+  }, []);
 
   const quote = data?.quotes.find((q) => q.code === code.toUpperCase());
   // 표시용 미세 진동 (장중 + 정지 아님일 때만) — 체결가는 항상 서버 틱 값
@@ -67,7 +82,7 @@ export default function StockDetailPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
+      <div ref={summaryRef}>
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-bold">{quote.name}</h1>
           <button
@@ -108,6 +123,35 @@ export default function StockDetailPage({
           {quote.changePercent > 0 ? "+" : ""}
           {quote.changePercent}%)
         </p>
+      </div>
+
+      {/* 스크롤 시 종목명·현재가를 잃지 않게 한 줄 요약을 상단 고정 */}
+      <div
+        aria-hidden={!pinned}
+        className={cn(
+          "sticky top-14 z-20 -mx-4 overflow-hidden border-b bg-card/95 px-4 backdrop-blur transition-all duration-200",
+          pinned
+            ? "max-h-16 border-border py-2 opacity-100"
+            : "pointer-events-none max-h-0 border-transparent py-0 opacity-0"
+        )}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate font-semibold">{quote.name}</span>
+          <span
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 text-sm tabular-nums",
+              up && "text-bull",
+              down && "text-bear"
+            )}
+          >
+            <span>{up ? "▲" : down ? "▼" : "―"}</span>
+            <span className="font-semibold">{formatMoney(displayPrice)}</span>
+            <span>
+              {quote.changePercent > 0 ? "+" : ""}
+              {quote.changePercent}%
+            </span>
+          </span>
+        </div>
       </div>
 
       <StockChart code={quote.code} />

@@ -46,14 +46,22 @@ export function UserSection() {
             검색
           </Button>
         </div>
-        <div className="flex flex-col divide-y divide-border/60">
-          {data?.users.map((u) => (
-            <UserRow
-              key={u.id}
-              user={u}
-              onChanged={() => queryClient.invalidateQueries({ queryKey: ["admin-users"] })}
-            />
-          ))}
+        {/* 유저가 많아도 아래로 무한히 늘어나지 않도록 스크롤 영역으로 가둔다 */}
+        <div className="max-h-[28rem] overflow-y-auto rounded-lg border px-3">
+          <div className="flex flex-col divide-y divide-border/60">
+            {data?.users.map((u) => (
+              <UserRow
+                key={u.id}
+                user={u}
+                onChanged={() => queryClient.invalidateQueries({ queryKey: ["admin-users"] })}
+              />
+            ))}
+            {data && data.users.length === 0 && (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                검색 결과가 없습니다
+              </p>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>
