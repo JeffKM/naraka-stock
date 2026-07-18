@@ -124,13 +124,30 @@ export default function AdminPage() {
           <UserSection />
         </TabsContent>
 
-        <TabsContent value="manage" className="flex flex-col gap-4">
-          <SectorSection />
-          <StockSection />
-          <StickerSection />
-          <EventSection />
-          <ManualNewsSection />
-          <ResetSection />
+        <TabsContent value="manage">
+          {/* 6개 섹션이 세로로 쌓여 밀리던 문제 → 서브탭으로 접어 한 번에 하나만 노출 */}
+          <Tabs defaultValue="stocks">
+            <TabsList className="w-full">
+              <TabsTrigger value="stocks">종목·섹터</TabsTrigger>
+              <TabsTrigger value="content">콘텐츠</TabsTrigger>
+              <TabsTrigger value="system">시스템</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="stocks" className="flex flex-col gap-4">
+              <SectorSection />
+              <StockSection />
+            </TabsContent>
+
+            <TabsContent value="content" className="flex flex-col gap-4">
+              <StickerSection />
+              <EventSection />
+              <ManualNewsSection />
+            </TabsContent>
+
+            <TabsContent value="system" className="flex flex-col gap-4">
+              <ResetSection />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         <TabsContent value="support" className="flex flex-col gap-4">

@@ -93,7 +93,7 @@ export function SectorSection() {
         </Button>
       </div>
 
-      <ul className="divide-y rounded-md border">
+      <ul className="max-h-[24rem] divide-y overflow-y-auto rounded-md border">
         {sectors.map((s) => (
           <li key={s.code} className="flex items-center gap-3 px-3 py-2">
             <span className="w-32 font-mono text-xs text-muted-foreground">
