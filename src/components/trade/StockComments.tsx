@@ -615,7 +615,9 @@ function ReplyComposer({
 
   async function send() {
     const trimmed = value.trim();
-    if (!trimmed || busy) return;
+    const mentionOnly = `@${parentNickname}`;
+    // 프리필(@닉네임)만 있고 실제 내용이 없으면 등록하지 않는다
+    if (!trimmed || trimmed === mentionOnly || busy) return;
     setBusy(true);
     try {
       await postJson(`/api/stocks/${stockCode}/comments`, {
@@ -640,7 +642,11 @@ function ReplyComposer({
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && send()}
       />
-      <Button size="sm" onClick={send} disabled={busy || !value.trim()}>
+      <Button
+        size="sm"
+        onClick={send}
+        disabled={busy || !value.trim() || value.trim() === `@${parentNickname}`}
+      >
         답글
       </Button>
     </div>
