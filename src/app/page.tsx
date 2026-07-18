@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AssetSummaryCard } from "@/components/quotes/AssetSummaryCard";
 import { IndexCards, IndexCardsSkeleton } from "@/components/quotes/IndexCards";
+import { EmptyState } from "@/components/mascot/EmptyState";
 import { NewsHighlight } from "@/components/news/NewsHighlight";
 import { PopularStocks } from "@/components/quotes/PopularStocks";
 import { Sparkline } from "@/components/quotes/Sparkline";
@@ -246,18 +247,25 @@ export default function Home() {
       </Card>
 
       {tab === "watch" && quotes?.length === 0 && (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          {watchlist.loggedOut ? (
-            <>
-              로그인하면 관심종목을 등록할 수 있어요.{" "}
-              <Link href="/login" className="text-primary-accent underline underline-offset-4">
+        watchlist.loggedOut ? (
+          <EmptyState
+            pose="wave"
+            title="로그인하면 관심종목을 등록할 수 있어요."
+            action={
+              <Link
+                href="/login"
+                className="text-sm text-primary-accent underline underline-offset-4"
+              >
                 로그인하기
               </Link>
-            </>
-          ) : (
-            "관심 등록한 종목이 없습니다. 별을 눌러 등록하세요."
-          )}
-        </p>
+            }
+          />
+        ) : (
+          <EmptyState
+            title="아직 점찍어둔 종목이 없어요."
+            description="별을 눌러 마음에 든 종목을 담아보세요."
+          />
+        )
       )}
 
       <NewsHighlight />

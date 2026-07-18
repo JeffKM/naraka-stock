@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/mascot/EmptyState";
 import { TradeHistoryCard } from "@/components/portfolio/TradeHistoryCard";
 import { MyOrdersCard } from "@/components/order/MyOrdersCard";
 import { AttendanceCard } from "@/components/portfolio/AttendanceCard";
@@ -139,11 +140,12 @@ export default function PortfolioPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-1">
           {portfolio && portfolio.holdings.length === 0 && (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              아직 보유한 주식이 없습니다
-              <br />
-              시세판에서 첫 주식을 사보세요!
-            </p>
+            <EmptyState
+              mascotSize={80}
+              className="py-6"
+              title="아직 보유한 주식이 없어요."
+              description="시세판에서 첫 주식을 사보세요."
+            />
           )}
           {portfolio?.holdings.map((h) => (
             <HoldingRow key={h.stockCode} holding={h} />

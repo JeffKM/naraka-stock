@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getJson, patchJson, postJson } from "@/lib/api/client";
+import { EmptyState } from "@/components/mascot/EmptyState";
 import { StickerPicker } from "@/components/trade/StickerPicker";
 import { useStickers, type CatalogSticker } from "@/hooks/useStickers";
 
@@ -176,9 +177,12 @@ export function StockComments({ stockCode }: { stockCode: string }) {
 
         <div className="flex flex-col divide-y divide-border/60">
           {data?.comments.length === 0 && (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              아직 댓글이 없습니다. 첫 밈을 남겨보세요!
-            </p>
+            <EmptyState
+              mascotSize={72}
+              className="py-6"
+              title="아직 댓글이 없어요."
+              description="첫 밈을 남겨보세요."
+            />
           )}
           {data?.comments.map((c) => (
             <div key={c.id} className="flex items-start justify-between gap-2 py-2.5">
