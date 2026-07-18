@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ThumbsUp } from "lucide-react";
+import { MessageCircle, ThumbsUp } from "lucide-react";
 import { toast } from "sonner";
 import { BadgeChip } from "@/components/badges/BadgeChip";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,7 @@ import type { WeeklyBadge } from "@/types/domain";
 interface DiscussionComment {
   id: number;
   nickname: string;
-  content: string;
+  content: string | null;
   createdAt: string;
   mine: boolean;
   likeCount: number;
@@ -22,6 +22,8 @@ interface DiscussionComment {
   stockName: string;
   representativeBadge: WeeklyBadge | null;
   stickerId: string | null;
+  deleted: boolean;
+  replyCount: number;
 }
 
 function relativeTime(iso: string): string {
@@ -77,9 +79,13 @@ export function DiscussionList() {
           className="rounded-xl border border-foreground/[0.14] bg-card px-4 py-3 shadow-sm"
         >
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{c.nickname}</span>
-            {c.representativeBadge && <BadgeChip badge={c.representativeBadge} />}
-            <span>·</span>
+            {!c.deleted && (
+              <>
+                <span className="font-medium text-foreground">{c.nickname}</span>
+                {c.representativeBadge && <BadgeChip badge={c.representativeBadge} />}
+                <span>·</span>
+              </>
+            )}
             <span>{relativeTime(c.createdAt)}</span>
             <Link href={`/stocks/${c.stockCode}`} className="ml-auto">
               <Badge className="cursor-pointer bg-muted text-muted-foreground hover:bg-muted/70 hover:text-foreground">
@@ -87,27 +93,46 @@ export function DiscussionList() {
               </Badge>
             </Link>
           </div>
-          {c.content && <p className="mt-1 break-words text-sm">{c.content}</p>}
-          {c.stickerId && byId.get(c.stickerId) && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={byId.get(c.stickerId)!.imageUrl}
-              alt={byId.get(c.stickerId)!.label}
-              className="mt-1 size-24 object-contain"
-            />
+          {c.deleted ? (
+            <p className="mt-1 text-sm italic text-muted-foreground">삭제된 댓글입니다.</p>
+          ) : (
+            <>
+              {c.content && <p className="mt-1 break-words text-sm">{c.content}</p>}
+              {c.stickerId && byId.get(c.stickerId) && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={byId.get(c.stickerId)!.imageUrl}
+                  alt={byId.get(c.stickerId)!.label}
+                  className="mt-1 size-24 object-contain"
+                />
+              )}
+            </>
           )}
-          <button
-            onClick={() => toggleLike(c)}
-            aria-label={c.likedByMe ? "엄지업 취소" : "엄지업"}
-            className={`mt-1.5 inline-flex items-center gap-1 text-xs transition-colors ${
-              c.likedByMe
-                ? "text-primary-accent"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <ThumbsUp className={`size-3.5 ${c.likedByMe ? "fill-current" : ""}`} />
-            {c.likeCount > 0 && <span>{c.likeCount}</span>}
-          </button>
+          <div className="mt-1.5 flex items-center gap-3">
+            {!c.deleted && (
+              <button
+                onClick={() => toggleLike(c)}
+                aria-label={c.likedByMe ? "엄지업 취소" : "엄지업"}
+                className={`inline-flex items-center gap-1 text-xs transition-colors ${
+                  c.likedByMe
+                    ? "text-primary-accent"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <ThumbsUp className={`size-3.5 ${c.likedByMe ? "fill-current" : ""}`} />
+                {c.likeCount > 0 && <span>{c.likeCount}</span>}
+              </button>
+            )}
+            {c.replyCount > 0 && (
+              <Link
+                href={`/stocks/${c.stockCode}`}
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <MessageCircle className="size-3.5" />
+                답글 {c.replyCount}
+              </Link>
+            )}
+          </div>
         </article>
       ))}
     </div>
