@@ -39,6 +39,7 @@ const createSchema = z
   .object({
     content: contentField.optional(),
     stickerId: stickerIdField.optional(),
+    parentId: z.number().int().positive().optional(),
   })
   .refine((d) => Boolean(d.content) || Boolean(d.stickerId), {
     message: "내용이나 스티커를 입력해주세요",
@@ -62,7 +63,8 @@ export async function POST(request: Request, { params }: RouteContext) {
       user.id,
       code.toUpperCase(),
       parsed.data.content ?? null,
-      parsed.data.stickerId ?? null
+      parsed.data.stickerId ?? null,
+      parsed.data.parentId ?? null
     );
     return apiOk({ ok: true });
   } catch (error) {
