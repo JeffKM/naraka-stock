@@ -169,3 +169,24 @@ export interface AdminSignupRequest {
   code: string;
   createdAt: string;
 }
+
+// 주간 시그니처 배지 (매주 리셋되는 경쟁형 리더보드 배지)
+export type WeeklyBadgeCategory = "asset" | "story" | "activity" | "character";
+
+export interface WeeklyBadge {
+  id: string;
+  name: string;
+  description: string;
+  tieBreakNote: string;
+  concept: string;
+  category: WeeklyBadgeCategory;
+  iconUrl: string; // 현재는 icon_symbol, 일러스트 도입 시 자산 URL
+  isUnique: boolean;
+  sortOrder: number;
+}
+
+export interface UserWeeklyBadge extends WeeklyBadge {
+  weekStart: string;
+  awardedAt: string;
+  metricValue: number | null;
+}
