@@ -33,14 +33,23 @@ const contentField = z
   .min(1, "내용을 입력해주세요")
   .max(200, "댓글은 200자 이하로 입력해주세요");
 
-const createSchema = z.object({ content: contentField });
+const stickerIdField = z.string().trim().min(1).max(64);
+
+const createSchema = z
+  .object({
+    content: contentField.optional(),
+    stickerId: stickerIdField.optional(),
+  })
+  .refine((d) => Boolean(d.content) || Boolean(d.stickerId), {
+    message: "내용이나 스티커를 입력해주세요",
+  });
 
 const updateSchema = z.object({
   id: z.number().int().positive(),
   content: contentField,
 });
 
-// 댓글 작성
+// 댓글 작성 (텍스트·스티커 중 최소 하나)
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const user = await requireUser();
@@ -49,7 +58,12 @@ export async function POST(request: Request, { params }: RouteContext) {
     if (!parsed.success) {
       return apiError("VALIDATION", parsed.error.issues[0].message);
     }
-    await createComment(user.id, code.toUpperCase(), parsed.data.content);
+    await createComment(
+      user.id,
+      code.toUpperCase(),
+      parsed.data.content ?? null,
+      parsed.data.stickerId ?? null
+    );
     return apiOk({ ok: true });
   } catch (error) {
     return handleApiError(error);

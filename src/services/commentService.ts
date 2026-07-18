@@ -2,6 +2,7 @@ import "server-only";
 import { ApiException } from "@/lib/api/response";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getRepresentativeBadges, resolveDisplayWeekStart } from "@/services/weeklyBadgeService";
+import { assertValidStickerId } from "@/services/stickerService";
 import type { WeeklyBadge } from "@/types/domain";
 
 // 종목 토론방 — 댓글 조회/작성/본인 삭제
@@ -18,6 +19,7 @@ export interface StockComment {
   likeCount: number; // 엄지업 수
   likedByMe: boolean; // 내가 엄지업 눌렀는지 (미로그인 시 항상 false)
   representativeBadge: WeeklyBadge | null; // 작성자 이번 주 대표 배지 (없으면 null)
+  stickerId: string | null; // 첨부 스티커 id (없으면 null)
 }
 
 // 댓글 rows의 작성자 user_id 집합으로 대표 배지를 배치 조회한다 (N+1 방지).
@@ -61,7 +63,7 @@ export async function listComments(
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("stock_comments")
-    .select("id, user_id, content, created_at, users!stock_comments_user_id_fkey(nickname)")
+    .select("id, user_id, content, created_at, sticker_id, users!stock_comments_user_id_fkey(nickname)")
     .eq("stock_code", stockCode)
     .order("created_at", { ascending: false })
     .limit(PAGE_SIZE);
@@ -83,6 +85,7 @@ export async function listComments(
       likeCount: like?.count ?? 0,
       likedByMe: like?.mine ?? false,
       representativeBadge: badges.get(row.user_id) ?? null,
+      stickerId: row.sticker_id ?? null,
     };
   });
 }
@@ -90,9 +93,15 @@ export async function listComments(
 export async function createComment(
   userId: number,
   stockCode: string,
-  content: string
+  content: string | null,
+  stickerId: string | null
 ): Promise<void> {
   const supabase = getSupabaseAdmin();
+
+  // 텍스트·스티커 중 최소 하나는 있어야 한다 (API에서도 막지만 서비스에서 재확인)
+  if (!content && !stickerId) {
+    throw new ApiException("VALIDATION", "내용이나 스티커를 입력해주세요.");
+  }
 
   const { data: stock, error: stockError } = await supabase
     .from("stocks")
@@ -103,6 +112,8 @@ export async function createComment(
   if (!stock) {
     throw new ApiException("NOT_FOUND", "없는 종목입니다.");
   }
+
+  if (stickerId) await assertValidStickerId(stickerId);
 
   // 도배 방지: 최근 1분 작성 수 제한
   const since = new Date(Date.now() - 60_000).toISOString();
@@ -118,7 +129,7 @@ export async function createComment(
 
   const { error } = await supabase
     .from("stock_comments")
-    .insert({ user_id: userId, stock_code: stockCode, content });
+    .insert({ user_id: userId, stock_code: stockCode, content, sticker_id: stickerId });
   if (error) throw error;
 }
 
@@ -236,7 +247,7 @@ export async function listAllComments(
   const { data, error } = await supabase
     .from("stock_comments")
     .select(
-      "id, user_id, stock_code, content, created_at, users!stock_comments_user_id_fkey(nickname), stocks(name)"
+      "id, user_id, stock_code, content, created_at, sticker_id, users!stock_comments_user_id_fkey(nickname), stocks(name)"
     )
     .order("created_at", { ascending: false })
     .range(from, from + PAGE_SIZE - 1);
@@ -259,6 +270,7 @@ export async function listAllComments(
       likeCount: like?.count ?? 0,
       likedByMe: like?.mine ?? false,
       representativeBadge: badges.get(row.user_id) ?? null,
+      stickerId: row.sticker_id ?? null,
       stockCode: row.stock_code,
       stockName:
         (row.stocks as unknown as { name: string } | null)?.name ?? row.stock_code,

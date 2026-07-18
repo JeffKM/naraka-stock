@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { BadgeChip } from "@/components/badges/BadgeChip";
 import { Badge } from "@/components/ui/badge";
 import { getJson, postJson } from "@/lib/api/client";
+import { useStickers } from "@/hooks/useStickers";
 import type { WeeklyBadge } from "@/types/domain";
 
 interface DiscussionComment {
@@ -20,6 +21,7 @@ interface DiscussionComment {
   stockCode: string;
   stockName: string;
   representativeBadge: WeeklyBadge | null;
+  stickerId: string | null;
 }
 
 function relativeTime(iso: string): string {
@@ -40,6 +42,7 @@ function relativeTime(iso: string): string {
 // 작성은 각 종목 상세에서만 — 여기선 읽기 + 엄지업만 가능하다.
 export function DiscussionList() {
   const queryClient = useQueryClient();
+  const { byId } = useStickers();
   const { data } = useQuery({
     queryKey: ["discussion", 1],
     queryFn: () =>
@@ -84,7 +87,15 @@ export function DiscussionList() {
               </Badge>
             </Link>
           </div>
-          <p className="mt-1 break-words text-sm">{c.content}</p>
+          {c.content && <p className="mt-1 break-words text-sm">{c.content}</p>}
+          {c.stickerId && byId.get(c.stickerId) && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={byId.get(c.stickerId)!.imageUrl}
+              alt={byId.get(c.stickerId)!.label}
+              className="mt-1 size-24 object-contain"
+            />
+          )}
           <button
             onClick={() => toggleLike(c)}
             aria-label={c.likedByMe ? "엄지업 취소" : "엄지업"}
