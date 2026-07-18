@@ -51,12 +51,13 @@ begin
   where (created_at at time zone 'Asia/Seoul')::date between p_week_start and p_week_end
   group by user_id;
 
-  -- (C) 유저별 보유 종목 평가수익률 (마감 보유분)
+  -- (C) 유저별 보유 종목 평가수익률 (마감 보유분, admin/banned 제외 — _tot 소속만)
   create temp table _stockret on commit drop as
   select h.user_id, h.stock_code,
          (ds.close - h.avg_price)::numeric / h.avg_price as ret,
          h.quantity * ds.close as eval
   from holdings h
+  join _tot t on t.user_id = h.user_id
   join daily_summary ds on ds.stock_code = h.stock_code and ds.date = p_week_end
   where h.quantity > 0 and h.avg_price > 0;
 
@@ -88,7 +89,7 @@ begin
   where s.date between p_week_start and p_week_end
   group by s.user_id;
 
-  -- (F) VIP 합계 (출석 + 매장 방문)
+  -- (F) VIP 합계 (출석 + 매장 방문, admin/banned 제외 — _tot 소속만)
   create temp table _vip on commit drop as
   select user_id, count(*) as cnt from (
     select user_id, date from attendance_claims
@@ -96,7 +97,9 @@ begin
     union all
     select user_id, date from visit_claims
       where date between p_week_start and p_week_end
-  ) x group by user_id;
+  ) x
+  where user_id in (select user_id from _tot)
+  group by user_id;
 
   -- ── 삽입: 자산/수익 4종 ──────────────────────────────────────────────────
   insert into weekly_badge_awards (week_start, badge_id, user_id, metric_value)
@@ -171,20 +174,18 @@ begin
   where v.cnt = (select max(cnt) from _vip) and v.cnt > 0;
 
   -- ── 삽입: 캐릭터 최대주주 4종 ────────────────────────────────────────────
+  -- distinct on (z.ch)과 같은 레벨에 order by를 두어 결정성을 하드닝한다.
   insert into weekly_badge_awards (week_start, badge_id, user_id, metric_value)
-  select p_week_start, 'wk-major-' || c.ch, c.user_id, c.char_eval
+  select distinct on (z.ch) p_week_start, 'wk-major-' || z.ch, z.user_id, z.char_eval
   from (
-    select distinct on (ch) ch, user_id, char_eval
-    from (
-      select c.ch, c.user_id, c.char_eval,
-             c.char_eval::numeric / nullif(t.eval_total, 0) as weight,
-             coalesce(ct.ct, 0) as ctrade
-      from _char c
-      join _tot t on t.user_id = c.user_id
-      left join _chartrade ct on ct.user_id = c.user_id and ct.ch = c.ch
-    ) z
-    order by ch, char_eval desc, weight desc, ctrade desc
-  ) c;
+    select c.ch, c.user_id, c.char_eval,
+           c.char_eval::numeric / nullif(t.eval_total, 0) as weight,
+           coalesce(ct.ct, 0) as ctrade
+    from _char c
+    join _tot t on t.user_id = c.user_id
+    left join _chartrade ct on ct.user_id = c.user_id and ct.ch = c.ch
+  ) z
+  order by z.ch, z.char_eval desc, z.weight desc, z.ctrade desc;
 
   select count(*) into v_count from weekly_badge_awards where week_start = p_week_start;
   return v_count;
