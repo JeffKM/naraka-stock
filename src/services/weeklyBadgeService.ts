@@ -1,6 +1,6 @@
 import "server-only";
 import { ApiException } from "@/lib/api/response";
-import { addDays, isoWeekdayOfDate } from "@/lib/market";
+import { addDays, getKstParts, isoWeekdayOfDate } from "@/lib/market";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { WeeklyBadge, UserWeeklyBadge } from "@/types/domain";
 
@@ -34,6 +34,20 @@ function toBadge(row: BadgeRow): WeeklyBadge {
 export function currentWeekStart(today: string, eventStart: string): string {
   const monday = addDays(today, -(isoWeekdayOfDate(today) - 1));
   return monday < eventStart ? eventStart : monday;
+}
+
+// 서버 기준 이번 주 시작일: KST 오늘 + config.event_start로 clamp.
+export async function resolveCurrentWeekStart(): Promise<string> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("config")
+    .select("value")
+    .eq("key", "event_start")
+    .maybeSingle();
+  if (error) throw error;
+  const eventStart = (data?.value as string) ?? "2026-08-01";
+  const today = getKstParts().date;
+  return currentWeekStart(today, eventStart);
 }
 
 export async function listBadgeCatalog(): Promise<WeeklyBadge[]> {
