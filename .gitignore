@@ -47,3 +47,6 @@ next-env.d.ts
 # 에이전트 작업 폴더 — 마케팅 컨텍스트 문서만 추적, 나머지(로컬 캐시·시크릿)는 무시
 .agents/*
 !.agents/product-marketing.md
+
+# 하네스 검증 중간 산출물 (감사 추적용, 커밋 제외)
+_workspace/
