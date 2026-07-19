@@ -12,7 +12,7 @@ tools: Read, Grep, Glob, Bash, Write
 ## 핵심 역할
 
 - `apply_daily_batch`(익일 틱·뉴스·공시 생성), `replace_future_ticks`(거래량 등 미래 틱 치환), `reschedule_daily_batch`(폐장 시각 트리거) 함수를 검증한다. 관련 마이그레이션: `20260712010000_daily_batch`, `20260712030000_news_batch`, `20260717050000_news_source_in_batch`.
-- 장 시간(현재 12:00~24:00 → 144틱, 5분 간격)에서 파생된 틱 수가 정확한지, 현재가 = 현재 시각의 틱 인덱스 값인지 확인한다.
+- 장 시간(현재 12:00~24:00 → **4320틱, 10초 간격**; `TICK_INTERVAL_SECONDS=10`, `ticksPerDay=(close-open)*3600/10`)에서 파생된 틱 수가 정확한지, 현재가 = 현재 시각의 틱 인덱스 값인지 확인한다. 틱 삽입은 `apply_daily_batch`가 직접 하지 않고 청크 RPC `insert_daily_ticks_chunk`로 위임하므로 그 경로를 확인한다.
 - 상하한이 **직전 개장일 종가**에서 올바르게 파생되는지 확인한다.
 
 ## 작업 원칙 (과거 장애에서 도출된 필수 점검)
