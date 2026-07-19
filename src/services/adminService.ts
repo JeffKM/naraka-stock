@@ -346,9 +346,11 @@ export async function triggerSurpriseEvent(
       : Math.min(Math.max(Math.round((durationMinutes * 60) / TICK_INTERVAL_SECONDS), 1), remaining);
   const windowEndTick = currentTick + windowTickCount;
 
-  // 꼬리가 가파른 구간 탐지창(15분=3틱)보다 짧으면 재생성하지 않는다 — 극단적으로
+  // 꼬리가 가파른 구간 탐지창(15분)보다 짧으면 재생성하지 않는다 — 극단적으로
   // 짧은 꼬리는 스케일이 과하게 작아져 사소한 움직임이 과장된 뉴스가 되기 때문.
-  const MIN_TAIL_TICKS = 3;
+  // 5분=1틱이던 시절의 "3틱" 고정값은 10초 틱 전환 후 15분=90틱이 되므로
+  // TICK_INTERVAL_SECONDS 기반으로 다시 유도한다 (폴백 시에도 15분 벽시계 유지).
+  const MIN_TAIL_TICKS = Math.round((15 * 60) / TICK_INTERVAL_SECONDS);
   let newNews: GeneratedNews[] = [];
   if (total - 1 - windowEndTick >= MIN_TAIL_TICKS) {
     const tailTicks = ticks
@@ -391,6 +393,14 @@ export async function triggerSurpriseEvent(
     })),
   });
   if (rpcError) throw rpcError;
+
+  // 오늘 남은 구간을 다시 썼으므로 이 종목·날짜의 5분 캔들도 재집계해야
+  // 차트(daily_candles 기반)가 스테일해지지 않는다.
+  const { error: candleError } = await supabase.rpc("build_daily_candles", {
+    p_stock_code: stockCode,
+    p_date: today,
+  });
+  if (candleError) throw candleError;
 
   return {
     fromTick: currentTick,
@@ -621,6 +631,14 @@ export async function reconcileTodayTicks(): Promise<ReconcileResult | null> {
       })),
     });
     if (rpcError) throw rpcError;
+
+    // 재조정으로 오늘 경로가 바뀐 종목은 캔들도 다시 집계한다 (스테일 캔들 방지).
+    const { error: candleError } = await supabase.rpc("build_daily_candles", {
+      p_stock_code: stock.code,
+      p_date: today,
+    });
+    if (candleError) throw candleError;
+
     adjustedStocks++;
   }
 
@@ -800,6 +818,13 @@ export async function createStock(
     })),
   });
   if (rpcError) throw rpcError;
+
+  // 신규 상장으로 오늘 경로가 생겼으니 이 종목의 캔들도 즉시 집계해둔다.
+  const { error: candleError } = await supabase.rpc("build_daily_candles", {
+    p_stock_code: input.code,
+    p_date: today,
+  });
+  if (candleError) throw candleError;
 
   return { tradableNow: true };
 }
