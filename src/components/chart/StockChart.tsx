@@ -18,7 +18,6 @@ import { formatMoney } from "@/lib/market";
 interface ChartDto {
   daily: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>;
   today: Array<{ time: number; price: number; volume: number }>; // 라인용: 오늘(없으면 직전 세션)
-  intraday: Array<{ time: number; price: number; volume: number }>; // 호환 유지(현재 미사용) — 종가 포인트
   intradayCandles: Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }>; // 진짜 5분 OHLC 캔들
 }
 
