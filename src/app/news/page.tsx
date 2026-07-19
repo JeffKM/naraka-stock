@@ -74,7 +74,7 @@ export default function NewsPage() {
             ))}
           </div>
           <p className="px-4 py-6 text-center text-xs text-muted-foreground">
-            정식 뉴스도 가끔 틀리고, 찌라시는 절반만 믿으세요
+            마지막 뉴스까지 모두 확인했어요
           </p>
         </>
       ) : (
