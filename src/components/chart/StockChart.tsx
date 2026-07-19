@@ -301,6 +301,11 @@ export function StockChart({ code }: { code: string }) {
     if (!liveTip) return;
     const series = lineSeriesRef.current;
     if (!series) return;
+    // board(tip)와 data(라인)가 폴링 타이밍으로 엇갈리면 스테일 tip이 라인 마지막
+    // 완료점보다 과거일 수 있다. lightweight-charts는 마지막 시각 이전 update를 throw하고
+    // (error boundary 부재 → 상세 화면 크래시), 이를 tip이 라인 끝보다 뒤일 때만 반영해 막는다.
+    const lastTime = data?.today.at(-1)?.time ?? Number.NEGATIVE_INFINITY;
+    if (liveTip.time <= lastTime) return;
     series.update({ time: liveTip.time as never, value: liveTip.value });
   }, [liveTip, data]);
 
