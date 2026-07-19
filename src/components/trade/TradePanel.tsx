@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { TradeSuccessOverlay, type TradeSuccessInfo } from "@/components/trade/TradeSuccessOverlay";
+import { useQuoteLock } from "@/hooks/useQuoteLock";
 import { getJson, postJson } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 import { formatMoney, formatQty } from "@/lib/market";
@@ -316,25 +317,28 @@ function BuyDialog({
   const [limitText, setLimitText] = useState("");
   const market = useSubmitTrade(quote, "buy", onOpenChange, onSuccess);
   const order = useSubmitOrder(quote, "buy", onOpenChange, onSuccess);
+  // 견적-잠금: 다이얼로그가 열려 있는 동안 시장가 기준가를 고정(10초 틱 슬리피지 인지용)
+  const { lockedPrice, moved, relock } = useQuoteLock(quote.price, "buy", open);
 
   const isLimit = orderType === "limit";
   const amount = Math.floor(Number(amountText) || 0); // 금액 모드 입력값 (원)
   const qtyInput = Math.floor(Number(amountText) || 0); // 수량 모드 입력값 (매수는 정수만, D1 RPC 제약)
   const limitPrice = Math.floor(Number(limitText) || 0);
-  // 지정가면 예상 수량은 지정가 기준, 시장가면 현재가 기준
-  const unit = isLimit && limitPrice > 0 ? limitPrice : quote.price;
+  // 지정가면 예상 수량은 지정가 기준, 시장가면 잠금 견적 기준
+  const unit = isLimit && limitPrice > 0 ? limitPrice : lockedPrice;
   const quantity = unit > 0 ? amount / unit : 0; // 금액 모드(또는 지정가) 예상 수량
   // 지정가·금액 모드는 기존 금액 경로, 시장가 수량 모드만 별도 값 사용
   const buyQty = isLimit || mode === "amount" ? quantity : qtyInput;
-  const buyAmount = isLimit || mode === "amount" ? amount : Math.round(qtyInput * quote.price);
-  const maxBuyQty = quote.price > 0 ? Math.floor(availableCash / quote.price) : 0;
+  const buyAmount = isLimit || mode === "amount" ? amount : Math.round(qtyInput * lockedPrice);
+  const maxBuyQty = lockedPrice > 0 ? Math.floor(availableCash / lockedPrice) : 0;
+  const adverse = !isLimit && moved === "adverse";
 
   const bandOk = limitPrice > 0 && limitPrice <= quote.upperLimit && limitPrice >= quote.lowerLimit;
   const valid = isLimit
     ? amount >= 1 && amount <= availableCash && bandOk
     : mode === "amount"
       ? amount >= 1 && amount <= availableCash
-      : qtyInput >= 1 && Math.round(qtyInput * quote.price) <= availableCash;
+      : qtyInput >= 1 && Math.round(qtyInput * lockedPrice) <= availableCash;
 
   function reset() {
     setAmountText("");
@@ -359,11 +363,19 @@ function BuyDialog({
         <DialogHeader>
           <DialogTitle>얼마치 살까요?</DialogTitle>
           <DialogDescription>
-            {quote.name} · 1주 {formatMoney(quote.price)}
+            {quote.name} · 1주 {formatMoney(lockedPrice)}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-sm">
+            <span className="text-muted-foreground">현재가 · 10초 후 갱신</span>
+            <span className="font-semibold tabular-nums">{formatMoney(lockedPrice)}</span>
+          </div>
+          {adverse && (
+            <p className="text-xs text-bear">가격이 바뀌었어요 · 다시 확인해 주세요</p>
+          )}
+
           <OrderTypeTabs value={orderType} onChange={setOrderType} />
 
           {isLimit && (
@@ -478,19 +490,21 @@ function BuyDialog({
           <Button
             className="h-12 bg-bull text-base font-bold text-white hover:bg-bull/90"
             disabled={!valid || submitting}
-            onClick={onSubmit}
+            onClick={adverse ? relock : onSubmit}
           >
-            {submitting
-              ? "주문 중…"
-              : isLimit
-                ? "지정가 매수 예약"
-                : mode === "qty"
-                  ? qtyInput > 0
-                    ? `${qtyInput}주 구매 확인`
-                    : "구매 확인"
-                  : quantity > 0
-                    ? `${formatQty(quantity)}주 구매 확인`
-                    : "구매 확인"}
+            {adverse
+              ? "가격 변동 · 다시 확인"
+              : submitting
+                ? "주문 중…"
+                : isLimit
+                  ? "지정가 매수 예약"
+                  : mode === "qty"
+                    ? qtyInput > 0
+                      ? `${qtyInput}주 구매 확인`
+                      : "구매 확인"
+                    : quantity > 0
+                      ? `${formatQty(quantity)}주 구매 확인`
+                      : "구매 확인"}
           </Button>
         </div>
       </DialogContent>
@@ -524,19 +538,22 @@ function SellDialog({
   const [limitText, setLimitText] = useState("");
   const market = useSubmitTrade(quote, "sell", onOpenChange, onSuccess);
   const order = useSubmitOrder(quote, "sell", onOpenChange, onSuccess);
+  // 견적-잠금: 다이얼로그가 열려 있는 동안 시장가 기준가를 고정(10초 틱 슬리피지 인지용)
+  const { lockedPrice, moved, relock } = useQuoteLock(quote.price, "sell", open);
 
   const isLimit = orderType === "limit";
   const reserved = holdingQty - availableQty; // 다른 지정가로 예약 중인 수량
   const input = Number(text) || 0;
   const limitPrice = Math.floor(Number(limitText) || 0);
 
-  // 지정가는 수량 기준만. 시장가는 수량/금액 토글.
+  // 지정가는 수량 기준만. 시장가는 수량/금액 토글(금액은 잠금 견적 기준으로 환산).
   const rawQty =
-    isLimit || mode === "qty" ? input : quote.price > 0 ? input / quote.price : 0;
+    isLimit || mode === "qty" ? input : lockedPrice > 0 ? input / lockedPrice : 0;
   const sellQty = Math.min(truncQty(rawQty), availableQty);
-  const unit = isLimit && limitPrice > 0 ? limitPrice : quote.price;
+  const unit = isLimit && limitPrice > 0 ? limitPrice : lockedPrice;
   const gross = Math.round(sellQty * unit);
   const fee = Math.floor(gross * SELL_FEE_RATE);
+  const adverse = !isLimit && moved === "adverse";
 
   const bandOk = limitPrice > 0 && limitPrice <= quote.upperLimit && limitPrice >= quote.lowerLimit;
   const valid =
@@ -572,12 +589,20 @@ function SellDialog({
         <DialogHeader>
           <DialogTitle>얼마나 팔까요?</DialogTitle>
           <DialogDescription>
-            {quote.name} · 1주 {formatMoney(quote.price)} · 보유 {formatQty(holdingQty)}주
+            {quote.name} · 1주 {formatMoney(lockedPrice)} · 보유 {formatQty(holdingQty)}주
             {reserved > 1e-6 && ` (예약 ${formatQty(reserved)}주 제외)`}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-sm">
+            <span className="text-muted-foreground">현재가 · 10초 후 갱신</span>
+            <span className="font-semibold tabular-nums">{formatMoney(lockedPrice)}</span>
+          </div>
+          {adverse && (
+            <p className="text-xs text-bear">가격이 바뀌었어요 · 다시 확인해 주세요</p>
+          )}
+
           <OrderTypeTabs value={orderType} onChange={setOrderType} />
 
           {isLimit && (
@@ -635,7 +660,7 @@ function SellDialog({
                 onClick={() =>
                   setText(
                     !isLimit && mode === "amount"
-                      ? String(Math.floor(ratioBase * quote.price * chip.ratio))
+                      ? String(Math.floor(ratioBase * lockedPrice * chip.ratio))
                       : String(chip.ratio === 1 ? ratioBase : truncQty(ratioBase * chip.ratio))
                   )
                 }
@@ -670,15 +695,17 @@ function SellDialog({
               "bg-bear hover:bg-bear/90"
             )}
             disabled={!valid || submitting}
-            onClick={onSubmit}
+            onClick={adverse ? relock : onSubmit}
           >
-            {submitting
-              ? "주문 중…"
-              : isLimit
-                ? "지정가 매도 예약"
-                : sellQty > 0
-                  ? `${formatQty(sellQty)}주 판매 확인`
-                  : "판매 확인"}
+            {adverse
+              ? "가격 변동 · 다시 확인"
+              : submitting
+                ? "주문 중…"
+                : isLimit
+                  ? "지정가 매도 예약"
+                  : sellQty > 0
+                    ? `${formatQty(sellQty)}주 판매 확인`
+                    : "판매 확인"}
           </Button>
         </div>
       </DialogContent>
