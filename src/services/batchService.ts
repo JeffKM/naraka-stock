@@ -277,6 +277,23 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
       if (chunkError) throw chunkError;
       ticksInserted += inserted ?? 0;
     }
+
+    // 익일 5분 캔들 사전 집계 (Task 5의 build_daily_candles, T-7): 반드시 위 청크
+    // 삽입 루프가 "끝난 뒤"에 호출해야 한다 — daily_ticks가 아직 비어 있는 시점에
+    // 돌리면 빈 캔들만 upsert되고 재호출 전까지 그대로 남는다. 종목별 upsert라
+    // 재실행에 안전(멱등)하며, 한 종목 실패가 나머지 종목 집계를 막지 않도록 에러를
+    // 모아뒀다가 전체 루프가 끝난 뒤 한 번에 던진다.
+    const candleErrors: string[] = [];
+    for (const stock of stocks) {
+      const { error: candleError } = await supabase.rpc("build_daily_candles", {
+        p_stock_code: stock.code,
+        p_date: tomorrowDate,
+      });
+      if (candleError) candleErrors.push(`${stock.code}: ${candleError.message}`);
+    }
+    if (candleErrors.length > 0) {
+      throw new Error(`캔들 집계 실패: ${candleErrors.join("; ")}`);
+    }
   }
 
   // 지수 종가 기록 (마지막 틱 기준, upsert라 재실행 안전) — 정산일에만 의미 있음
