@@ -296,6 +296,12 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
     }
   }
 
+  // 오래된 raw 10초틱 프루닝 (Task 16): 캔들 집계가 끝난 뒤 실행해야 집계 대상이
+  // 먼저 daily_candles로 옮겨진 상태를 보장한다. 부수 작업이라 실패해도 배치
+  // 정산 전체를 막지 않고 로깅만 한다(orderService의 lazy 정산 에러 패턴과 동일).
+  const { error: pruneError } = await supabase.rpc("prune_old_ticks", { p_keep_days: 3 });
+  if (pruneError) console.error("오래된 틱 프루닝 실패(무시):", pruneError.message);
+
   // 지수 종가 기록 (마지막 틱 기준, upsert라 재실행 안전) — 정산일에만 의미 있음
   if (todayOpen) {
     await recordIndexCloses(today);
