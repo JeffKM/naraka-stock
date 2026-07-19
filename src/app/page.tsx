@@ -134,7 +134,7 @@ function QuoteRow({
           </p>
           <p
             className={cn(
-              "text-xs",
+              "text-xs tabular-nums",
               up && "text-bull",
               down && "text-bear",
               !up && !down && "text-muted-foreground"

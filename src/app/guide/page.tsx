@@ -2,11 +2,11 @@ import type { LucideIcon } from "lucide-react";
 import {
   ClockIcon,
   CoinsIcon,
+  GhostIcon,
   GiftIcon,
   MessagesSquareIcon,
   OctagonMinusIcon,
   RepeatIcon,
-  SparklesIcon,
   TimerIcon,
   TrophyIcon,
   UserPlusIcon,
@@ -24,7 +24,7 @@ type Rule = {
 
 const RULES: Rule[] = [
   {
-    icon: SparklesIcon,
+    icon: GhostIcon,
     title: "나라카증권이란?",
     body: "요괴들의 도시 나라카에서 열리는 8월 한정 모의 주식 게임입니다. 가상 화폐 1,000만원으로 요괴 테마 42개 종목을 사고팔며, 8월 30일(일) 장 마감까지 총자산을 가장 많이 불린 상위권 손님에게 매장에서 상품을 드립니다.",
   },
@@ -36,7 +36,7 @@ const RULES: Rule[] = [
   {
     icon: GiftIcon,
     title: "시작 자금과 방문 보너스",
-    body: "계좌를 만들면 10,000,000원이 지급됩니다. 매장에 방문해 게시된 '오늘의 코드'를 지갑 화면에 입력하면 하루 한 번 +1,000,000원을 더 받을 수 있어요.",
+    body: "계좌를 만들면 10,000,000원이 지급됩니다. 매장에 방문해 게시된 「오늘의 코드」를 지갑 화면에 입력하면 하루 한 번 +1,000,000원을 더 받을 수 있어요.",
   },
   {
     icon: ClockIcon,
@@ -71,7 +71,7 @@ const RULES: Rule[] = [
   {
     icon: MessagesSquareIcon,
     title: "토론방과 문의",
-    body: "종목 상세 화면에는 손님들이 함께 이야기 나누는 토론방이 있어요. 서비스에 문제가 있거나 건의할 게 있으면 하단 '문의' 탭에서 접수하면 운영자가 답해 드립니다.",
+    body: "종목 상세 화면에는 손님들이 함께 이야기 나누는 토론방이 있어요. 서비스에 문제가 있거나 건의할 게 있으면 하단 「문의」 탭에서 접수하면 운영자가 답해 드립니다.",
   },
   {
     icon: TrophyIcon,

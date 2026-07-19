@@ -56,7 +56,7 @@ export function PopularStocks() {
                   </span>
                   <div>
                     <p className="font-medium leading-tight">{s.name}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground tabular-nums">
                       {s.tradeCount.toLocaleString("ko-KR")}건 체결
                     </p>
                   </div>
@@ -65,7 +65,7 @@ export function PopularStocks() {
                   <div className="text-right">
                     <p
                       className={cn(
-                        "text-sm font-semibold leading-tight",
+                        "text-sm font-semibold leading-tight tabular-nums",
                         up && "text-bull",
                         down && "text-bear"
                       )}
@@ -74,7 +74,7 @@ export function PopularStocks() {
                     </p>
                     <p
                       className={cn(
-                        "text-xs",
+                        "text-xs tabular-nums",
                         up && "text-bull",
                         down && "text-bear",
                         !up && !down && "text-muted-foreground"

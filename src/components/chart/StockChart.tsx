@@ -21,19 +21,41 @@ interface ChartDto {
   intraday: Array<{ time: number; price: number; volume: number }>; // 분봉 집계 소스: 다일 누적
 }
 
-// 다크 테마 차트 색 (globals.css 팔레트와 톤 일치)
-const CHART_COLORS = {
-  text: "#b8ada3",
-  grid: "rgba(184, 173, 163, 0.08)",
-  up: "#e05c4f", // bull
-  down: "#5b8cc9", // bear
-  area: "#c04a3e",
-  volUp: "rgba(224, 92, 79, 0.4)",
-  volDown: "rgba(91, 140, 201, 0.4)",
-  volNeutral: "rgba(184, 173, 163, 0.4)",
-  high: "rgba(224, 92, 79, 0.5)",
-  low: "rgba(91, 140, 201, 0.5)",
+// 차트 색은 globals.css의 --chart-* 토큰이 단일 출처.
+// lightweight-charts는 canvas라 CSS 변수를 직접 못 읽으므로 마운트 시 getComputedStyle로 읽어 주입한다.
+type ChartColors = {
+  text: string;
+  grid: string;
+  up: string;
+  down: string;
+  area: string;
+  areaTop: string;
+  areaBottom: string;
+  volUp: string;
+  volDown: string;
+  volNeutral: string;
+  high: string;
+  low: string;
 };
+
+function readChartColors(el: HTMLElement): ChartColors {
+  const s = getComputedStyle(el);
+  const v = (name: string) => s.getPropertyValue(name).trim();
+  return {
+    text: v("--chart-text"),
+    grid: v("--chart-grid"),
+    up: v("--chart-up"),
+    down: v("--chart-down"),
+    area: v("--chart-area"),
+    areaTop: v("--chart-area-top"),
+    areaBottom: v("--chart-area-bottom"),
+    volUp: v("--chart-vol-up"),
+    volDown: v("--chart-vol-down"),
+    volNeutral: v("--chart-vol-neutral"),
+    high: v("--chart-high"),
+    low: v("--chart-low"),
+  };
+}
 
 // 라인(당일) / 분봉 캔들(5분 틱 집계) / 일봉 캔들
 type Mode = "line" | "m15" | "m30" | "m60" | "daily";
@@ -118,17 +140,19 @@ export function StockChart({ code }: { code: string }) {
   useEffect(() => {
     if (!containerRef.current || !data) return;
 
+    const colors = readChartColors(containerRef.current);
+
     const chart = createChart(containerRef.current, {
       // 컨테이너 CSS 높이(반응형)를 따라감 — 너비·높이 모두 ResizeObserver로 자동 추종
       autoSize: true,
       layout: {
         background: { color: "transparent" },
-        textColor: CHART_COLORS.text,
+        textColor: colors.text,
         attributionLogo: false,
       },
       grid: {
-        vertLines: { color: CHART_COLORS.grid },
-        horzLines: { color: CHART_COLORS.grid },
+        vertLines: { color: colors.grid },
+        horzLines: { color: colors.grid },
       },
       // 가격 캔들을 하단 거래량 밴드 위로 띄워 가격축 라벨·거래량 겹침 방지
       rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.1, bottom: 0.28 } },
@@ -140,17 +164,17 @@ export function StockChart({ code }: { code: string }) {
     const priceSeries =
       mode === "line"
         ? chart.addSeries(AreaSeries, {
-            lineColor: CHART_COLORS.area,
-            topColor: "rgba(192, 74, 62, 0.35)",
-            bottomColor: "rgba(192, 74, 62, 0.02)",
+            lineColor: colors.area,
+            topColor: colors.areaTop,
+            bottomColor: colors.areaBottom,
             lineWidth: 2,
           })
         : chart.addSeries(CandlestickSeries, {
-            upColor: CHART_COLORS.up,
-            downColor: CHART_COLORS.down,
+            upColor: colors.up,
+            downColor: colors.down,
             borderVisible: false,
-            wickUpColor: CHART_COLORS.up,
-            wickDownColor: CHART_COLORS.down,
+            wickUpColor: colors.up,
+            wickDownColor: colors.down,
           });
 
     // 캔들 데이터(일봉/분봉 집계) — 라인 모드에서는 빈 배열. 일봉은 날짜 문자열, 분봉은 초 단위 epoch 시간을 그대로 유지한다
@@ -182,16 +206,16 @@ export function StockChart({ code }: { code: string }) {
     const volSeries = chart.addSeries(HistogramSeries, {
       priceFormat: { type: "volume" },
       priceScaleId: "vol",
-      color: CHART_COLORS.volNeutral,
+      color: colors.volNeutral,
     });
     chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
     const volData =
       mode === "line"
-        ? data.today.map((t) => ({ time: t.time as never, value: t.volume, color: CHART_COLORS.volNeutral }))
+        ? data.today.map((t) => ({ time: t.time as never, value: t.volume, color: colors.volNeutral }))
         : candleData.map((c) => ({
             time: c.time as never,
             value: c.volume,
-            color: c.close >= c.open ? CHART_COLORS.volUp : CHART_COLORS.volDown,
+            color: c.close >= c.open ? colors.volUp : colors.volDown,
           }));
     volSeries.setData(volData);
 
@@ -201,7 +225,7 @@ export function StockChart({ code }: { code: string }) {
     if (highs.length) {
       priceSeries.createPriceLine({
         price: Math.max(...highs),
-        color: CHART_COLORS.high,
+        color: colors.high,
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
@@ -209,7 +233,7 @@ export function StockChart({ code }: { code: string }) {
       });
       priceSeries.createPriceLine({
         price: Math.min(...lows),
-        color: CHART_COLORS.low,
+        color: colors.low,
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,

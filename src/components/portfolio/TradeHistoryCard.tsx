@@ -100,7 +100,7 @@ function TradePageBlock({
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">{formatTime(t.createdAt)}</p>
           </div>
-          <div className="text-right text-sm">
+          <div className="text-right text-sm tabular-nums">
             <p>
               {formatQty(t.quantity)}주 × {formatMoney(t.price)}
             </p>

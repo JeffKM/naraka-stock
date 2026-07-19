@@ -88,7 +88,7 @@ export default function StockDetailPage({
           <button
             type="button"
             onClick={() => watchlist.toggle(quote.code)}
-            className="p-1"
+            className="rounded-sm p-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label={watchlist.isWatching(quote.code) ? "관심 해제" : "관심 등록"}
           >
             <Star
@@ -129,7 +129,7 @@ export default function StockDetailPage({
       <div
         aria-hidden={!pinned}
         className={cn(
-          "sticky top-14 z-20 -mx-4 overflow-hidden border-b bg-card/95 px-4 backdrop-blur transition-all duration-200",
+          "sticky top-14 z-20 -mx-4 overflow-hidden border-b bg-card/95 px-4 backdrop-blur transition-[max-height,opacity,padding,border-color] duration-200",
           pinned
             ? "max-h-16 border-border py-2 opacity-100"
             : "pointer-events-none max-h-0 border-transparent py-0 opacity-0"
