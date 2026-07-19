@@ -9,6 +9,7 @@ import {
 } from "@/lib/market";
 import { loadMarketConfig } from "@/lib/marketHours";
 import { PRICE_LIMIT_RATE } from "@/lib/engine/randomWalk";
+import { downsampleSpark } from "@/lib/spark";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import {
   computeIndexQuotes,
@@ -291,7 +292,7 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
       marketCap: price * stock.shares_outstanding,
       volume: Math.round(volumes[stock.code] ?? 0), // 시뮬 시장 거래량, 표시용 정수 반올림
 
-      spark: sparks[stock.code] ?? [],
+      spark: downsampleSpark(sparks[stock.code] ?? []),
     };
   });
 

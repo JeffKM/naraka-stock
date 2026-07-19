@@ -1,6 +1,7 @@
 import "server-only";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { ApiException } from "@/lib/api/response";
+import { downsampleSpark } from "@/lib/spark";
 import { loadDayLastTicks } from "@/services/tickService";
 import type { IndexQuote, StockTier } from "@/types/domain";
 
@@ -57,7 +58,7 @@ interface IndexMember {
 
 // 현재가 스냅샷에서 지수 시세 계산 (quoteService가 이미 로드한 데이터 재사용)
 //
-// T-20 성능 수정: 스파크라인은 daily_candles(5분 버킷) 해상도로 낮춰 원가 계산량을
+// T-20 성능 수정: 스파크라인은 daily_candles(1분 버킷) 해상도로 낮춰 원가 계산량을
 // 줄이되, 지수의 "현재값·등락"은 항상 currentPrices(현재 틱 실값)로 정확히 계산한다
 // — 지수는 표시 핵심 지표라 버킷 해상도로 근사하면 안 된다(스파크 곡선만 근사).
 // - pathByStock: 오늘 완료 버킷 인덱스 → 종가 (미래유출 게이팅은 quoteService가
@@ -127,7 +128,7 @@ export function computeIndexQuotes(params: {
         value,
         change,
         changePercent: open > 0 ? Math.round((change / open) * 10000) / 100 : 0,
-        spark,
+        spark: downsampleSpark(spark),
       };
     }
 
@@ -149,7 +150,7 @@ export function computeIndexQuotes(params: {
       value,
       change,
       changePercent: prevClose > 0 ? Math.round((change / prevClose) * 10000) / 100 : 0,
-      spark,
+      spark: downsampleSpark(spark),
     };
   });
 }
