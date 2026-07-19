@@ -15,7 +15,7 @@ import {
 import { generateDailyPath, type DailyPath } from "../src/lib/engine/randomWalk";
 import { createRng, hashSeed, type Rng } from "../src/lib/engine/rng";
 import { drawSectorRumors, type SectorRumor } from "../src/lib/news/generate";
-import { addDays, isOpenDate } from "../src/lib/market";
+import { addDays, isOpenDate, ticksPerDay } from "../src/lib/market";
 import type { StockSector, StockTier } from "../src/types/domain";
 
 // --- 이벤트 설정 (시드 데이터와 동일) ---
@@ -24,6 +24,11 @@ const EVENT_END = "2026-08-30";
 const INITIAL_CASH = 10_000_000;
 const SELL_FEE_RATE = 0.005;
 const DIVIDEND_RATE = 0.01;
+// 10초 틱 전환(2026-07-19): 배치 실제 운영과 동일한 하루 틱 수(12~24시 기준 4,320)로
+// 경로를 생성해야 σ 정규화(scale = TICKS_PER_DAY/totalTicks)가 실제로 검증된다.
+// generateDailyPath의 기본값(TICKS_PER_DAY=84)에 맡기면 엔진 기준 틱수로만 시뮬돼
+// 10초 틱 특유의 반올림 드리프트·VI 빈도 변화를 놓친다.
+const TOTAL_TICKS = ticksPerDay();
 
 // 출석 스트릭 보너스 (2026-07-18 몰입 스펙): 개근 가정 시 dayIdx(0-based)별 지급액.
 // 1~2일차 30만 / 3~6일차 50만 / 7일차+ 70만. --attendance 플래그로만 활성(기본 off, 기존 동작 보존).
@@ -131,7 +136,8 @@ function simulateMarket(rng: Rng): DayMarket[] {
         closes[stock.code],
         realizeBias(biases[stock.code], rng),
         stock.tier,
-        rng
+        rng,
+        TOTAL_TICKS
       );
       paths[stock.code] = path;
       closes[stock.code] = path.close;
