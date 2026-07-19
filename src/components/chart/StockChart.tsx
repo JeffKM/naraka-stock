@@ -7,13 +7,15 @@ import {
   HistogramSeries,
   createChart,
   type IChartApi,
+  type ISeriesApi,
 } from "lightweight-charts";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useQuotes } from "@/hooks/useQuotes";
 import { getJson } from "@/lib/api/client";
-import { formatMoney } from "@/lib/market";
+import { chartEpochOfSeconds, formatMoney, getKstParts, getTickIndex, TICK_INTERVAL_SECONDS } from "@/lib/market";
 
 interface ChartDto {
   daily: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>;
@@ -131,11 +133,29 @@ export function StockChart({ code }: { code: string }) {
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const lineSeriesRef = useRef<ISeriesApi<"Area"> | null>(null);
+  const { data: board } = useQuotes();
+
+  // 라인 tip: 현재 종목의 10초 현재가를 라인 끝에 얹기 위한 {time, value}.
+  // time은 서버 candleTimeEpoch와 동일 규약(chartEpochOfSeconds)으로, getTickIndex가
+  // 현재 틱으로 클램프하므로 미래 틱은 절대 새지 않는다(원칙 2). 장중·해당 종목 시세가
+  // 있을 때만 non-null.
+  const liveTip = useMemo(() => {
+    if (mode !== "line" || !board || board.marketState !== "open") return null;
+    const q = board.quotes.find((x) => x.code === code);
+    if (!q) return null;
+    const hours = { openHour: board.market.openHour, closeHour: board.market.closeHour };
+    const now = new Date(board.asOf);
+    const tickIdx = getTickIndex(now, hours, { closedWeekdays: board.market.closedWeekdays });
+    if (tickIdx === null) return null;
+    const { date } = getKstParts(now);
+    return { time: chartEpochOfSeconds(date, tickIdx * TICK_INTERVAL_SECONDS, hours.openHour), value: q.price };
+  }, [board, mode, code]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["chart", code],
     queryFn: () => getJson<ChartDto>(`/api/stocks/${code}/chart`),
-    refetchInterval: 5 * 60_000, // 틱 주기와 동일
+    refetchInterval: 60_000, // 완료된 1분봉 갱신 — 라인 끝 tip은 useQuotes(10초)가 담당
   });
 
   useEffect(() => {
@@ -177,6 +197,10 @@ export function StockChart({ code }: { code: string }) {
             wickUpColor: colors.up,
             wickDownColor: colors.down,
           });
+
+    if (mode === "line") {
+      lineSeriesRef.current = priceSeries as ISeriesApi<"Area">;
+    }
 
     // 캔들 데이터(일봉/1분/N분 집계) — 라인 모드에서는 빈 배열. 일봉은 날짜 문자열, 나머지는 초 단위 epoch.
     // m1은 서버가 내려주는 원본 1분봉을 그대로 쓰고, m5/m15/m30/m60은 1분봉을 N개씩 묶어 재집계한다.
@@ -268,15 +292,26 @@ export function StockChart({ code }: { code: string }) {
       chart.unsubscribeCrosshairMove(handleCrosshairMove);
       chart.remove();
       chartRef.current = null;
+      lineSeriesRef.current = null;
       setHover(null);
     };
   }, [data, mode]);
 
+  // 라이브 tip 반영: 10초마다 board가 갱신되면 라인 끝 점만 update. 빌드 effect가
+  // data/mode 변화로 시리즈를 다시 만든 직후에도 재적용되도록 data를 의존에 둔다.
+  useEffect(() => {
+    if (!liveTip) return;
+    const series = lineSeriesRef.current;
+    if (!series) return;
+    series.update({ time: liveTip.time as never, value: liveTip.value });
+  }, [liveTip, data]);
+
   // 라인은 오늘(없으면 fallback) 세션, m5/분봉은 5분 OHLC 캔들(다일 누적, 최근 N일)을 소스로 쓴다.
-  // 각각 실제로 그릴 데이터가 하나도 없을 때만 빈 화면을 띄운다.
+  // 각각 실제로 그릴 데이터가 하나도 없을 때만 빈 화면을 띄운다. 장중 첫 1분처럼 today가
+  // 비어도 liveTip이 있으면 빈 화면을 띄우지 않는다.
   const chartEmpty =
     data &&
-    ((mode === "line" && data.today.length === 0) ||
+    ((mode === "line" && data.today.length === 0 && !liveTip) ||
       (mode !== "line" && mode !== "daily" && data.intradayCandles.length === 0));
 
   return (
