@@ -33,11 +33,26 @@ export interface IntradayPoint {
   volume: number;
 }
 
+export interface IntradayOhlc {
+  time: number; // Unix epoch (초) — 버킷 시작 시각
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
 export interface ChartData {
   daily: DailyCandle[];
   today: IntradayPoint[]; // 라인용: 오늘 5분 틱 (없으면 직전 세션 fallback)
-  intraday: IntradayPoint[]; // 분봉 집계 소스: 이벤트 전 기간 누적 틱
+  intraday: IntradayPoint[]; // 분봉 집계 소스: 이벤트 전 기간 누적 틱 (호환 유지 — 현재 클라이언트는 intradayCandles를 사용)
+  intradayCandles: IntradayOhlc[]; // 진짜 5분 OHLC 캔들 (최근 INTRADAY_CANDLE_DAYS일로 제한)
 }
+
+// intradayCandles 페이로드 크기 제한: 이벤트 전 기간 누적이면 30일×144버킷=4,320행이라
+// 클라이언트로 다 보내기엔 무거움 — 최근 N일치만 노출(daily 모드는 daily_summary
+// 전 기간을 그대로 유지하므로 멀티데이 조회에는 영향 없음)
+const INTRADAY_CANDLE_DAYS = 7;
 
 // KST 게임 날짜 + 캔들 버킷(5분 단위) → 차트용 epoch 초 (개장 시각 기준)
 // lightweight-charts는 타임스탬프를 UTC 벽시계로 렌더링하므로 +9h 보정해
@@ -84,12 +99,12 @@ export async function getChartData(stockCode: string, now: Date = new Date()): P
   // range로 페이지네이션해 전 기간을 모은다. (date, bucket) 정렬이라 페이지
   // 경계가 날짜 중간에 걸려도 순서가 유지된다.
   const PAGE = 1000;
-  type CandleRow = { date: string; bucket: number; close: number; volume: number };
+  type CandleRow = { date: string; bucket: number; open: number; high: number; low: number; close: number; volume: number };
   const candleRows: CandleRow[] = [];
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await supabase
       .from("daily_candles")
-      .select("date, bucket, close, volume")
+      .select("date, bucket, open, high, low, close, volume")
       .eq("stock_code", stockCode)
       .lte("date", today)
       .order("date", { ascending: true })
@@ -112,8 +127,23 @@ export async function getChartData(stockCode: string, now: Date = new Date()): P
     volume: c.volume,
   });
 
-  // 분봉 집계 소스: 여러 날 누적 전체(과거 전 버킷 + 오늘 완료 버킷)
+  // 분봉 집계 소스(호환 유지): 여러 날 누적 전체(과거 전 버킷 + 오늘 완료 버킷)
   const intraday: IntradayPoint[] = visibleRows.map(toPoint);
+
+  // 진짜 5분 OHLC 캔들: 최근 INTRADAY_CANDLE_DAYS 거래일치만 노출(페이로드 절감).
+  // visibleRows에 이미 미래유출 게이팅(완료 버킷만)이 적용돼 있으므로 그대로 재사용.
+  const visibleDates = Array.from(new Set(visibleRows.map((r) => r.date))).sort();
+  const recentDates = new Set(visibleDates.slice(-INTRADAY_CANDLE_DAYS));
+  const intradayCandles: IntradayOhlc[] = visibleRows
+    .filter((r) => recentDates.has(r.date))
+    .map((c) => ({
+      time: candleTimeEpoch(c.date, c.bucket, hours.openHour),
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+      volume: c.volume,
+    }));
 
   // 라인용 오늘 세션. 오늘 틱이 없으면 직전 세션(마지막 날짜) 라인을 fallback으로 남긴다.
   let lineRows = visibleRows.filter((t) => t.date === today);
@@ -136,6 +166,7 @@ export async function getChartData(stockCode: string, now: Date = new Date()): P
       })),
     today: todayPoints,
     intraday,
+    intradayCandles,
   };
 }
 
