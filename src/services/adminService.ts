@@ -505,7 +505,7 @@ export async function reconcileTodayTicks(): Promise<ReconcileResult | null> {
 
   const totalTicks = ticksPerDay(hours);
 
-  // 오늘 경로 전체 로드 (전 종목 × 전 틱 = 42종목 × 최대 288틱). PostgREST
+  // 오늘 경로 전체 로드 (전 종목 × 전 틱 = 42종목 × 최대 4,320틱, 10초 간격 기준). PostgREST
   // max_rows(로컬 config.toml=1000) 상한을 넘으므로 range로 페이지네이션한다
   // (단일 쿼리면 뒤쪽 틱이 잘려 재조정 시 종가가 오염된다).
   // (stock_code, tick_index) 정렬로 페이지 경계를 안정화.
