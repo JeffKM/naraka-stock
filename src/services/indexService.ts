@@ -56,54 +56,67 @@ interface IndexMember {
 }
 
 // 현재가 스냅샷에서 지수 시세 계산 (quoteService가 이미 로드한 데이터 재사용)
-// - pathByStock: 오늘 틱 인덱스 → 가격 (장중 경로). 없으면 prevClose로 대체
-//   (장중 상장 종목은 상장 전 틱 가격이 없으므로 기준가로 채워 연속성 유지)
+//
+// T-20 성능 수정: 스파크라인은 daily_candles(5분 버킷) 해상도로 낮춰 원가 계산량을
+// 줄이되, 지수의 "현재값·등락"은 항상 currentPrices(현재 틱 실값)로 정확히 계산한다
+// — 지수는 표시 핵심 지표라 버킷 해상도로 근사하면 안 된다(스파크 곡선만 근사).
+// - pathByStock: 오늘 완료 버킷 인덱스 → 종가 (미래유출 게이팅은 quoteService가
+//   완료 버킷만 담아서 넘겨줌 — 진행 중인 현재 버킷은 애초에 포함되지 않는다)
+// - currentPrices: 종목별 현재가(현재 틱). 없으면 prevClose로 대체
+//   (장중 상장 종목은 상장 전 가격이 없으므로 기준가로 채워 연속성 유지)
 export function computeIndexQuotes(params: {
   indices: MarketIndexRow[];
   members: IndexMember[];
   prevCloses: Record<string, number>;
+  currentPrices: Record<string, number>;
   pathByStock: Record<string, Record<number, number>>;
-  tickIndex: number | null;
+  // 오늘 완료 버킷 상한(미포함, bucket < bucketLimit) — 차트 서비스(T-9)와 동일한
+  // maxBucketExclusive 개념. null이면 오늘 틱이 아예 없음(개장 전·휴장)
+  bucketLimit: number | null;
   prevIndexCloses: Record<string, number>;
-  // 개장 전·휴장(tickIndex null)일 때 직전 세션 지수 라인 fallback용 경로·마지막 틱.
+  // 개장 전·휴장(bucketLimit null)일 때 직전 세션 지수 라인 fallback용 경로·마지막 버킷.
   // 종목 스파크라인 fallback과 동일 기준(직전 세션 시가→종가)으로 채운다.
   fallbackPathByStock?: Record<string, Record<number, number>>;
-  fallbackMaxTick?: number | null;
+  fallbackMaxBucket?: number | null;
 }): IndexQuote[] {
   const {
     indices,
     members,
     prevCloses,
+    currentPrices,
     pathByStock,
-    tickIndex,
+    bucketLimit,
     prevIndexCloses,
     fallbackPathByStock,
-    fallbackMaxTick,
+    fallbackMaxBucket,
   } = params;
 
   return indices.map((index) => {
     const constituents = members.filter((m) => indexCodeOfTier(m.tier) === index.code);
     const round2 = (v: number) => Math.round(v * 100) / 100;
 
-    // 특정 경로·틱의 지수 값. tick이 null이면 직전 종가 기준가로 대체.
-    const indexAt = (
-      path: Record<string, Record<number, number>>,
-      tick: number | null
-    ): number => {
+    // 임의의 가격 조회 함수로 시총 합산 → 지수 값. 조회 결과가 없으면 직전 종가로 대체.
+    const capValue = (priceOf: (code: string) => number | undefined): number => {
       const cap = constituents.reduce((sum, m) => {
-        const price =
-          (tick !== null ? path[m.code]?.[tick] : undefined) ?? prevCloses[m.code] ?? 0;
+        const price = priceOf(m.code) ?? prevCloses[m.code] ?? 0;
         return sum + price * m.sharesOutstanding;
       }, 0);
       return round2(cap / index.divisor);
     };
 
+    // 특정 버킷 경로의 지수 값 (스파크라인 전용, 해상도 낮음)
+    const indexAtBucket = (path: Record<string, Record<number, number>>, bucket: number) =>
+      capValue((code) => path[code]?.[bucket]);
+
+    // 현재가 스냅샷 기준 지수 값 (정확 — 표시 핵심값)
+    const indexAtCurrent = () => capValue((code) => currentPrices[code]);
+
     // 개장 전·휴장: 직전 세션 지수 라인을 스파크라인 fallback으로 남기고,
     // 값·등락률도 그 세션 시가→종가 기준으로 계산해 종목 카드와 기준을 일치시킨다.
-    if (tickIndex === null && fallbackPathByStock && fallbackMaxTick != null) {
+    if (bucketLimit === null && fallbackPathByStock && fallbackMaxBucket != null) {
       const spark: number[] = [];
-      for (let t = 0; t <= fallbackMaxTick; t++) {
-        spark.push(indexAt(fallbackPathByStock, t));
+      for (let b = 0; b <= fallbackMaxBucket; b++) {
+        spark.push(indexAtBucket(fallbackPathByStock, b));
       }
       const open = spark[0] ?? INDEX_BASE;
       const value = spark[spark.length - 1] ?? open;
@@ -119,13 +132,15 @@ export function computeIndexQuotes(params: {
     }
 
     const spark: number[] = [];
-    if (tickIndex !== null) {
-      for (let t = 0; t <= tickIndex; t++) {
-        spark.push(indexAt(pathByStock, t));
+    if (bucketLimit !== null) {
+      for (let b = 0; b < bucketLimit; b++) {
+        spark.push(indexAtBucket(pathByStock, b));
       }
     }
 
-    const value = indexAt(pathByStock, tickIndex);
+    // 현재값은 항상 현재 틱 가격 기준 — 스파크 해상도(버킷)와 무관하게 정확해야 한다.
+    const value = indexAtCurrent();
+    if (bucketLimit !== null) spark.push(value); // 라인이 현재까지 이어지도록 마지막 점으로 추가
     const prevClose = prevIndexCloses[index.code] ?? INDEX_BASE;
     const change = round2(value - prevClose);
     return {

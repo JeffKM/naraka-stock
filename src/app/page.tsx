@@ -74,7 +74,8 @@ function QuoteRow({
   onToggle: () => void;
 }) {
   const displayPrice = usePriceWiggle(q.price, marketOpen && !q.isHalted);
-  const flash = usePriceFlash(displayPrice);
+  // 플래시는 wiggle 잔진동이 아니라 진짜 10초 틱 변화(원값)에만 발동
+  const flash = usePriceFlash(q.price);
   const up = q.change > 0;
   const down = q.change < 0;
   return (

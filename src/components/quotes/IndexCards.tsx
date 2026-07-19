@@ -36,7 +36,8 @@ export function IndexCardsSkeleton() {
 // 등락·등락률도 진동값 기준으로 재계산해 숫자끼리 어긋나지 않게 한다 (표시 전용).
 function IndexCard({ index, marketOpen }: { index: IndexQuote; marketOpen: boolean }) {
   const displayValue = useIndexWiggle(index.value, marketOpen);
-  const flash = usePriceFlash(displayValue);
+  // 플래시는 wiggle 잔진동이 아니라 진짜 10초 틱 변화(원값)에만 발동
+  const flash = usePriceFlash(index.value);
 
   const prevClose = index.value - index.change; // 전 개장일 종가 지수
   const displayChange = Math.round((displayValue - prevClose) * 100) / 100;

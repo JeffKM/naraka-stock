@@ -53,7 +53,8 @@ export default function StockDetailPage({
     data?.marketState === "open" && !quote?.isHalted
   );
   // 가격 변동 시 등락 방향 배경 플래시 (시세판과 동일 연출)
-  const flash = usePriceFlash(displayPrice);
+  // 플래시는 wiggle 잔진동이 아니라 진짜 10초 틱 변화(원값)에만 발동
+  const flash = usePriceFlash(quote?.price ?? 0);
 
   // 탭 타이틀 = "체결가 ±등락률% | 종목명" — 체결가 기준(표시용 진동 제외), 값이 바뀔 때만 갱신
   const docTitle = quote
