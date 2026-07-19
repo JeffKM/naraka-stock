@@ -1,4 +1,5 @@
 import "server-only";
+import { randomInt } from "node:crypto";
 import { ApiException } from "@/lib/api/response";
 import { realizeBias } from "@/lib/engine/bias";
 import {
@@ -80,9 +81,10 @@ export async function getDashboard(): Promise<AdminDashboard> {
 function randomCode(prefix: string, length: number): string {
   // 혼동 문자(0/O, 1/I/L) 제외
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  // 돈이 걸린 코드라 예측 불가한 암호학적 난수를 쓴다 (Math.random 금지).
   let code = "";
   for (let i = 0; i < length; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
+    code += chars[randomInt(chars.length)];
   }
   return `${prefix}-${code}`;
 }
@@ -234,7 +236,7 @@ export async function ensureVisitCodes(days: number): Promise<Array<{ date: stri
 
   const missing = dates
     .filter((d) => !existingDates.has(d))
-    .map((date) => ({ date, code: randomCode("VISIT", 4) }));
+    .map((date) => ({ date, code: randomCode("VISIT", 8) }));
   if (missing.length > 0) {
     const { error: insertError } = await supabase.from("visit_codes").insert(missing);
     if (insertError) throw insertError;

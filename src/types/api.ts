@@ -18,6 +18,7 @@ export type ApiErrorCode =
   | "REQUEST_INVALID" // 이미 처리된 가입요청
   | "ATTENDANCE_ALREADY_CLAIMED" // 오늘 출석 보너스 이미 수령
   | "BANNED" // 정지 계정
+  | "RATE_LIMITED" // 요청 과다 (무차별 대입·스팸 방어)
   | "INTERNAL"; // 서버 내부 오류
 
 export interface ApiError {
