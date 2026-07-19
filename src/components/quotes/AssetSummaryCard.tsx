@@ -39,7 +39,7 @@ export function AssetSummaryCard() {
     queryKey: ["portfolio"],
     queryFn: () => getJson<Portfolio>("/api/portfolio"),
     retry: false,
-    refetchInterval: 60_000, // 5분 틱 갱신을 놓치지 않게 폴링 (카운트업 연출의 전제)
+    refetchInterval: 60_000, // 10초 틱 갱신을 놓치지 않게 폴링 (카운트업 연출의 전제)
   });
 
   if (isLoading) {

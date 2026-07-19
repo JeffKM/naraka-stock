@@ -7,18 +7,20 @@ import {
   HistogramSeries,
   createChart,
   type IChartApi,
+  type ISeriesApi,
 } from "lightweight-charts";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useQuotes } from "@/hooks/useQuotes";
 import { getJson } from "@/lib/api/client";
-import { formatMoney } from "@/lib/market";
+import { chartEpochOfSeconds, formatMoney, getKstParts, TICK_INTERVAL_SECONDS } from "@/lib/market";
 
 interface ChartDto {
   daily: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>;
   today: Array<{ time: number; price: number; volume: number }>; // 라인용: 오늘(없으면 직전 세션)
-  intradayCandles: Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }>; // 진짜 5분 OHLC 캔들
+  intradayCandles: Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }>; // 1분 OHLC 캔들
 }
 
 // 차트 색은 globals.css의 --chart-* 토큰이 단일 출처.
@@ -57,10 +59,12 @@ function readChartColors(el: HTMLElement): ChartColors {
   };
 }
 
-// 라인(당일) / 5분 OHLC 캔들 / 분봉 캔들(5분 캔들 N개 집계) / 일봉 캔들
-type Mode = "line" | "m5" | "m15" | "m30" | "m60" | "daily";
+// 라인(당일) / 1분·N분 OHLC 캔들(1분봉을 N개 집계) / 일봉 캔들
+type Mode = "line" | "m1" | "m5" | "m15" | "m30" | "m60" | "daily";
 
-const MINUTES_BY_MODE: Record<Exclude<Mode, "line" | "daily" | "m5">, number> = {
+// m1은 원본 1분봉을 그대로 쓰고, 나머지는 1분봉 N개를 묶어 재집계한다.
+const MINUTES_BY_MODE: Record<Exclude<Mode, "line" | "daily" | "m1">, number> = {
+  m5: 5,
   m15: 15,
   m30: 30,
   m60: 60,
@@ -102,7 +106,7 @@ function timeKey(t: number | string | { year: number; month: number; day: number
   return `${t.year}-${String(t.month).padStart(2, "0")}-${String(t.day).padStart(2, "0")}`;
 }
 
-// 5분 OHLC 캔들을 n분 봉으로 재집계 (개장이 정시라 버킷 경계가 항상 맞아떨어진다).
+// 1분 OHLC 캔들을 n분 봉으로 재집계 (개장이 정시라 버킷 경계가 항상 맞아떨어진다).
 // open=첫 캔들의 open, high/low=구간 내 최대/최소, close=마지막 캔들의 close, volume=합산 —
 // 종가 포인트만 이어붙이는 것보다 정확한 OHLC가 나온다.
 function aggregateOhlcCandles(candles: IntradayCandle[], minutes: number): IntradayCandle[] {
@@ -129,11 +133,27 @@ export function StockChart({ code }: { code: string }) {
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const lineSeriesRef = useRef<ISeriesApi<"Area"> | null>(null);
+  const { data: board } = useQuotes();
+
+  // 라인 tip: 현재 종목의 10초 현재가를 라인 끝에 얹기 위한 {time, value}.
+  // time은 서버 candleTimeEpoch와 동일 규약(chartEpochOfSeconds). tickIndex는 서버가
+  // 전체 개장일 규칙(extraOpenDays/holidayExceptions 포함)으로 계산·클램프해 내려준
+  // 값을 그대로 쓴다 — 클라에서 재판정하면 QuoteBoardDto가 노출하지 않는 규칙 때문에
+  // 오판(휴장으로 잘못 판정)할 수 있다. 현재 틱 클램프는 서버가 이미 했으므로 미래
+  // 틱은 절대 새지 않는다(원칙 2). 장중·해당 종목 시세가 있을 때만 non-null.
+  const liveTip = useMemo(() => {
+    if (mode !== "line" || !board || board.marketState !== "open" || board.tickIndex === null) return null;
+    const q = board.quotes.find((x) => x.code === code);
+    if (!q) return null;
+    const { date } = getKstParts(new Date(board.asOf));
+    return { time: chartEpochOfSeconds(date, board.tickIndex * TICK_INTERVAL_SECONDS, board.market.openHour), value: q.price };
+  }, [board, mode, code]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["chart", code],
     queryFn: () => getJson<ChartDto>(`/api/stocks/${code}/chart`),
-    refetchInterval: 5 * 60_000, // 틱 주기와 동일
+    refetchInterval: 60_000, // 완료된 1분봉 갱신 — 라인 끝 tip은 useQuotes(10초)가 담당
   });
 
   useEffect(() => {
@@ -176,16 +196,20 @@ export function StockChart({ code }: { code: string }) {
             wickDownColor: colors.down,
           });
 
-    // 캔들 데이터(일봉/5분/분봉 집계) — 라인 모드에서는 빈 배열. 일봉은 날짜 문자열, 나머지는 초 단위 epoch 시간을 그대로 유지한다.
-    // m5는 서버가 내려주는 진짜 5분 OHLC 캔들을 그대로 쓰고, m15/m30/m60은 그 캔들을 N/5개씩 묶어 재집계한다(종가 포인트 집계보다 정확).
+    if (mode === "line") {
+      lineSeriesRef.current = priceSeries as ISeriesApi<"Area">;
+    }
+
+    // 캔들 데이터(일봉/1분/N분 집계) — 라인 모드에서는 빈 배열. 일봉은 날짜 문자열, 나머지는 초 단위 epoch.
+    // m1은 서버가 내려주는 원본 1분봉을 그대로 쓰고, m5/m15/m30/m60은 1분봉을 N개씩 묶어 재집계한다.
     const candleData: ChartCandle[] =
       mode === "daily"
         ? data.daily.map((d) => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume }))
         : mode === "line"
           ? []
-          : mode === "m5"
+          : mode === "m1"
             ? data.intradayCandles.map((c) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume }))
-            : aggregateOhlcCandles(data.intradayCandles, MINUTES_BY_MODE[mode as "m15" | "m30" | "m60"]);
+            : aggregateOhlcCandles(data.intradayCandles, MINUTES_BY_MODE[mode as "m5" | "m15" | "m30" | "m60"]);
 
     if (mode === "line") {
       priceSeries.setData(
@@ -266,15 +290,31 @@ export function StockChart({ code }: { code: string }) {
       chart.unsubscribeCrosshairMove(handleCrosshairMove);
       chart.remove();
       chartRef.current = null;
+      lineSeriesRef.current = null;
       setHover(null);
     };
   }, [data, mode]);
 
-  // 라인은 오늘(없으면 fallback) 세션, m5/분봉은 5분 OHLC 캔들(다일 누적, 최근 N일)을 소스로 쓴다.
-  // 각각 실제로 그릴 데이터가 하나도 없을 때만 빈 화면을 띄운다.
+  // 라이브 tip 반영: 10초마다 board가 갱신되면 라인 끝 점만 update. 빌드 effect가
+  // data/mode 변화로 시리즈를 다시 만든 직후에도 재적용되도록 data를 의존에 둔다.
+  useEffect(() => {
+    if (!liveTip) return;
+    const series = lineSeriesRef.current;
+    if (!series) return;
+    // board(tip)와 data(라인)가 폴링 타이밍으로 엇갈리면 스테일 tip이 라인 마지막
+    // 완료점보다 과거일 수 있다. lightweight-charts는 마지막 시각 이전 update를 throw하고
+    // (error boundary 부재 → 상세 화면 크래시), 이를 tip이 라인 끝보다 뒤일 때만 반영해 막는다.
+    const lastTime = data?.today.at(-1)?.time ?? Number.NEGATIVE_INFINITY;
+    if (liveTip.time <= lastTime) return;
+    series.update({ time: liveTip.time as never, value: liveTip.value });
+  }, [liveTip, data]);
+
+  // 라인은 오늘(없으면 fallback) 세션, m1/m5/m15/m30/m60 분봉은 1분 OHLC 캔들(다일 누적, 최근 N일)을 소스로 쓴다.
+  // 각각 실제로 그릴 데이터가 하나도 없을 때만 빈 화면을 띄운다. 장중 첫 1분처럼 today가
+  // 비어도 liveTip이 있으면 빈 화면을 띄우지 않는다.
   const chartEmpty =
     data &&
-    ((mode === "line" && data.today.length === 0) ||
+    ((mode === "line" && data.today.length === 0 && !liveTip) ||
       (mode !== "line" && mode !== "daily" && data.intradayCandles.length === 0));
 
   return (
@@ -283,6 +323,7 @@ export function StockChart({ code }: { code: string }) {
         <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
           <TabsList>
             <TabsTrigger value="line">라인</TabsTrigger>
+            <TabsTrigger value="m1">1분</TabsTrigger>
             <TabsTrigger value="m5">5분</TabsTrigger>
             <TabsTrigger value="m15">15분</TabsTrigger>
             <TabsTrigger value="m30">30분</TabsTrigger>

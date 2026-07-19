@@ -12,6 +12,7 @@ export interface QuoteBoardDto {
   market: { openHour: number; closeHour: number; closedWeekdays: number[] };
   indices: IndexQuote[];
   quotes: StockQuote[];
+  tickIndex: number | null;
 }
 
 // 다음 10초 틱 경계까지 남은 ms + 서버 반영 여유 0.5초 (T-404: 틱 경계 정렬)
