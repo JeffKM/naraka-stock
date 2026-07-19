@@ -244,7 +244,8 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
     p_dividend_percent: config.dividendPercent,
     p_tomorrow: tomorrowOpen ? tomorrowDate : null,
     p_summaries: summaries,
-    p_ticks: ticks,
+    // 틱 삽입은 apply_daily_batch에서 분리했다(아래 참고) — 항상 빈 배열을 넘긴다.
+    p_ticks: [],
     // DB 함수는 snake_case 키를 기대한다
     p_news: news.map((n) => ({
       date: n.date,
@@ -257,6 +258,26 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
     })),
   });
   if (error) throw error;
+
+  // 익일 틱 청크 삽입 (10초 틱 전환 실측 대응, T-6): 42종목 × 4,320틱 ≈ 181,440개
+  // 객체를 apply_daily_batch 안에서 한 번에 넣으면 PostgREST 연결(authenticator)의
+  // statement_timeout=8s에 걸려 트랜잭션 전체가 실패한다(로컬 실측 확인). 삭제는
+  // apply_daily_batch가 이미 수행했으니(멱등성 유지), 여기서는 순수 삽입만 청크
+  // 단위로 나눠 순차 호출한다. 청크당 실제 소요를 8s 한도 대비 넉넉히 아래로 두기
+  // 위해 종목 3개(약 12,960틱)씩 묶는다.
+  let ticksInserted = 0;
+  if (tomorrowOpen && ticks.length > 0) {
+    const CHUNK_SIZE = 3 * config.ticksPerDay;
+    for (let i = 0; i < ticks.length; i += CHUNK_SIZE) {
+      const chunk = ticks.slice(i, i + CHUNK_SIZE);
+      const { data: inserted, error: chunkError } = await supabase.rpc(
+        "insert_daily_ticks_chunk",
+        { p_date: tomorrowDate, p_ticks: chunk }
+      );
+      if (chunkError) throw chunkError;
+      ticksInserted += inserted ?? 0;
+    }
+  }
 
   // 지수 종가 기록 (마지막 틱 기준, upsert라 재실행 안전) — 정산일에만 의미 있음
   if (todayOpen) {
@@ -284,7 +305,7 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
     settled: result.settled,
     dividendsPaid: result.dividendsPaid,
     tomorrow: tomorrowOpen ? tomorrowDate : null,
-    ticksInserted: result.ticksInserted,
+    ticksInserted, // 청크 RPC 응답 합산 (apply_daily_batch의 ticksInserted는 항상 0)
     newsInserted: result.newsInserted,
     biases,
   };
