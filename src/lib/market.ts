@@ -11,7 +11,11 @@ import type { MarketState } from "@/types/domain";
 
 export const MARKET_OPEN_HOUR = 12; // fallback 개장 시각 — 운영 기본값과 일치
 export const MARKET_CLOSE_HOUR = 24; // fallback 폐장 시각(자정) — 운영 기본값과 일치
-export const TICK_INTERVAL_MINUTES = 5;
+// 운영 틱 간격(초). 10초 = 실시간 시세. 폴백 시 이 값만 바꿔 재배포하면 된다.
+export const TICK_INTERVAL_SECONDS = 10;
+// 차트 캔들 간격(분)과 캔들당 틱 수
+export const CANDLE_INTERVAL_MINUTES = 5;
+export const TICKS_PER_CANDLE = (CANDLE_INTERVAL_MINUTES * 60) / TICK_INTERVAL_SECONDS; // 30
 // 엔진 밸런스의 기준 틱 수(고정). 실제 하루 틱 수는 장 시간에서 파생되며
 // (12~24시면 144틱) 이 상수와 다를 수 있다 — randomWalk가 sqrt(TICKS_PER_DAY/
 // totalTicks)로 변동성을 정규화하므로 두 값은 의도적으로 분리돼 있다.
@@ -68,9 +72,9 @@ export const DEFAULT_MARKET_HOURS: MarketHours = {
   closeHour: MARKET_CLOSE_HOUR,
 };
 
-// 장 시간 기준 하루 틱 수 (12~24시면 144틱)
+// 장 시간 기준 하루 틱 수 (12~24시, 10초 간격이면 4,320틱)
 export function ticksPerDay(hours: MarketHours = DEFAULT_MARKET_HOURS): number {
-  return ((hours.closeHour - hours.openHour) * 60) / TICK_INTERVAL_MINUTES;
+  return ((hours.closeHour - hours.openHour) * 3600) / TICK_INTERVAL_SECONDS;
 }
 
 // 개장일 여부 (요일 규칙 + 예외일)
@@ -96,21 +100,26 @@ export function getTickIndex(
   rules: OpenDayRules = {}
 ): number | null {
   if (getMarketState(now, hours, rules) !== "open") return null;
-  const { hour, minute } = getKstParts(now);
-  const minutesSinceOpen = (hour - hours.openHour) * 60 + minute;
+  const { hour, minute, second } = getKstParts(now);
+  const secondsSinceOpen = (hour - hours.openHour) * 3600 + minute * 60 + second;
   return Math.min(
-    Math.floor(minutesSinceOpen / TICK_INTERVAL_MINUTES),
+    Math.floor(secondsSinceOpen / TICK_INTERVAL_SECONDS),
     ticksPerDay(hours) - 1
   );
 }
 
-// 게임 날짜 + 틱 인덱스 → 실제 순간(UTC ISO). 개장 시각 기준 5분 간격.
+// 게임 날짜 + 틱 인덱스 → 실제 순간(UTC ISO). 개장 시각 기준 10초 간격.
 // chartService의 tickTimeEpoch와 달리 화면용 +9h 보정이 없는 "진짜 시각"이다.
 // 뉴스 published_at(장중 시간차 노출)·공시 폐장 시각 계산에 쓴다.
 export function tickTimestamp(date: string, tickIndex: number, openHour: number): string {
   const open = String(openHour).padStart(2, "0");
   const base = new Date(`${date}T${open}:00:00+09:00`).getTime();
-  return new Date(base + tickIndex * TICK_INTERVAL_MINUTES * 60_000).toISOString();
+  return new Date(base + tickIndex * TICK_INTERVAL_SECONDS * 1000).toISOString();
+}
+
+// 틱 인덱스 → 5분 캔들 버킷 인덱스
+export function bucketOfTick(tickIndex: number): number {
+  return Math.floor(tickIndex / TICKS_PER_CANDLE);
 }
 
 // 금액 표시: 1234567 → "1,234,567원"

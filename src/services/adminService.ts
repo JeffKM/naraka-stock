@@ -16,7 +16,7 @@ import {
   isOpenDate,
   ticksPerDay,
   tickTimestamp,
-  TICK_INTERVAL_MINUTES,
+  TICK_INTERVAL_SECONDS,
 } from "@/lib/market";
 import { loadMarketConfig } from "@/lib/marketHours";
 import { generateRegularNews, type GeneratedNews } from "@/lib/news/generate";
@@ -329,7 +329,7 @@ export async function triggerSurpriseEvent(
     stock.tier as StockTier,
     rng,
     ticksPerDay(hours),
-    durationMinutes === null ? null : Math.round(durationMinutes / TICK_INTERVAL_MINUTES),
+    durationMinutes === null ? null : Math.round((durationMinutes * 60) / TICK_INTERVAL_SECONDS),
     resumeBias
   );
 
@@ -343,7 +343,7 @@ export async function triggerSurpriseEvent(
   const windowTickCount =
     durationMinutes === null
       ? remaining
-      : Math.min(Math.max(Math.round(durationMinutes / TICK_INTERVAL_MINUTES), 1), remaining);
+      : Math.min(Math.max(Math.round((durationMinutes * 60) / TICK_INTERVAL_SECONDS), 1), remaining);
   const windowEndTick = currentTick + windowTickCount;
 
   // 꼬리가 가파른 구간 탐지창(15분=3틱)보다 짧으면 재생성하지 않는다 — 극단적으로
