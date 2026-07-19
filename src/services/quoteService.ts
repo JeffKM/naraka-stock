@@ -57,8 +57,8 @@ interface DailyCandleRow {
   volume: number;
 }
 
-// 전 종목 × 하루치 5분 캔들을 페이지네이션으로 로드 (daily_candles, 종목당 최대
-// 144행 — 42종목이면 최대 6,048행이라 단일 쿼리는 PostgREST max_rows에 잘린다).
+// 전 종목 × 하루치 1분 캔들을 페이지네이션으로 로드 (daily_candles, 종목당 최대
+// 720행 — 42종목이면 최대 30,240행이라 단일 쿼리는 PostgREST max_rows에 잘린다).
 // (stock_code, bucket) 고정 정렬이라 페이지 경계가 안정적이다.
 // maxBucketExclusive 지정 시 그 버킷 미만까지만 — Task 9 차트와 동일한 미래유출
 // 게이팅(진행 중인 현재 버킷은 daily_candles에 이미 사전 집계돼 있지만 아직
@@ -181,7 +181,7 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
   const volumes: Record<string, number> = {};
   if (tickIndex !== null) {
     // 현재가는 현재 틱 1행만(42행), 스파크·거래량은 완료 버킷까지의 daily_candles(종목당
-    // 최대 144행)만 — 하루 전체 raw 틱(종목당 최대 4,320행) 로드를 피해 응답 시간을
+    // 최대 720행)만 — 하루 전체 raw 틱(종목당 최대 4,320행) 로드를 피해 응답 시간을
     // 초 단위에서 유지한다.
     const [currentTicks, candleRows] = await Promise.all([
       loadCurrentTicks(supabase, today, tickIndex),

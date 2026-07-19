@@ -11,8 +11,8 @@ import { TICKS_PER_CANDLE } from "@/lib/market";
 // Vercel maxDuration을 갉아먹는다. 이 함수가 호출되는 date는 항상 "이미 마감된
 // 날"이고, 그 날의 daily_candles는 전날 배치가 build_daily_candles로 이미
 // 사전 집계해 둔 상태이므로(chartService와 동일 전제) daily_candles를 소스로
-// 쓴다. 마지막 틱 가격 = 그 날 최대 bucket의 close(풀데이면 bucket 143 close
-// = tick 4319 price와 동일값) — 30배 가벼운 6,048행(42종목 × 144버킷)만 읽는다.
+// 쓴다. 마지막 틱 가격 = 그 날 최대 bucket의 close(풀데이면 bucket 719 close
+// = tick 4319 price와 동일값) — 6배 가벼운 30,240행(42종목 × 720버킷)만 읽는다.
 export interface LastTick {
   tickIndex: number;
   price: number;
@@ -21,7 +21,7 @@ export interface LastTick {
 export async function loadDayLastTicks(date: string): Promise<Record<string, LastTick>> {
   const supabase = getSupabaseAdmin();
   // PostgREST max_rows(로컬 config.toml=1000) 상한 대응: 전 종목 × 전 버킷도
-  // 1000행을 넘어(42종목 × 144버킷 = 6048행) 단일 쿼리로는 잘린다. range로
+  // 1000행을 넘어(42종목 × 720버킷 = 30,240행) 단일 쿼리로는 잘린다. range로
   // 페이지네이션한다. (stock_code, bucket) 정렬이라 페이지 경계가 종목 중간에
   // 걸려도 다음 페이지에서 더 큰 bucket이 이어서 덮어써 최종값이 정확하다.
   // (chartService의 daily_candles 페이지네이션과 동일 패턴)

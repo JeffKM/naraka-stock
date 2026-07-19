@@ -20,7 +20,7 @@ import { chartEpochOfSeconds, formatMoney, getKstParts, TICK_INTERVAL_SECONDS } 
 interface ChartDto {
   daily: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>;
   today: Array<{ time: number; price: number; volume: number }>; // 라인용: 오늘(없으면 직전 세션)
-  intradayCandles: Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }>; // 진짜 5분 OHLC 캔들
+  intradayCandles: Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }>; // 1분 OHLC 캔들
 }
 
 // 차트 색은 globals.css의 --chart-* 토큰이 단일 출처.
@@ -106,7 +106,7 @@ function timeKey(t: number | string | { year: number; month: number; day: number
   return `${t.year}-${String(t.month).padStart(2, "0")}-${String(t.day).padStart(2, "0")}`;
 }
 
-// 5분 OHLC 캔들을 n분 봉으로 재집계 (개장이 정시라 버킷 경계가 항상 맞아떨어진다).
+// 1분 OHLC 캔들을 n분 봉으로 재집계 (개장이 정시라 버킷 경계가 항상 맞아떨어진다).
 // open=첫 캔들의 open, high/low=구간 내 최대/최소, close=마지막 캔들의 close, volume=합산 —
 // 종가 포인트만 이어붙이는 것보다 정확한 OHLC가 나온다.
 function aggregateOhlcCandles(candles: IntradayCandle[], minutes: number): IntradayCandle[] {
@@ -304,7 +304,7 @@ export function StockChart({ code }: { code: string }) {
     series.update({ time: liveTip.time as never, value: liveTip.value });
   }, [liveTip, data]);
 
-  // 라인은 오늘(없으면 fallback) 세션, m5/분봉은 5분 OHLC 캔들(다일 누적, 최근 N일)을 소스로 쓴다.
+  // 라인은 오늘(없으면 fallback) 세션, m1/m5/m15/m30/m60 분봉은 1분 OHLC 캔들(다일 누적, 최근 N일)을 소스로 쓴다.
   // 각각 실제로 그릴 데이터가 하나도 없을 때만 빈 화면을 띄운다. 장중 첫 1분처럼 today가
   // 비어도 liveTip이 있으면 빈 화면을 띄우지 않는다.
   const chartEmpty =

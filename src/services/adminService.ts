@@ -396,7 +396,7 @@ export async function triggerSurpriseEvent(
   });
   if (rpcError) throw rpcError;
 
-  // 오늘 남은 구간을 다시 썼으므로 이 종목·날짜의 5분 캔들도 재집계해야
+  // 오늘 남은 구간을 다시 썼으므로 이 종목·날짜의 1분 캔들도 재집계해야
   // 차트(daily_candles 기반)가 스테일해지지 않는다.
   const { error: candleError } = await supabase.rpc("build_daily_candles", {
     p_stock_code: stockCode,

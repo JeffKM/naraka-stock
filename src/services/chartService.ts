@@ -87,11 +87,11 @@ export async function getChartData(stockCode: string, now: Date = new Date()): P
     maxBucketExclusive = tickIdx !== null ? bucketOfTick(tickIdx) : null;
   }
 
-  // 다일 5분 캔들: intradayCandles가 최근 INTRADAY_CANDLE_DAYS일만, today 라인이
+  // 다일 1분 캔들: intradayCandles가 최근 INTRADAY_CANDLE_DAYS일만, today 라인이
   // 오늘(직전 세션 fallback 포함)만 쓰므로 조회 자체를 최근 INTRADAY_CANDLE_DAYS일로
   // 바운드한다(그 안에 직전 세션이 반드시 있어 fallback도 그대로 동작). 미래 날짜는
   // 아예 제외(date <= today). 그래도 종목 1개당 최대
-  // INTRADAY_CANDLE_DAYS일 × 144버킷 = 1,008행이라 PostgREST max_rows(로컬
+  // 3일 × 720버킷 = 2,160행이라 PostgREST max_rows(로컬
   // config.toml=1000) 상한에 걸릴 수 있어 range로 페이지네이션한다. (date, bucket)
   // 정렬이라 페이지 경계가 날짜 중간에 걸려도 순서가 유지된다.
   const PAGE = 1000;
@@ -124,7 +124,7 @@ export async function getChartData(stockCode: string, now: Date = new Date()): P
     volume: c.volume,
   });
 
-  // 진짜 5분 OHLC 캔들: 최근 INTRADAY_CANDLE_DAYS 거래일치만 노출(페이로드 절감).
+  // 진짜 1분 OHLC 캔들: 최근 INTRADAY_CANDLE_DAYS 거래일치만 노출(페이로드 절감).
   // visibleRows에 이미 미래유출 게이팅(완료 버킷만)이 적용돼 있으므로 그대로 재사용.
   const visibleDates = Array.from(new Set(visibleRows.map((r) => r.date))).sort();
   const recentDates = new Set(visibleDates.slice(-INTRADAY_CANDLE_DAYS));
