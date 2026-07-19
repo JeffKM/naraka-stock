@@ -117,6 +117,15 @@ export function tickTimestamp(date: string, tickIndex: number, openHour: number)
   return new Date(base + tickIndex * TICK_INTERVAL_SECONDS * 1000).toISOString();
 }
 
+// 차트 표시용 epoch(초): lightweight-charts는 타임스탬프를 UTC 벽시계로 렌더하므로
+// +9h 보정해 화면에 KST 시각이 그대로 보이게 한다. 캔들 버킷과 라이브 tip이 같은
+// 시간축에 놓이도록 서버(chartService.candleTimeEpoch)와 클라(StockChart tip)가 공유한다.
+export function chartEpochOfSeconds(date: string, secondsSinceOpen: number, openHour: number): number {
+  const open = String(openHour).padStart(2, "0");
+  const base = new Date(`${date}T${open}:00:00+09:00`).getTime();
+  return Math.floor(base / 1000) + secondsSinceOpen + 9 * 3600;
+}
+
 // 틱 인덱스 → 1분 캔들 버킷 인덱스
 export function bucketOfTick(tickIndex: number): number {
   return Math.floor(tickIndex / TICKS_PER_CANDLE);

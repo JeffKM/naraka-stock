@@ -1,5 +1,5 @@
 import "server-only";
-import { CANDLE_INTERVAL_MINUTES, TICKS_PER_CANDLE, bucketOfTick, getKstParts, getTickIndex, ticksPerDay } from "@/lib/market";
+import { CANDLE_INTERVAL_MINUTES, TICKS_PER_CANDLE, bucketOfTick, chartEpochOfSeconds, getKstParts, getTickIndex, ticksPerDay } from "@/lib/market";
 import { loadMarketConfig } from "@/lib/marketHours";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 
@@ -11,8 +11,8 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 // - 오늘 캔들 버킷은 완료된(과거) 버킷까지만 내보낸다
 //
 // Task 9: 10초 틱 전환으로 종목당 하루 최대 4,320틱 — raw daily_ticks 전 기간
-// 조회는 붕괴하므로 폐장 후 5분 단위로 사전 집계된 daily_candles(종목·일당
-// ~144행)를 소스로 쓴다. 단, daily_candles는 배치가 "익일 전체 버킷"을 한 번에
+// 조회는 붕괴하므로 폐장 후 1분 단위(종목·일당 최대 720행)로 사전 집계된
+// daily_candles를 소스로 쓴다. 단, daily_candles는 배치가 "익일 전체 버킷"을 한 번에
 // 미리 넣어두므로(build_daily_candles가 하루치 틱 전부를 한 번에 집계) 오늘
 // 날짜의 캔들 행에는 아직 도래하지 않은 미래 버킷도 이미 저장돼 있다. 따라서
 // 서비스 레이어에서 "완료된 버킷(bucket < currentBucket)"만 걸러내는 게 유일한
@@ -44,23 +44,18 @@ export interface IntradayOhlc {
 
 export interface ChartData {
   daily: DailyCandle[];
-  today: IntradayPoint[]; // 라인용: 오늘 5분 틱 (없으면 직전 세션 fallback)
-  intradayCandles: IntradayOhlc[]; // 진짜 5분 OHLC 캔들 (최근 INTRADAY_CANDLE_DAYS일로 제한)
+  today: IntradayPoint[]; // 라인용: 오늘 1분 틱 (없으면 직전 세션 fallback)
+  intradayCandles: IntradayOhlc[]; // 진짜 1분 OHLC 캔들 (최근 INTRADAY_CANDLE_DAYS일로 제한)
 }
 
-// intradayCandles 페이로드 크기 제한: 이벤트 전 기간 누적이면 30일×144버킷=4,320행이라
-// 클라이언트로 다 보내기엔 무거움 — 최근 N일치만 노출(daily 모드는 daily_summary
-// 전 기간을 그대로 유지하므로 멀티데이 조회에는 영향 없음)
-const INTRADAY_CANDLE_DAYS = 7;
+// intradayCandles 페이로드 크기 제한: 1분봉은 하루 최대 720버킷이라 창을 좁힌다.
+// 최근 N일치만 노출(전체 추세는 daily_summary 일봉이 담당).
+const INTRADAY_CANDLE_DAYS = 3;
 
-// KST 게임 날짜 + 캔들 버킷(5분 단위) → 차트용 epoch 초 (개장 시각 기준)
-// lightweight-charts는 타임스탬프를 UTC 벽시계로 렌더링하므로 +9h 보정해
-// 화면에 KST 시각이 그대로 보이게 한다. 버킷 폭이 CANDLE_INTERVAL_MINUTES(5분)로
-// 고정이라 *300초가 성립한다(10초 틱 전환과 무관 — 버킷 자체는 여전히 5분).
+// KST 게임 날짜 + 캔들 버킷(1분 단위) → 차트용 epoch 초 (개장 시각 기준).
+// 버킷 폭이 CANDLE_INTERVAL_MINUTES(1분)로 고정이라 bucket * 60초가 성립한다.
 function candleTimeEpoch(date: string, bucket: number, openHour: number): number {
-  const open = String(openHour).padStart(2, "0");
-  const base = new Date(`${date}T${open}:00:00+09:00`).getTime();
-  return Math.floor(base / 1000) + bucket * CANDLE_INTERVAL_MINUTES * 60 + 9 * 3600;
+  return chartEpochOfSeconds(date, bucket * CANDLE_INTERVAL_MINUTES * 60, openHour);
 }
 
 export async function getChartData(stockCode: string, now: Date = new Date()): Promise<ChartData> {
