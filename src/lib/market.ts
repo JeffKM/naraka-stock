@@ -25,6 +25,7 @@ interface KstParts {
   isoWeekday: number; // 1(월) ~ 7(일)
   hour: number;
   minute: number;
+  second: number;
 }
 
 // 실행 환경 타임존과 무관하게 KST 기준 날짜·시각을 얻는다.
@@ -36,6 +37,7 @@ export function getKstParts(now: Date = new Date()): KstParts {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     weekday: "short",
     hour12: false,
   });
@@ -51,6 +53,7 @@ export function getKstParts(now: Date = new Date()): KstParts {
     // Intl은 자정을 "24"로 줄 수 있어 보정한다
     hour: Number(parts.hour) % 24,
     minute: Number(parts.minute),
+    second: Number(parts.second),
   };
 }
 
