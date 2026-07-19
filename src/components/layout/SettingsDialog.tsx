@@ -49,7 +49,7 @@ function ThemePreviewCard({
     >
       <span
         className={cn(
-          "flex h-16 w-24 flex-col justify-between rounded-xl border-2 p-2 transition-all",
+          "flex h-16 w-24 flex-col justify-between rounded-xl border-2 p-2 transition-colors",
           dark
             ? "border-white/10 bg-[oklch(0.2_0.015_25)]"
             : "border-black/10 bg-[oklch(0.97_0.01_85)]",
@@ -69,7 +69,7 @@ function ThemePreviewCard({
               dark ? "bg-white/15" : "bg-black/8"
             )}
           />
-          <span className="h-2.5 w-6 rounded-full bg-[#e0434f]" />
+          <span className="h-2.5 w-6 rounded-full bg-primary" />
         </span>
       </span>
       <span

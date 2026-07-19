@@ -54,7 +54,7 @@ function PendingRow({ order }: { order: LimitOrder }) {
             {isBuy ? "매수" : "매도"}
           </span>
         </p>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground tabular-nums">
           지정가 {formatMoney(order.limitPrice)} · 예약 {reserveText(order)}
         </p>
       </div>
@@ -75,7 +75,7 @@ function HistoryRow({ order }: { order: LimitOrder }) {
         <span className={cn("text-xs font-bold", isBuy ? "text-bull" : "text-bear")}>
           {isBuy ? "매수" : "매도"}
         </span>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground tabular-nums">
           지정가 {formatMoney(order.limitPrice)}
           {filled && order.filledQty != null && ` · ${formatQty(order.filledQty)}주 체결`}
         </p>

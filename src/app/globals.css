@@ -147,6 +147,24 @@
   --bear: oklch(0.6201 0.1906 258.2);
 }
 
+/* 차트 색 토큰 (StockChart) — lightweight-charts는 canvas라 CSS 변수를 직접 못 읽으므로
+   JS(getComputedStyle)로 읽어 주입한다. 캔버스 호환을 위해 hex/rgba 리터럴 유지.
+   기존 팔레트와 톤을 맞춘 완화색(등락색 --bull/--bear의 채도를 낮춘 캔들용 톤). */
+:root {
+  --chart-text: #b8ada3;
+  --chart-grid: rgba(184, 173, 163, 0.08);
+  --chart-up: #e05c4f;
+  --chart-down: #5b8cc9;
+  --chart-area: #c04a3e;
+  --chart-area-top: rgba(192, 74, 62, 0.35);
+  --chart-area-bottom: rgba(192, 74, 62, 0.02);
+  --chart-vol-up: rgba(224, 92, 79, 0.4);
+  --chart-vol-down: rgba(91, 140, 201, 0.4);
+  --chart-vol-neutral: rgba(184, 173, 163, 0.4);
+  --chart-high: rgba(224, 92, 79, 0.5);
+  --chart-low: rgba(91, 140, 201, 0.5);
+}
+
 /* 상단 로딩 바 애니메이션 (FetchIndicator) */
 @keyframes fetch-slide {
   0% {

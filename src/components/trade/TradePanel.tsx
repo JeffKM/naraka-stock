@@ -262,7 +262,7 @@ function LimitPriceInput({
         placeholder="지정가 (원)"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-11 text-base font-semibold"
+        className="h-11 text-base font-semibold tabular-nums"
       />
       <div className="flex gap-1.5">
         <Button
@@ -408,7 +408,7 @@ function BuyDialog({
             autoFocus={!isLimit}
             onChange={(e) => setAmountText(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && onSubmit()}
-            className="h-12 text-lg font-semibold"
+            className="h-12 text-lg font-semibold tabular-nums"
           />
           <div className="flex gap-1.5">
             {!isLimit && mode === "qty" ? (
@@ -460,7 +460,7 @@ function BuyDialog({
             )}
           </div>
 
-          <div className="rounded-lg bg-muted/50 p-3 text-sm">
+          <div className="rounded-lg bg-muted/50 p-3 text-sm tabular-nums">
             <div className="flex justify-between">
               <span className="text-muted-foreground">예상 수량</span>
               <span className="font-medium">{formatQty(buyQty)}주</span>
@@ -481,7 +481,7 @@ function BuyDialog({
             onClick={onSubmit}
           >
             {submitting
-              ? "주문 중..."
+              ? "주문 중…"
               : isLimit
                 ? "지정가 매수 예약"
                 : mode === "qty"
@@ -622,7 +622,7 @@ function SellDialog({
             autoFocus={!isLimit}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && onSubmit()}
-            className="h-12 text-lg font-semibold"
+            className="h-12 text-lg font-semibold tabular-nums"
           />
           <div className="flex gap-1.5">
             {SELL_RATIOS.map((chip) => (
@@ -645,7 +645,7 @@ function SellDialog({
             ))}
           </div>
 
-          <div className="rounded-lg bg-muted/50 p-3 text-sm">
+          <div className="rounded-lg bg-muted/50 p-3 text-sm tabular-nums">
             <div className="flex justify-between">
               <span className="text-muted-foreground">예상 수량</span>
               <span className="font-medium">{formatQty(sellQty)}주</span>
@@ -673,7 +673,7 @@ function SellDialog({
             onClick={onSubmit}
           >
             {submitting
-              ? "주문 중..."
+              ? "주문 중…"
               : isLimit
                 ? "지정가 매도 예약"
                 : sellQty > 0

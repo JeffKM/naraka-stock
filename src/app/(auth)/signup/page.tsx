@@ -63,7 +63,7 @@ export default function SignupPage() {
 
   return (
     <Card>
-      <CardHeader className="items-center text-center">
+      <CardHeader>
         <CardTitle>나라카에 온 걸 환영해요</CardTitle>
         <CardDescription>
           매장에서 받은 가입 코드로 나라카증권 계좌를 만들어보세요

@@ -7,6 +7,14 @@ import { toast } from "sonner";
 import { BadgeChip } from "@/components/badges/BadgeChip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { getJson, patchJson, postJson } from "@/lib/api/client";
 import { EmptyState } from "@/components/mascot/EmptyState";
@@ -54,6 +62,8 @@ export function StockComments({ stockCode }: { stockCode: string }) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<StockComment | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const { data } = useQuery({
     queryKey: ["comments", stockCode],
@@ -114,11 +124,15 @@ export function StockComments({ stockCode }: { stockCode: string }) {
     }
   }
 
-  async function remove(c: StockComment) {
-    const message = c.mine
-      ? "이 댓글을 삭제할까요?"
-      : `'${c.nickname}'님의 댓글을 삭제할까요? (관리자 권한)`;
-    if (!window.confirm(message)) return;
+  // 삭제는 앱 전역과 동일하게 테마 확인 Dialog로 통일 (native window.confirm 제거)
+  function remove(c: StockComment) {
+    setPendingDelete(c);
+  }
+
+  async function confirmDelete() {
+    const c = pendingDelete;
+    if (!c || deleting) return;
+    setDeleting(true);
     try {
       const res = await fetch(`/api/stocks/${stockCode}/comments?id=${c.id}`, {
         method: "DELETE",
@@ -126,8 +140,11 @@ export function StockComments({ stockCode }: { stockCode: string }) {
       const json = await res.json();
       if (!json.success) throw new Error(json.error.message);
       invalidate();
+      setPendingDelete(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "삭제에 실패했습니다.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -196,6 +213,34 @@ export function StockComments({ stockCode }: { stockCode: string }) {
           ))}
         </div>
       </CardContent>
+
+      <Dialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>댓글을 삭제할까요?</DialogTitle>
+            <DialogDescription>
+              {pendingDelete?.mine
+                ? "삭제한 댓글은 되돌릴 수 없어요."
+                : `「${pendingDelete?.nickname}」님의 댓글을 삭제합니다. (관리자 권한)`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setPendingDelete(null)}
+              disabled={deleting}
+            >
+              취소
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+              {deleting ? "삭제 중…" : "삭제"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
@@ -227,7 +272,7 @@ function CommentComposer({
             type="button"
             onClick={() => setSticker(null)}
             aria-label="스티커 제거"
-            className="ml-auto text-muted-foreground transition-colors hover:text-foreground"
+            className="ml-auto rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <X className="size-4" />
           </button>
@@ -428,7 +473,7 @@ function CommentBody({
                 onClick={() => onToggleLike(c)}
                 aria-label={c.likedByMe ? "엄지업 취소" : "엄지업"}
                 className={cn(
-                  "inline-flex items-center gap-1 text-xs transition-colors",
+                  "inline-flex items-center gap-1 rounded-sm text-xs transition-colors focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   c.likedByMe
                     ? "text-primary-accent"
                     : "text-muted-foreground hover:text-foreground"
@@ -441,7 +486,7 @@ function CommentBody({
                 <button
                   onClick={onReply}
                   aria-label="답글 달기"
-                  className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                  className="inline-flex items-center gap-1 rounded-sm text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <MessageCircle className="size-3.5" />
                   답글
@@ -458,14 +503,14 @@ function CommentBody({
               onClick={() => onSaveEdit(c.id)}
               disabled={saving || !editContent.trim()}
               aria-label="댓글 수정 저장"
-              className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+              className="rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
             >
               <Check className="size-3.5" />
             </button>
             <button
               onClick={onCancelEdit}
               aria-label="수정 취소"
-              className="text-muted-foreground transition-colors hover:text-foreground"
+              className="rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <X className="size-3.5" />
             </button>
@@ -476,7 +521,7 @@ function CommentBody({
               <button
                 onClick={() => onStartEdit(c)}
                 aria-label="내 댓글 수정"
-                className="text-muted-foreground transition-colors hover:text-foreground"
+                className="rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Pencil className="size-3.5" />
               </button>
@@ -485,8 +530,10 @@ function CommentBody({
               onClick={() => onRemove(c)}
               aria-label={c.mine ? "내 댓글 삭제" : "댓글 삭제 (관리자)"}
               className={cn(
-                "text-muted-foreground transition-colors",
-                c.mine ? "hover:text-foreground" : "hover:text-destructive"
+                "rounded-sm text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                c.mine
+                  ? "hover:text-foreground focus-visible:text-foreground"
+                  : "hover:text-destructive focus-visible:text-destructive"
               )}
             >
               <X className="size-3.5" />
@@ -549,7 +596,7 @@ function ReplyThread({
       {hasReplies && (
         <button
           onClick={() => setShowReplies(!showReplies)}
-          className="text-xs font-medium text-primary-accent hover:underline"
+          className="rounded-sm text-xs font-medium text-primary-accent hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {showReplies ? "답글 숨기기" : `답글 ${replies.length}개 보기`}
         </button>
