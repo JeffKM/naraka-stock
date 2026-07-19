@@ -14,10 +14,10 @@ export interface QuoteBoardDto {
   quotes: StockQuote[];
 }
 
-// 다음 10초 틱 경계까지 남은 ms + 서버 반영 여유 5초 (T-404: 틱 경계 정렬)
+// 다음 10초 틱 경계까지 남은 ms + 서버 반영 여유 0.5초 (T-404: 틱 경계 정렬)
 function msUntilNextTick(): number {
   const interval = TICK_INTERVAL_SECONDS * 1000;
-  return interval - (Date.now() % interval) + 5_000;
+  return interval - (Date.now() % interval) + 500;
 }
 
 // 전 종목 시세 공용 훅 — 항상 10초 틱 경계에 맞춰 갱신.
@@ -28,6 +28,7 @@ export function useQuotes() {
     queryKey: ["quotes"],
     queryFn: () => getJson<QuoteBoardDto>("/api/quotes"),
     refetchInterval: msUntilNextTick,
-    staleTime: 10_000,
+    refetchIntervalInBackground: false,
+    staleTime: 5_000,
   });
 }
