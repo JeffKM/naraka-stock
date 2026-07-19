@@ -15,7 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuotes } from "@/hooks/useQuotes";
 import { getJson } from "@/lib/api/client";
-import { chartEpochOfSeconds, formatMoney, getKstParts, getTickIndex, TICK_INTERVAL_SECONDS } from "@/lib/market";
+import { chartEpochOfSeconds, formatMoney, getKstParts, TICK_INTERVAL_SECONDS } from "@/lib/market";
 
 interface ChartDto {
   daily: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>;
@@ -137,19 +137,17 @@ export function StockChart({ code }: { code: string }) {
   const { data: board } = useQuotes();
 
   // 라인 tip: 현재 종목의 10초 현재가를 라인 끝에 얹기 위한 {time, value}.
-  // time은 서버 candleTimeEpoch와 동일 규약(chartEpochOfSeconds)으로, getTickIndex가
-  // 현재 틱으로 클램프하므로 미래 틱은 절대 새지 않는다(원칙 2). 장중·해당 종목 시세가
-  // 있을 때만 non-null.
+  // time은 서버 candleTimeEpoch와 동일 규약(chartEpochOfSeconds). tickIndex는 서버가
+  // 전체 개장일 규칙(extraOpenDays/holidayExceptions 포함)으로 계산·클램프해 내려준
+  // 값을 그대로 쓴다 — 클라에서 재판정하면 QuoteBoardDto가 노출하지 않는 규칙 때문에
+  // 오판(휴장으로 잘못 판정)할 수 있다. 현재 틱 클램프는 서버가 이미 했으므로 미래
+  // 틱은 절대 새지 않는다(원칙 2). 장중·해당 종목 시세가 있을 때만 non-null.
   const liveTip = useMemo(() => {
-    if (mode !== "line" || !board || board.marketState !== "open") return null;
+    if (mode !== "line" || !board || board.marketState !== "open" || board.tickIndex === null) return null;
     const q = board.quotes.find((x) => x.code === code);
     if (!q) return null;
-    const hours = { openHour: board.market.openHour, closeHour: board.market.closeHour };
-    const now = new Date(board.asOf);
-    const tickIdx = getTickIndex(now, hours, { closedWeekdays: board.market.closedWeekdays });
-    if (tickIdx === null) return null;
-    const { date } = getKstParts(now);
-    return { time: chartEpochOfSeconds(date, tickIdx * TICK_INTERVAL_SECONDS, hours.openHour), value: q.price };
+    const { date } = getKstParts(new Date(board.asOf));
+    return { time: chartEpochOfSeconds(date, board.tickIndex * TICK_INTERVAL_SECONDS, board.market.openHour), value: q.price };
   }, [board, mode, code]);
 
   const { data, isLoading } = useQuery({

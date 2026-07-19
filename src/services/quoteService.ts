@@ -24,6 +24,7 @@ export interface QuoteBoard {
   market: { openHour: number; closeHour: number; closedWeekdays: number[] }; // 장 운영 안내용
   indices: IndexQuote[]; // 나스피/나스닥 (Phase 8)
   quotes: StockQuote[];
+  tickIndex: number | null; // 현재 틱 인덱스 (전체 개장일 규칙으로 계산·클램프, 장외 null) — 차트 라이브 tip용
 }
 
 interface CurrentTick {
@@ -305,5 +306,6 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
     },
     indices,
     quotes,
+    tickIndex,
   };
 }
