@@ -325,7 +325,7 @@ function BuyDialog({
   const qtyInput = Math.floor(Number(amountText) || 0); // 수량 모드 입력값 (매수는 정수만, D1 RPC 제약)
   const limitPrice = Math.floor(Number(limitText) || 0);
   // 지정가면 예상 수량은 지정가 기준, 시장가면 잠금 견적 기준
-  const unit = isLimit && limitPrice > 0 ? limitPrice : lockedPrice;
+  const unit = isLimit ? (limitPrice > 0 ? limitPrice : quote.price) : lockedPrice;
   const quantity = unit > 0 ? amount / unit : 0; // 금액 모드(또는 지정가) 예상 수량
   // 지정가·금액 모드는 기존 금액 경로, 시장가 수량 모드만 별도 값 사용
   const buyQty = isLimit || mode === "amount" ? quantity : qtyInput;
@@ -550,7 +550,7 @@ function SellDialog({
   const rawQty =
     isLimit || mode === "qty" ? input : lockedPrice > 0 ? input / lockedPrice : 0;
   const sellQty = Math.min(truncQty(rawQty), availableQty);
-  const unit = isLimit && limitPrice > 0 ? limitPrice : lockedPrice;
+  const unit = isLimit ? (limitPrice > 0 ? limitPrice : quote.price) : lockedPrice;
   const gross = Math.round(sellQty * unit);
   const fee = Math.floor(gross * SELL_FEE_RATE);
   const adverse = !isLimit && moved === "adverse";
