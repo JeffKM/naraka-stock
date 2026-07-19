@@ -57,10 +57,12 @@ function readChartColors(el: HTMLElement): ChartColors {
   };
 }
 
-// 라인(당일) / 5분 OHLC 캔들 / 분봉 캔들(5분 캔들 N개 집계) / 일봉 캔들
-type Mode = "line" | "m5" | "m15" | "m30" | "m60" | "daily";
+// 라인(당일) / 1분·N분 OHLC 캔들(1분봉을 N개 집계) / 일봉 캔들
+type Mode = "line" | "m1" | "m5" | "m15" | "m30" | "m60" | "daily";
 
-const MINUTES_BY_MODE: Record<Exclude<Mode, "line" | "daily" | "m5">, number> = {
+// m1은 원본 1분봉을 그대로 쓰고, 나머지는 1분봉 N개를 묶어 재집계한다.
+const MINUTES_BY_MODE: Record<Exclude<Mode, "line" | "daily" | "m1">, number> = {
+  m5: 5,
   m15: 15,
   m30: 30,
   m60: 60,
@@ -176,16 +178,16 @@ export function StockChart({ code }: { code: string }) {
             wickDownColor: colors.down,
           });
 
-    // 캔들 데이터(일봉/5분/분봉 집계) — 라인 모드에서는 빈 배열. 일봉은 날짜 문자열, 나머지는 초 단위 epoch 시간을 그대로 유지한다.
-    // m5는 서버가 내려주는 진짜 5분 OHLC 캔들을 그대로 쓰고, m15/m30/m60은 그 캔들을 N/5개씩 묶어 재집계한다(종가 포인트 집계보다 정확).
+    // 캔들 데이터(일봉/1분/N분 집계) — 라인 모드에서는 빈 배열. 일봉은 날짜 문자열, 나머지는 초 단위 epoch.
+    // m1은 서버가 내려주는 원본 1분봉을 그대로 쓰고, m5/m15/m30/m60은 1분봉을 N개씩 묶어 재집계한다.
     const candleData: ChartCandle[] =
       mode === "daily"
         ? data.daily.map((d) => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close, volume: d.volume }))
         : mode === "line"
           ? []
-          : mode === "m5"
+          : mode === "m1"
             ? data.intradayCandles.map((c) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume }))
-            : aggregateOhlcCandles(data.intradayCandles, MINUTES_BY_MODE[mode as "m15" | "m30" | "m60"]);
+            : aggregateOhlcCandles(data.intradayCandles, MINUTES_BY_MODE[mode as "m5" | "m15" | "m30" | "m60"]);
 
     if (mode === "line") {
       priceSeries.setData(
@@ -283,6 +285,7 @@ export function StockChart({ code }: { code: string }) {
         <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
           <TabsList>
             <TabsTrigger value="line">라인</TabsTrigger>
+            <TabsTrigger value="m1">1분</TabsTrigger>
             <TabsTrigger value="m5">5분</TabsTrigger>
             <TabsTrigger value="m15">15분</TabsTrigger>
             <TabsTrigger value="m30">30분</TabsTrigger>
