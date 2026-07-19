@@ -1,5 +1,12 @@
 import "server-only";
-import { getKstParts, getMarketState, getTickIndex, ticksPerDay } from "@/lib/market";
+import {
+  bucketOfTick,
+  getKstParts,
+  getMarketState,
+  getTickIndex,
+  TICKS_PER_CANDLE,
+  ticksPerDay,
+} from "@/lib/market";
 import { loadMarketConfig } from "@/lib/marketHours";
 import { PRICE_LIMIT_RATE } from "@/lib/engine/randomWalk";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
@@ -19,34 +26,58 @@ export interface QuoteBoard {
   quotes: StockQuote[];
 }
 
-interface SessionTick {
+interface CurrentTick {
   stock_code: string;
-  tick_index: number;
   price: number;
   is_halted: boolean;
+}
+
+// 전 종목의 "현재 틱 1행"만 조회 (42종목 → 42행, 페이지네이션 불필요).
+// Task 9 차트와 마찬가지로 시세판도 경로성 데이터(스파크·거래량)는 daily_candles로
+// 옮기되, 현재가·정지 여부만큼은 실 틱값 그대로 정확해야 하므로 여기서 단건 조회한다.
+async function loadCurrentTicks(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  date: string,
+  tickIndex: number
+): Promise<CurrentTick[]> {
+  const { data, error } = await supabase
+    .from("daily_ticks")
+    .select("stock_code, price, is_halted")
+    .eq("date", date)
+    .eq("tick_index", tickIndex);
+  if (error) throw error;
+  return data;
+}
+
+interface DailyCandleRow {
+  stock_code: string;
+  bucket: number;
+  close: number;
   volume: number;
 }
 
-// 전 종목 × 한 세션 틱을 페이지네이션으로 로드.
-// PostgREST max_rows(로컬 config.toml=1000) 상한에 걸리지 않도록 range로 쪼갠다
-// (42종목 × 144틱 = 6048행이라 단일 쿼리는 잘린다). (stock_code, tick_index)
-// 고정 정렬이라 페이지 경계가 안정적이다. maxTick 지정 시 그 틱까지만.
-async function loadSessionTicks(
+// 전 종목 × 하루치 5분 캔들을 페이지네이션으로 로드 (daily_candles, 종목당 최대
+// 144행 — 42종목이면 최대 6,048행이라 단일 쿼리는 PostgREST max_rows에 잘린다).
+// (stock_code, bucket) 고정 정렬이라 페이지 경계가 안정적이다.
+// maxBucketExclusive 지정 시 그 버킷 미만까지만 — Task 9 차트와 동일한 미래유출
+// 게이팅(진행 중인 현재 버킷은 daily_candles에 이미 사전 집계돼 있지만 아직
+// 완료되지 않았으므로 제외).
+async function loadDayCandles(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   date: string,
-  maxTick?: number
-): Promise<SessionTick[]> {
+  maxBucketExclusive?: number
+): Promise<DailyCandleRow[]> {
   const PAGE = 1000;
-  const rows: SessionTick[] = [];
+  const rows: DailyCandleRow[] = [];
   for (let from = 0; ; from += PAGE) {
     let query = supabase
-      .from("daily_ticks")
-      .select("stock_code, tick_index, price, is_halted, volume")
+      .from("daily_candles")
+      .select("stock_code, bucket, close, volume")
       .eq("date", date);
-    if (maxTick !== undefined) query = query.lte("tick_index", maxTick);
+    if (maxBucketExclusive !== undefined) query = query.lt("bucket", maxBucketExclusive);
     const { data, error } = await query
       .order("stock_code", { ascending: true })
-      .order("tick_index", { ascending: true })
+      .order("bucket", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw error;
     rows.push(...data);
@@ -125,31 +156,48 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
 
   // 현재 참조할 틱 인덱스: 장중이면 현재 틱, 마감 후면 마지막 틱, 그 외 null
   let tickIndex: number | null = null;
+  let afterClose = false; // 오늘 장 마감 직후(오늘 버킷 전부 완료) — 차트 서비스와 동일 구분
   if (state === "open" || state === "halted") {
     tickIndex = getTickIndex(now, hours, rules); // CB 중에도 가격은 현재 틱에서 동결 표시
   } else if (state === "closed" && hour >= hours.closeHour) {
     tickIndex = ticksPerDay(hours) - 1; // 오늘 장 마감 직후 → 오늘 종가
+    afterClose = true;
+  }
+
+  // 오늘 캔들 버킷 노출 상한(미포함, bucket < bucketLimit). 장중이면 진행 중인
+  // 현재 버킷은 아직 미완료이므로 제외(bucketOfTick(tickIndex)), 마감 후면 오늘
+  // 버킷 전부(totalBuckets) 노출 — Task 9 chartService.getChartData와 동일 원칙.
+  const totalBuckets = ticksPerDay(hours) / TICKS_PER_CANDLE;
+  let bucketLimit: number | null = null;
+  if (tickIndex !== null) {
+    bucketLimit = afterClose ? totalBuckets : bucketOfTick(tickIndex);
   }
 
   const prices: Record<string, { price: number; isHalted: boolean }> = {};
   const sparks: Record<string, number[]> = {};
-  const pathByStock: Record<string, Record<number, number>> = {}; // 지수 계산용 (틱 정렬)
-  // 당일 누적 시뮬 시장 거래량 (사전 생성 틱의 volume 합 — 참가자 체결과 무관)
+  const pathByStock: Record<string, Record<number, number>> = {}; // 지수 계산용 (버킷 정렬)
+  // 당일 누적 시뮬 시장 거래량 (완료 버킷의 daily_candles.volume 합 — 참가자 체결과 무관)
   const volumes: Record<string, number> = {};
   if (tickIndex !== null) {
-    // 현재 틱까지의 오늘 경로 전체 (현재가 + 스파크라인 + 거래량을 한 번에).
-    // 전 종목 × 현재 틱까지가 1000행을 넘을 수 있어 페이지네이션 로드.
-    const tickRows = await loadSessionTicks(supabase, today, tickIndex);
-    for (const row of tickRows) {
-      (sparks[row.stock_code] ??= []).push(row.price);
-      (pathByStock[row.stock_code] ??= {})[row.tick_index] = row.price;
+    // 현재가는 현재 틱 1행만(42행), 스파크·거래량은 완료 버킷까지의 daily_candles(종목당
+    // 최대 144행)만 — 하루 전체 raw 틱(종목당 최대 4,320행) 로드를 피해 응답 시간을
+    // 초 단위에서 유지한다.
+    const [currentTicks, candleRows] = await Promise.all([
+      loadCurrentTicks(supabase, today, tickIndex),
+      loadDayCandles(supabase, today, bucketLimit ?? undefined),
+    ]);
+    for (const row of currentTicks) {
+      prices[row.stock_code] = { price: row.price, isHalted: row.is_halted };
+    }
+    for (const row of candleRows) {
+      (sparks[row.stock_code] ??= []).push(row.close);
+      (pathByStock[row.stock_code] ??= {})[row.bucket] = row.close;
       volumes[row.stock_code] = (volumes[row.stock_code] ?? 0) + row.volume;
-      // 마지막 틱(오름차순 마지막 행)을 현재가로 쓴다 — 장 시간이 운영 중
-      // 늘어나 오늘 경로가 현재 틱보다 짧아도 종가에서 동결 표시된다
-      prices[row.stock_code] = {
-        price: row.price,
-        isHalted: row.tick_index === tickIndex && row.is_halted,
-      };
+    }
+    // 현재가를 스파크 마지막 점으로 이어붙여 라인이 현재까지 자연스럽게 이어지게 한다
+    // (버킷 해상도라 완료 버킷 종가까지만 있으면 라인이 현재보다 뒤처져 보인다).
+    for (const [code, current] of Object.entries(prices)) {
+      (sparks[code] ??= []).push(current.price);
     }
   }
 
@@ -157,9 +205,9 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
   // 상세 차트 라인 fallback과 동일 UX. 색·등락률도 그 세션 시가→종가 기준으로
   // 표시해 라인 모양·색·숫자가 모두 같은 기준으로 일치하게 한다.
   const fallbackChange: Record<string, { open: number; close: number }> = {};
-  // 지수 fallback용: 직전 세션의 틱 인덱스별 가격 경로 + 마지막 틱
+  // 지수 fallback용: 직전 세션의 버킷별 가격 경로 + 마지막 버킷
   const fallbackPathByStock: Record<string, Record<number, number>> = {};
-  let fallbackMaxTick: number | null = null;
+  let fallbackMaxBucket: number | null = null;
   if (tickIndex === null) {
     const { data: lastDateRow, error: lastDateError } = await supabase
       .from("daily_ticks")
@@ -170,12 +218,13 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
       .maybeSingle();
     if (lastDateError) throw lastDateError;
     if (lastDateRow?.date) {
-      const prevTicks = await loadSessionTicks(supabase, lastDateRow.date);
-      for (const row of prevTicks) {
-        (sparks[row.stock_code] ??= []).push(row.price);
-        (fallbackPathByStock[row.stock_code] ??= {})[row.tick_index] = row.price;
-        if (fallbackMaxTick === null || row.tick_index > fallbackMaxTick) {
-          fallbackMaxTick = row.tick_index;
+      // 과거 세션은 이미 완전히 종료됐으므로 전 버킷을 그대로 노출해도 유출이 아니다.
+      const prevCandles = await loadDayCandles(supabase, lastDateRow.date);
+      for (const row of prevCandles) {
+        (sparks[row.stock_code] ??= []).push(row.close);
+        (fallbackPathByStock[row.stock_code] ??= {})[row.bucket] = row.close;
+        if (fallbackMaxBucket === null || row.bucket > fallbackMaxBucket) {
+          fallbackMaxBucket = row.bucket;
         }
       }
       for (const [code, arr] of Object.entries(sparks)) {
@@ -187,6 +236,8 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
   }
 
   // 시장 지수 (나스피/나스닥)
+  const currentPrices: Record<string, number> = {};
+  for (const [code, current] of Object.entries(prices)) currentPrices[code] = current.price;
   const [indexRows, prevIndexCloses] = await Promise.all([
     loadIndices(),
     loadPrevIndexCloses(today),
@@ -199,11 +250,12 @@ export async function getQuoteBoard(now: Date = new Date()): Promise<QuoteBoard>
       sharesOutstanding: s.shares_outstanding,
     })),
     prevCloses,
+    currentPrices,
     pathByStock,
-    tickIndex,
+    bucketLimit,
     prevIndexCloses,
     fallbackPathByStock,
-    fallbackMaxTick,
+    fallbackMaxBucket,
   });
 
   const quotes: StockQuote[] = stocks.map((stock) => {
