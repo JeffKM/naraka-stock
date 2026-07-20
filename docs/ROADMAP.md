@@ -3,7 +3,7 @@
 > 개발 기간: 2026-07-11 ~ 2026-07-28 (약 2.5주) · 테스트: 07-29 ~ 07-31 · **오픈: 2026-08-01 (개장/폐장 시각 논의 중 — 현행 12:00~24:00 유지)**
 > 진행 규칙: Phase 순서대로 진행, 각 Task 완료 시 체크 + 진행률 갱신. 매 Phase 종료 시 `npm run build` + `npm run lint` 통과 필수.
 
-**전체 진행률: 76/77 (99%)** — 남은 1개: T-703 리허설(07-15~ 첫 리허설 장). 지정가 예약주문(Phase 10)은 프로덕션 db push까지 완료(2026-07-14). **섹터 개편(Phase 11)은 Plan 1~5 전 단계 완료·prod 배포까지 완료(2026-07-17, main `9774843`)**. **UI 개선(Phase 12, A~D)은 전 단계 완료·main 머지·prod 배포까지 완료(2026-07-19, PR#46·#47·#48)** — Phase D 마이그 2종 prod push 완료(토론방 API 200 검증). **API rate limit 보안 강화(Phase 13)는 구현·main 머지·prod db push까지 완료(2026-07-20, PR#57·#58)** — 마이그 `20260720030000_rate_limit` remote 반영 확인. 차트 1분봉(m1) 토글 + 실시간 tip(Phase 4 추가 항목)은 10초 틱 전환 이후 구현·완료(2026-07-20).
+**전체 진행률: 76/77 (99%)** — 남은 1개: T-703 리허설(07-15~ 첫 리허설 장). 지정가 예약주문(Phase 10)은 프로덕션 db push까지 완료(2026-07-14). **섹터 개편(Phase 11)은 Plan 1~5 전 단계 완료·prod 배포까지 완료(2026-07-17, main `9774843`)**. **UI 개선(Phase 12, A~D)은 전 단계 완료·main 머지·prod 배포까지 완료(2026-07-19, PR#46·#47·#48)** — Phase D 마이그 2종 prod push 완료(토론방 API 200 검증). **API rate limit 보안 강화(Phase 13)는 구현·main 머지·prod db push까지 완료(2026-07-20, PR#57·#58)** — 마이그 `20260720030000_rate_limit` remote 반영 확인. 차트 1분봉(m1) 토글 + 실시간 tip(Phase 4 추가 항목)은 10초 틱 전환 이후 구현·완료(2026-07-20). **실력자 우승 밸런스(Phase 14)는 Phase 1~3b 전 단계 구현·main 머지 완료(2026-07-20~21, PR#63·#64)** — 매도 수수료 0.5%→1.5% 포함, ⚠️ `sell_fee_bp=150` config 마이그(`20260720050000`) prod push 여부 확인 필요. **웹 서비스 보안 강화(Phase 15)는 CI·Dependabot·보안 헤더 도입·main 머지 완료(2026-07-21, PR#65)**.
 
 > **현행 기준(2026-07-17 섹터 개편 반영):** 종목 **42종 / 18섹터**(초기 8종 → 27종 → 42종), 초기 자금 **10,000,000원**(방문 보너스 100,000원), 섹터는 `sectors` 테이블로 데이터화(어드민 CRUD)·섹터 뉴스는 "참여확률" 모델. 운영 장 시간 **12:00~24:00**(어드민 config 조절, 개장 전까지 유지 — **8월 개장/폐장 시각은 논의 중**). 아래 Phase 0~10의 개별 Task 서술 중 "8종/27종·초기 100만원" 등은 **작성 당시 시점 기록**이며, 최신 사양은 Phase 11 및 본 노트를 따른다.
 
@@ -149,6 +149,26 @@
 
 ---
 
+## Phase 14 — 실력자 우승 밸런스 (4/4) ✅
+
+> 2026-07-20~21. "단타 아닌 실력자가 우승"하도록 튜닝. 진단: 단일 총자산 크라운은 분산을 보상해 랜덤 단타도 42% 우승. 크라운 토너먼트 + 소문 교차검증 하네스로 레시피 도출. 스펙·근거·하네스 `docs/PLAN-skill-wins-balance.md`, 규칙 반영은 `docs/PRD.md`(§전면). 브랜치 `feat/skill-wins-balance` → **main 머지(PR#63·#64)**. **env 오버라이드(`SIM_*`)는 유지하고 fallback(운영값)만 변경** → 미설정 시 새 밸런스 적용, 이벤트 미개장이라 다음 배치 사전생성분부터 반영(라이브 충격 없음). ⚠️ config 값 마이그(`sell_fee_bp`)는 prod db push 확인 필요.
+
+- [x] **T-1401** (Phase 1 — 엔진 운영값 3개) 풀틱(4,320) 재검증된 config A 운영 기본값 반영: `bias.ts` `SECTOR_MAGNITUDE` 15→25(섹터 신호 강화 → 소문 교차검증 우위), `randomWalk.ts` `DAILY_DRIFT.wild` -0.2→-1.0(잡주 하방↑, 블라인드 몰빵 꼬리 절단·급락트랩 회피 완화값), `JUMP_UP_PROBABILITY.wild` 0.5→0.35(35:65 하방편향, 복권성 보존). σ 위계(0.005/0.009/0.015)·수수료 불변. 커밋 `fc2bfa3`
+- [x] **T-1402** (Phase 2 — 매도 수수료) **매도 수수료 0.5% → 1.5%**(`config.sell_fee_bp` 50→150, 단타 회전 억제 — 결정타). 거래 함수는 config를 읽으므로 함수 수정 불필요, 값만 변경. 마이그 `20260720050000_sell_fee_150bp.sql`. 커밋 `6a18c8e`
+- [x] **T-1403** (Phase 3a — 초반 톤뉴스 채널) 장 초반 0~40% 구간(`STOCK_EARLY_WINDOW_RATIO=0.4`)에 방향 표시 없이 문안 톤만 흘리는 종목뉴스 묶음(grade=news 동일 배지). 진짜(`|bias|≥20`·톤 0.6 정확도)/필러(편향0·잡음)/헤드페이크 3종. "톤 읽기"가 아니라 초반 시세 브레이크·거래량으로 **교차검증**하는 실력자만 이득. 커밋 `cadecd6`
+- [x] **T-1404** (Phase 3b — 헤드페이크·거래량 단서) 헤드페이크(함정): 항상 호재 톤이지만 경로는 **펌프-덤프**(+6~14% 펌프→30% 정점→종가 −6~0%, `generateHeadfakePath`), 진짜수 ×**0.3**(`STOCK_EARLY_HEADFAKE_RATIO`, 288틱 검증 스위트스팟=실력40%·단타23%). **거래량 단서 불완전성**(`STOCK_EARLY_VOL_TELL_ACC=0.8`): 진짜 20% 조용·헤드페이크 20% 위장 → 1-factor("오르면 산다") 무력화, 다층 종합 판단 요구. 진짜/필러/헤드페이크 종목은 후반 정식뉴스 제외(excludeCodes). 커밋 `644dd9e`·`7ec087e`·`f45d3f3`
+
+---
+
+## Phase 15 — 웹 서비스 보안 강화 (2/2) ✅
+
+> 2026-07-21. 유튜브 "1인 개발자, 보안 기법 5개는 기본으로 알아야죠"(fi4gaqQFw3s) 대조 점검. 5개 중 #1 시크릿·#2 입력검증/SQL인젝션·#3 인증세션은 이미 충족, 미비했던 #4 의존성관리·#5 보안헤더 보완. 브랜치 `feat/security-hardening` → **main 머지(PR#65, 머지 `d3070d9`)**, CI 전 스텝 green.
+
+- [x] **T-1501** (#4 의존성 취약점 관리) `.github/dependabot.yml`(npm·github-actions 주간 스캔, minor/patch 그룹화) + `.github/workflows/ci.yml`(PR·main push 게이트: install→lint→`tsc --noEmit`→`npm audit --audit-level=high`) **프로젝트 최초 CI 도입**. build는 미포함(env·시간). 현재 취약점은 moderate 2건(next 전이 postcss)뿐이라 high 임계값 통과, next 업데이트 시 Dependabot 자동 PR. ⚠️ 함정: macOS 생성 lock에 리눅스 optional(`@emnapi/*`·Tailwind oxide wasm) 누락으로 `npm ci` 실패 → CI를 `npm install`로 전환. `eslint.config.mjs`에 `.agents/**`(스킬 번들) ignore 추가로 lint 정상화
+- [x] **T-1502** (#5 보안 헤더) `next.config.ts` `headers()`로 전 응답 5종 적용: `X-Frame-Options: DENY`(클릭재킹), `X-Content-Type-Options: nosniff`(MIME 스니핑), `Referrer-Policy: strict-origin-when-cross-origin`, `Strict-Transport-Security`(1y includeSubDomains), `Permissions-Policy`(camera/mic/geo 차단). HTTPS/TLS 종단은 Vercel 엣지 담당. **CSP는 lightweight-charts·Tailwind 인라인 충돌 위험으로 의도적 제외**(별도 nonce 기반 검토 대상). `npm start` 실응답 `curl -sI`로 5종 노출 검증
+
+---
+
 ## 마일스톤
 
 | 날짜 | 목표 |
@@ -161,5 +181,7 @@
 | 07-17 | Phase 11 섹터 개편(42종/18섹터·참여확률 뉴스·자금 1,000만) — main 머지·prod 배포 |
 | 07-18 ~ 19 | Phase 12 UI 개선(A 어드민·B 위계·C 감성 보라밤+마스코트·D 소셜 대댓글+미확인배지) — main 머지·prod 배포 완료(PR#46·#47·#48), Phase D 마이그 prod push 완료 |
 | 07-20 | Phase 13 API rate limit 보안 강화(로그인·보너스·가입 남용 방어·방문코드 crypto 8자) — main 머지·prod db push 완료(PR#57·#58) |
+| 07-20 ~ 21 | Phase 14 실력자 우승 밸런스(엔진 운영값 3개·매도 수수료 0.5%→1.5%·초반 톤뉴스+헤드페이크 함정) — main 머지(PR#63·#64), ⚠️ sell_fee config 마이그 prod push 확인 필요 |
+| 07-21 | Phase 15 웹 서비스 보안 강화(CI·Dependabot·보안 헤더 5종) — main 머지(PR#65) |
 | 07-29 ~ 31 | 리허설·버그픽스, 매장 코드 인쇄물 준비 |
 | **08-01** | **개장** 🔔 (개장/폐장 시각 미정 — 8월 시각 논의 중, 그 전까지 12~24시 유지) |
