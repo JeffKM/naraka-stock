@@ -23,10 +23,11 @@ const MAGNITUDE_TABLE: Array<{ value: number; weight: number }> = [
 ];
 
 // 등급별 상승 확률 — 우량주를 일반·잡주보다 높여 "오를 확률" 편향(우상향)
+// wild는 시뮬레이션 튜닝용 env 오버라이드 허용(SIM_WILD_UP_PROB). 운영은 env 미설정 → 0.5.
 const UP_PROBABILITY: Record<StockTier, number> = {
   stable: 0.6,
   normal: 0.55,
-  wild: 0.5,
+  wild: Number(process.env.SIM_WILD_UP_PROB ?? 0.5),
 };
 
 // 등급별 이벤트 배정 가중치 (잡주가 이벤트 단골, 우량은 약간 상향)
@@ -57,7 +58,8 @@ function pickWeighted<T>(rng: Rng, table: Array<{ value: T; weight: number }>): 
 // - 실현 강도는 20~100% 균등 (기대 60%)
 // 뉴스는 이 실현 경로(realizeBias 후 생성된 실제 움직임)를 "설명"하는 방식으로
 // 발행된다(2026-07-14 개편, generate.ts). 즉 원래 bias가 아니라 실현 결과 기준이다.
-const FLIP_PROBABILITY = 0.3;
+// 시뮬 튜닝용 env 오버라이드(SIM_FLIP_PROB). 운영은 env 미설정 → 0.3.
+const FLIP_PROBABILITY = Number(process.env.SIM_FLIP_PROB ?? 0.3);
 const REALIZATION_MIN = 0.2;
 const REALIZATION_MAX = 1.0;
 
@@ -104,7 +106,10 @@ export function drawDailyBiases(stocks: BiasTarget[], rng: Rng): BiasMap {
 // 제공하므로 섹터 층에는 별도 방향 반전(flip)을 걸지 않는다(뉴스추종 방지는
 // generate.ts의 사후 후반 노출 타이밍이 담당). 뉴스는 이 결과를 설명하는 정식뉴스로
 // 후반 노출된다.
-const SECTOR_MAGNITUDE = 15; // 참여 종목에 가산되는 섹터 공통 편향 세기(%p) — 밸런스 튜닝 대상(Plan 5)
+// 참여 종목에 가산되는 섹터 공통 편향 세기(%p). 시뮬 튜닝용 env 오버라이드(SIM_SECTOR_MAG).
+// 키우면 확인된 섹터가 더 크게 움직여 소문교차검증(실력)의 정보 기반 집중 꼬리가 커진다(L2).
+// 운영값 25 = "실력자 우승" 밸런스 반영(2026-07-20, 15→25). env 미설정 시 25.
+const SECTOR_MAGNITUDE = Number(process.env.SIM_SECTOR_MAG ?? 25);
 const SECTOR_PARTICIPATION_PROB = 0.7; // 섹터 구성원 각자 참여할 확률
 const SECTOR_UP_PROBABILITY = 0.55; // 섹터 이벤트의 상승 방향 확률
 

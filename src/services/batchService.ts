@@ -1,13 +1,20 @@
 import "server-only";
 import { applySectorEvents, drawDailyBiases, drawSectorEvents, realizeBias } from "@/lib/engine/bias";
-import { generateDailyPath, PRICE_LIMIT_RATE } from "@/lib/engine/randomWalk";
+import {
+  generateDailyPath,
+  generateHeadfakePath,
+  HEADFAKE_LOUD_VOLUME_SCALE,
+  PRICE_LIMIT_RATE,
+  QUIET_REAL_VOLUME_SCALE,
+} from "@/lib/engine/randomWalk";
 import { createRng, hashSeed } from "@/lib/engine/rng";
 import {
   generateDisclosures,
-  generateEarlySignalNews,
   generateRegularNews,
   generateSectorRumors,
-  pickEarlySignalTargets,
+  generateStockEarlyNews,
+  pickStockNewsTargets,
+  pickVolumeTells,
   type DailyMove,
   type GeneratedNews,
   type StockDayPath,
@@ -130,24 +137,48 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
     // 진입 전에 호출해야 시드 재현성이 유지된다. applySectorEvents는 참여 판정으로
     // RNG를 소비하므로(구 단수 버전과 달리 순수 병합이 아님) 이 순서가 중요하다.
     const sectorEvents = drawSectorEvents(biasTargets, rng);
-    // 가격 경로·요약·섹터 판정용 결합 편향(개별 + 섹터 참여분). 조기 방향뉴스 후보
-    // 선정에는 쓰지 않는다 — 아래 pickEarlySignalTargets 호출부 주석 참고.
+    // 가격 경로·요약·섹터 판정용 결합 편향(개별 + 섹터 참여분). 종목 초반 톤뉴스 후보
+    // 선정에는 쓰지 않는다(개별 편향 기준) — 아래 stockNewsTargets 주석 참고.
     biases = applySectorEvents(individualBiases, biasTargets, sectorEvents, rng);
+
+    // 종목 초반 톤뉴스 채널 대상 선정 (Phase 3a·3b) — 반드시 "개별" 편향 기준(결합 편향을 넘기면
+    // 섹터-only 종목이 끼거나 개별+섹터 상쇄로 순편향 낮은 종목이 뽑히는 리뷰 결함 재발). 헤드페이크
+    // (Phase 3b)는 가격 경로 자체를 펌프-덤프로 바꾸므로 반드시 경로 루프 前에 선정해야 한다. 여기서
+    // RNG를 소비(헤드페이크·필러 추출)하므로 이후 경로·뉴스 시드가 이 지점 기준으로 재현된다
+    // (이벤트 미개장이라 시장 구성 변화는 허용). generateStockEarlyNews가 이 타겟을 그대로 재사용.
+    const stockNewsTargets = pickStockNewsTargets(individualBiases, rng);
+    const headfakeSet = new Set(stockNewsTargets.headfakes);
+    // 거래량 단서 불완전성 (Phase 3b, 하네스 VOL_TELL_ACC=0.8): 진짜 20% 조용·헤드페이크 20%
+    // 시끄럽게 뒤집어 "오르는데 얇으면 헤드페이크"를 확실한 규칙이 아니게 한다. 시장 경로와 분리된
+    // 전용 rng로 결정해 가격은 불변(거래량 세기만 조정) — voltell 시드는 배치 멱등성 유지.
+    const volRng = createRng(hashSeed(`${process.env.SESSION_SECRET}|voltell|${tomorrowDate}`));
+    const { quietReals, loudHeadfakes } = pickVolumeTells(stockNewsTargets, volRng);
 
     for (const stock of stocks) {
       const prevClose = prevCloses[stock.code];
       if (!prevClose) {
         throw new Error(`직전 종가가 없습니다: ${stock.code} (${today})`);
       }
-      // 실제 경로는 확률적 실현치(realizeBias)를 따르고, 뉴스도 이 실현 경로를
-      // "설명"하는 방식으로 발행된다 (추첨 bias가 아니라 실현 결과 기준 — generate.ts)
-      const path = generateDailyPath(
-        prevClose,
-        realizeBias(biases[stock.code], rng),
-        stock.tier as StockTier,
-        rng,
-        config.ticksPerDay
-      );
+      // 헤드페이크(Phase 3b) 종목은 펌프-덤프 경로, 나머지는 실현 편향 기반 랜덤워크.
+      // 실제 경로는 확률적 실현치(realizeBias)를 따르고, 뉴스도 이 실현 경로를 "설명"하는
+      // 방식으로 발행된다 (추첨 bias가 아니라 실현 결과 기준 — generate.ts).
+      // 거래량 배율: loud 헤드페이크는 정상 거래량으로 위장, 조용한 진짜는 얇게(단서 불완전).
+      const path = headfakeSet.has(stock.code)
+        ? generateHeadfakePath(
+            prevClose,
+            stock.tier as StockTier,
+            rng,
+            config.ticksPerDay,
+            loudHeadfakes.has(stock.code) ? HEADFAKE_LOUD_VOLUME_SCALE : undefined
+          )
+        : generateDailyPath(
+            prevClose,
+            realizeBias(biases[stock.code], rng),
+            stock.tier as StockTier,
+            rng,
+            config.ticksPerDay,
+            quietReals.has(stock.code) ? QUIET_REAL_VOLUME_SCALE : 1
+          );
       summaries.push({
         stock_code: stock.code,
         open: path.open,
@@ -178,18 +209,13 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
     // 교체되므로 이력에서 제외 — 배치 멱등성 유지)
     const usedTitles = await loadUsedHintTitles(tomorrowDate);
 
-    // 장중 조기 방향뉴스 (편향 이벤트 상위 2종을 장 70% 지점에 흘림 — T-505).
-    // 이 종목은 후반 정식뉴스에서 제외해 한 종목당 방향뉴스 하나만 유지한다.
-    // 후보 선정·세기(magnitude)는 반드시 "개별" 편향(individualBiases) 기준이어야 한다.
-    // 결합(섹터 가산 후) 편향을 넘기면 섹터-only 종목이 top-2를 밀어내거나 개별+섹터
-    // 상쇄로 순편향이 낮은 종목이 뽑히는 리뷰 결함이 재발한다 (방향 자체는 아래 함수
-    // 내부에서 "노출 틱→종가 실제 방향"으로 실현 경로 기준 산출되므로 결합 편향의 영향을
-    // 받지 않는다).
-    const earlyTargets = pickEarlySignalTargets(individualBiases);
+    // 종목 초반 톤뉴스 발행 (Phase 3a·3b — 경로 루프 前에 선정한 stockNewsTargets 재사용,
+    // generate.ts 상단 참고). 진짜·헤드페이크·필러 모두 후반 정식뉴스에서 제외해 한 종목당
+    // 뉴스 하나만 유지한다.
     news.push(
-      ...generateEarlySignalNews(
+      ...generateStockEarlyNews(
         stockPaths,
-        earlyTargets,
+        stockNewsTargets,
         individualBiases,
         tomorrowDate,
         config.openHour,
@@ -206,7 +232,11 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
         usedTitles,
         1,
         undefined,
-        new Set(earlyTargets)
+        new Set([
+          ...stockNewsTargets.reals,
+          ...stockNewsTargets.fillers,
+          ...stockNewsTargets.headfakes,
+        ])
       )
     );
 

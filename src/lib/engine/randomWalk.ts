@@ -27,10 +27,22 @@ const TICK_SIGMA: Record<StockTier, number> = {
 
 // 등급별 기본 일일 드리프트(%/일). 편향과 합산돼 하루 드리프트로 반영된다.
 // 우량주에 양(+)의 드리프트를 줘 "오를 확률"을 일반·잡주보다 높인다(우상향).
+// wild은 시뮬 튜닝용 env 오버라이드(SIM_WILD_DRIFT). 운영값 -1.0 = "실력자 우승"
+// 밸런스 반영(2026-07-20, -0.2→-1.0). 잡주 하방을 키워 도박(블라인드 몰빵) 꼬리를 깎되,
+// 급락트랩이 되지 않게 완화값(-1.5 대신) 채택. env 미설정 시 -1.0.
 const DAILY_DRIFT: Record<StockTier, number> = {
   stable: 0.2,
   normal: 0,
-  wild: -0.2,
+  wild: Number(process.env.SIM_WILD_DRIFT ?? -1.0),
+};
+
+// 점프 방향(상승) 확률 — stable·normal은 50:50 대칭. wild만 env로 하방편향(SIM_WILD_JUMP_UP_PROB).
+// 낮추면 잡주 급락(크래시)이 잦아져 좌측 꼬리가 두꺼워진다 = 블라인드 몰빵 파산 유도.
+// 운영값 0.35(35:65) = "실력자 우승" 밸런스 반영(2026-07-20, 0.5→0.35, 복권성 보존 완화값).
+const JUMP_UP_PROBABILITY: Record<StockTier, number> = {
+  stable: 0.5,
+  normal: 0.5,
+  wild: Number(process.env.SIM_WILD_JUMP_UP_PROB ?? 0.35),
 };
 
 export const PRICE_LIMIT_RATE = 0.3; // 상하한 ±30%
@@ -123,7 +135,8 @@ export function generateDailyPath(
   bias: number, // %p (-30~+30, 0=중립)
   tier: StockTier,
   rng: Rng,
-  totalTicks: number = TICKS_PER_DAY
+  totalTicks: number = TICKS_PER_DAY,
+  volumeScale: number = 1 // 거래량 배율 (Phase 3b 거래량 단서: 조용한 진짜=QUIET_REAL_VOLUME_SCALE)
 ): DailyPath {
   const upperLimit = roundPrice(prevClose * (1 + PRICE_LIMIT_RATE));
   const lowerLimit = roundPrice(prevClose * (1 - PRICE_LIMIT_RATE));
@@ -153,13 +166,15 @@ export function generateDailyPath(
     // 확률적 점프 (방향 50:50)
     if (rng() < jumpProbability) {
       const size = JUMP_MIN + rng() * (JUMP_MAX - JUMP_MIN);
-      price *= rng() < 0.5 ? 1 + size : 1 - size;
+      price *= rng() < JUMP_UP_PROBABILITY[tier] ? 1 + size : 1 - size;
       h = clusterBoost(h); // 여진: 다음 틱들 σ 상승
     }
     price = Math.min(Math.max(price, lowerLimit), upperLimit);
     const rounded = roundPrice(price);
     prices.push(rounded);
-    volumes.push(tickVolume(tier, prev, rounded, rng)); // 가격 확정 후 RNG 소비
+    // 가격 확정 후 RNG 소비(volumeScale과 무관하게 항상 1회 → 가격·재현성 불변).
+    // volumeScale<1은 "조용한 진짜"(거래량 단서를 불완전하게) 연출용.
+    volumes.push(Math.max(1, Math.round(tickVolume(tier, prev, rounded, rng) * volumeScale)));
   }
 
   // VI 마킹: 직전 틱 대비 ±8% 이상 급변 → 다음 틱부터 5분 정지
@@ -239,7 +254,7 @@ export function regenerateRemainingPath(
     h = clusterStep(h, Math.abs(nextGaussian(rng)) - MEAN_ABS_GAUSSIAN);
     if (rng() < jumpProbability) {
       const size = JUMP_MIN + rng() * (JUMP_MAX - JUMP_MIN);
-      price *= rng() < 0.5 ? 1 + size : 1 - size;
+      price *= rng() < JUMP_UP_PROBABILITY[tier] ? 1 + size : 1 - size;
       h = clusterBoost(h); // 여진: 다음 틱들 σ 상승
     }
     price = Math.min(Math.max(price, lowerLimit), upperLimit);
@@ -262,6 +277,72 @@ export function regenerateRemainingPath(
   }
 
   return ticks;
+}
+
+// --- 헤드페이크(펌프-덤프 함정) 경로 (Phase 3b, 2026-07-20 밸런스 결정 B) ---
+// 종목 초반 톤뉴스 채널의 "함정": 개장가에서 완만히 펌프(+6~14%)해 확인 시점(≈30% 지점)에
+// 정점을 찍고, 종가까지 덤프(−6~0%)한다. 순진하게 "초반 오르는 것 + 호재 톤"만 보고 사면
+// 종가에 물린다. 단서 = 거래량 — 펌프가 완만해(틱당 변동 미미) 거래량이 얇게 유지되므로,
+// σ·점프로 거래량이 실리는 "진짜 급등"과 대조된다. bias-0 종목에만 적용해 실제 이벤트와
+// 겹치지 않게 하고, 톤뉴스는 tone-up으로 붙는다(generate.ts). 방향은 살 수만 있는(공매도 없는)
+// 게임이라 브라켓 차익거래가 열리지 않는다(펌프 높이·시점 rng 변동 → 예측 불가).
+// 하네스 검증(2026-07-20): 헤드페이크 0.3이 스위트스팟(실력 상위4 40%·단타 23%, 순진추종 박살).
+const HEADFAKE_PUMP_MIN = 0.06; // 펌프 정점 상승률 하한
+const HEADFAKE_PUMP_MAX = 0.14; // 펌프 정점 상승률 상한
+const HEADFAKE_CLOSE_MIN = -0.06; // 종가 순수익 하한 (−6%)
+const HEADFAKE_CLOSE_MAX = 0.0; // 종가 순수익 상한 (0%)
+const HEADFAKE_PEAK_FRACTION = 0.3; // 정점 위치 = 톤뉴스 교차검증 창(0~40%) 안, 확인 시점에 맞춤
+const HEADFAKE_NOISE = 0.005; // 틱당 ±0.5% 잔떨림
+// 거래량 단서 세기 (Phase 3b, 하네스 VOL_TELL_ACC=0.8 재현):
+export const HEADFAKE_VOLUME_SCALE = 0.4; // 얇은 헤드페이크(80%) = baseline 40%, 스파이크 없음 = 단서 성립
+export const HEADFAKE_LOUD_VOLUME_SCALE = 1.0; // 시끄러운 헤드페이크(20%) = 정상 거래량 → 거래량만 보는 판단도 속임
+export const QUIET_REAL_VOLUME_SCALE = 0.4; // 조용한 진짜(20%) = 얇게 → 거래량 확인이 진짜를 놓침(단서 불완전)
+
+// 헤드페이크 경로 생성. RNG 소비: pump 1 + closeRet 1 + 틱당 (가격 noise 1 + 거래량 noise 1).
+// 완만한 곡선이라 틱 간 ±8% 급변이 없어 VI는 발동하지 않는다(isHalted 전부 false). 상하한 클램프.
+// volumeScale: 거래량 배율. 기본=얇음(0.4). loud 헤드페이크는 HEADFAKE_LOUD_VOLUME_SCALE(1.0)로
+// 호출해 정상 거래량처럼 위장한다. 가격은 volumeScale과 무관(경로·RNG 소비 불변).
+export function generateHeadfakePath(
+  prevClose: number,
+  tier: StockTier,
+  rng: Rng,
+  totalTicks: number = TICKS_PER_DAY,
+  volumeScale: number = HEADFAKE_VOLUME_SCALE
+): DailyPath {
+  const upperLimit = roundPrice(prevClose * (1 + PRICE_LIMIT_RATE));
+  const lowerLimit = roundPrice(prevClose * (1 - PRICE_LIMIT_RATE));
+  const open = prevClose;
+  const pump = HEADFAKE_PUMP_MIN + rng() * (HEADFAKE_PUMP_MAX - HEADFAKE_PUMP_MIN);
+  const closeRet = HEADFAKE_CLOSE_MIN + rng() * (HEADFAKE_CLOSE_MAX - HEADFAKE_CLOSE_MIN);
+  const peakAt = Math.floor(totalTicks * HEADFAKE_PEAK_FRACTION);
+  const ticks: Tick[] = [];
+  for (let i = 0; i < totalTicks; i++) {
+    // 정점(peakAt)까지 선형 상승 → 이후 종가까지 선형 하강 + 소음
+    const frac =
+      i <= peakAt
+        ? (i / Math.max(1, peakAt)) * pump
+        : pump + ((i - peakAt) / Math.max(1, totalTicks - 1 - peakAt)) * (closeRet - pump);
+    const noise = (rng() - 0.5) * 2 * HEADFAKE_NOISE;
+    const price = roundPrice(
+      Math.min(Math.max(open * (1 + frac + noise), lowerLimit), upperLimit)
+    );
+    // 얇은 거래량: baseline × scale × noise. 변동폭 스파이크(VOLUME_MOVE_K)를 태우지 않아
+    // 완만히 오르는데도 거래량이 조용하다 = 진짜 급등과 구별되는 단서.
+    const volNoise = VOLUME_NOISE_MIN + rng() * (VOLUME_NOISE_MAX - VOLUME_NOISE_MIN);
+    const volume = Math.max(
+      1,
+      Math.round(VOLUME_BASELINE[tier] * volumeScale * volNoise)
+    );
+    ticks.push({ tickIndex: i, price, isHalted: false, volume });
+  }
+  const prices = ticks.map((t) => t.price);
+  return {
+    ticks,
+    open: prices[0],
+    high: Math.max(...prices),
+    low: Math.min(...prices),
+    close: prices[totalTicks - 1],
+  };
 }
 
 // 인트라데이 U자 변동성 배율 — 개장·마감↑·정오↓. 구간 평균을 정확히 1로
