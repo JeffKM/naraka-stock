@@ -25,8 +25,13 @@ jobs:
           node-version: 20
           cache: npm
 
+      # npm ci 대신 npm install 사용:
+      # 로컬(macOS)에서 생성한 lock에는 리눅스 전용 optional deps(@tailwindcss/oxide
+      # wasm fallback = @emnapi/*)가 빠져 npm ci가 sync 불일치로 실패한다.
+      # CI는 build를 하지 않아 재현성 요구가 낮고, npm install이 리눅스 optional을
+      # 그때 해결하므로 lint·tsc·audit 실행에 충분하다.
       - name: 의존성 설치
-        run: npm ci
+        run: npm install --no-fund
 
       - name: ESLint
         run: npm run lint
