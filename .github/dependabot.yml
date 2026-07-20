@@ -11,6 +11,12 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    ignore:
+      # TypeScript 7.x = 네이티브(Go) 재작성 메이저. typescript-eslint 등 툴체인이
+      # 호환되기 전까지 5.x 유지 (major 올리면 ESLint 단계에서 크래시). PR #70 참고.
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
     groups:
       minor-and-patch:
         update-types:
