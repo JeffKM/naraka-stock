@@ -7,14 +7,16 @@
 // - 중립 잡뉴스(방향성 없음): 잔잔한 종목 중 랜덤으로 골라 장 초·중반(후반 전)에
 //   균등 배치한다. 오르내림 신호가 없어 뉴스추종 악용이 불가하므로 순수 피드 밀도용
 //   (하루 NEUTRAL_TARGET개, 균등 간격 ≈22분 ±5분 지터·종목 순서는 랜덤).
-// - 장중 조기 방향뉴스(2026-07-15 추가): 매일 편향 이벤트 상위 EARLY_SIGNAL_COUNT종에
-//   대해, 방향이 있는 뉴스를 장 EARLY_SIGNAL_RATIO 지점(후반 전)에 흘린다. 잡뉴스와
-//   겉모습(grade "news")은 같고 문안 톤(방향 템플릿)으로만 구별되어, 손님이 피드를
-//   읽고 판별해 베팅하는 재미를 준다. 방향은 "노출 틱→종가 실제 방향"과
-//   EARLY_SIGNAL_ACCURACY 확률로만 일치(=도박). 이 종목은 후반 정식뉴스에서 제외한다.
-//   시뮬레이션 검증(2026-07-15): 2종·정확도 60%·0.7 지점이 밸런스(추종 중앙값 ≈본전,
-//   존버·잡주몰빵 미지배)와 차별화(원금손실 45%·상하 스프레드 2.2배)를 동시에 만족.
-//   더 이르거나(장 중간) 더 정확하면(≥70%) 추종이 지배 전략이 되어 붕괴한다.
+// - 종목 초반 톤뉴스 (Phase 3a, 2026-07-20 밸런스 결정 B): 기존 조기 방향뉴스(top-2·
+//   장 70%지점·방향표시)를 실력자 우위 채널로 확장. 개별편향 |bias|≥STOCK_EARLY_CUT "진짜"
+//   + 편향0 "필러"(진짜:노이즈 1:1)를 장 초반 0~STOCK_EARLY_WINDOW_RATIO 창에 분산 발행한다.
+//   방향은 미표기 — 문안 톤이 진짜 방향을 STOCK_EARLY_TONE_ACC(0.6=애매)로만 가리켜, 톤 단독
+//   추종은 동전(블라인드 사멸)이고 초반 시세 브레이크로 교차검증하는 실력자만 이득이다.
+//   진짜/필러 모두 grade "news"라 라벨로는 구별 불가(문안 톤으로만). 이 종목들은 후반 정식뉴스
+//   에서 제외한다. 거래량 단서 = 실제 틱 거래량(진짜=|bias| 큼→움직임 큼→거래량 실림)으로,
+//   시세/차트에 이미 노출되므로 별도 저장이 불필요하다. 헤드페이크(펌프-덤프 함정)는 가격 엔진
+//   변경이 필요해 3b로 분리한다. 하네스 검증(2026-07-20, 288틱·수수료1.5%·헤드페이크0):
+//   교차검증 진입 적중 81%, 실력(거래량+시세 확인) 상위4 68% 압도·블라인드·도박·단타 사멸.
 // - 찌라시(55%): 자동 생성하지 않는다. 어드민이 콘솔에서 직접 흘리고(수동), 그에
 //   맞춰 시세를 조정한다.
 // - 공시(오늘자, 100%): 실제 등락 ±5% 이상 또는 상·하한가만 발행. 폐장 시각에 노출.
@@ -49,10 +51,14 @@ export interface GeneratedNews {
 const COVERAGE = 0.7; // 유의미한 움직임 중 뉴스가 붙는 비율 (나머지는 조용히 지나감)
 const NEWS_ACCURACY = 0.9; // 정식뉴스가 실제 방향과 일치할 확률
 
-// 장중 조기 방향뉴스 (시뮬레이션 확정값 2026-07-15) — 상세 근거는 파일 상단 참고
-export const EARLY_SIGNAL_COUNT = 2; // 하루 조기 방향뉴스 개수 (편향 이벤트 상위 N종)
-const EARLY_SIGNAL_ACCURACY = 0.6; // 노출 틱→종가 실제 방향과 일치할 확률 (아니면 반대)
-const EARLY_SIGNAL_RATIO = 0.7; // 노출 틱 = 장 70% 지점 (남은 드리프트만 추종 가능 → 착취 제한)
+// 종목 초반 톤뉴스 채널 (Phase 3a 확정값 2026-07-20) — 상세 근거는 파일 상단 참고
+export const STOCK_EARLY_CUT = 20; // 진짜 대상: |개별 bias| ≥ 20 (하네스 STOCKNEWS_CUT)
+const STOCK_EARLY_TONE_ACC = 0.6; // 톤이 진짜 방향을 가리킬 확률 (0.6=애매, 톤 단독 추종 무력화)
+const STOCK_EARLY_NOISE_RATIO = 1.0; // 진짜당 필러(방향성0 종목) 수 (진짜:노이즈 = 1:1)
+const STOCK_EARLY_WINDOW_RATIO = 0.4; // 발행 창 = 장 0~40% 지점 (교차검증할 남은 움직임 확보)
+const STOCK_EARLY_FILLER_LEVEL = 10 as const; // 필러 톤 세기(약) — 방향성0이라 세기 정보 없음
+// 발행 슬롯 지터 — 벽시계 ±5분어치 틱(틱 간격 무관하게 분산 폭 보존)
+const STOCK_EARLY_JITTER_TICKS = Math.round((5 * 60) / TICK_INTERVAL_SECONDS);
 const NEUTRAL_TARGET = 27; // 초·중반에 균등 배치할 중립 잡뉴스 목표 개수/일 = 가용 중립 종목 전부 (약 22분 간격, 방향성 없음·피드 밀도용)
 // 틱 간격이 바뀌어도(5분→10초 등) 벽시계 지속시간을 보존하도록 TICK_INTERVAL_SECONDS로 재유도한다.
 const NEUTRAL_JITTER_TICKS = Math.round((5 * 60) / TICK_INTERVAL_SECONDS); // 균등 간격에서 ±5분어치 틱 흔들어 기계적 등간격 방지
@@ -230,60 +236,99 @@ export function generateRegularNews(
   return result;
 }
 
-// 조기 방향뉴스 대상 선정: 그날 편향 이벤트(bias≠0) 중 |bias| 상위 count종.
-//   동률은 코드 사전순으로 tie-break해 결정적(배치 멱등성 유지).
-export function pickEarlySignalTargets(
-  biases: Record<string, number>,
-  count: number = EARLY_SIGNAL_COUNT
-): string[] {
-  return Object.entries(biases)
-    .filter(([, b]) => b !== 0)
-    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]) || (a[0] < b[0] ? -1 : 1))
-    .slice(0, count)
-    .map(([code]) => code);
+export interface StockNewsTargets {
+  reals: string[]; // |개별 bias| ≥ CUT — 톤이 진짜 방향을 힌트, 실제로 크게 움직임(거래량 실림)
+  fillers: string[]; // 편향0 종목 — 톤 랜덤(방향성0 노이즈), 실제 움직임 없음
 }
 
-// 장중 조기 방향뉴스 — 잡뉴스 사이에 소수(EARLY_SIGNAL_COUNT) 섞는 "예측형" 신호.
-//   세기(±10/20/30)는 재료(bias) 크기로, 부호는 "노출 틱→종가 실제 방향"과
-//   EARLY_SIGNAL_ACCURACY 확률로 일치(아니면 반대)해 정한다 = 정확도 있는 도박 신호.
-//   노출 틱은 장 EARLY_SIGNAL_RATIO 지점(후반 전) — 남은 움직임만 추종 가능해 착취 제한.
-//   grade는 잡뉴스와 동일한 "news"라 라벨로는 구별 불가, 문안 톤으로만 티가 난다.
-export function generateEarlySignalNews(
+// 종목 초반 톤뉴스 대상 선정 (Phase 3a):
+//   진짜 = 개별 편향 |bias|≥CUT (코드 사전순으로 결정적 — 배치 멱등성 유지)
+//   필러 = 편향0 종목 중 진짜수 × NOISE_RATIO개를 랜덤 추출 (진짜:노이즈 1:1)
+//   RNG 소비는 필러 추출뿐(진짜는 소비 없음) — batchService·이후 뉴스와 순서 일치 필요.
+export function pickStockNewsTargets(
+  individualBiases: Record<string, number>,
+  rng: Rng
+): StockNewsTargets {
+  const reals: string[] = [];
+  const fillerPool: string[] = [];
+  for (const [code, b] of Object.entries(individualBiases).sort((a, z) =>
+    a[0] < z[0] ? -1 : 1
+  )) {
+    if (Math.abs(b) >= STOCK_EARLY_CUT) reals.push(code);
+    else if (b === 0) fillerPool.push(code);
+  }
+  const fillerCount = Math.min(
+    fillerPool.length,
+    Math.round(reals.length * STOCK_EARLY_NOISE_RATIO)
+  );
+  const fillers: string[] = [];
+  for (let i = 0; i < fillerCount; i++) {
+    const idx = Math.floor(rng() * fillerPool.length);
+    fillers.push(fillerPool.splice(idx, 1)[0]);
+  }
+  return { reals, fillers };
+}
+
+// 종목 초반 톤뉴스 발행 (Phase 3a) — 진짜+필러를 장 0~WINDOW 창에 방향 미표기(톤만)로 분산.
+//   진짜: 세기(10/20/30)=개별 편향 크기, 톤 방향=진짜 방향을 TONE_ACC로만 일치(아니면 반대) = 애매.
+//   필러: 세기=약(10), 톤 방향=랜덤 → 방향성0 노이즈(블라인드 추종을 동전으로 만든다).
+//   grade는 정식뉴스와 동일한 "news"라 라벨 구별 불가, 문안 톤으로만 티가 난다. 실력 = 톤 +
+//   초반 시세 브레이크 + 거래량(시세/차트에 노출된 실제 틱 거래량) 교차검증.
+export function generateStockEarlyNews(
   paths: StockDayPath[],
-  targets: string[],
-  biases: Record<string, number>,
+  targets: StockNewsTargets,
+  individualBiases: Record<string, number>,
   date: string,
   openHour: number,
   rng: Rng,
   usedTitles: UsedTitles = {}
 ): GeneratedNews[] {
-  const result: GeneratedNews[] = [];
   const pathByCode = new Map(paths.map((p) => [p.code, p]));
-  for (const code of targets) {
-    const path = pathByCode.get(code);
-    const templates = HINT_TEMPLATES[code];
-    if (!path || !templates || path.ticks.length === 0) continue;
-    const magnitude = Math.abs(biases[code]); // 개별+섹터 결합 편향 (10/20/30이 아닐 수 있음)
-    if (magnitude === 0) continue;
-    const level = snapMagnitudeLevel(magnitude); // 템플릿 세기(10/20/30)로 스냅
+  const totalTicks = paths.reduce((m, p) => Math.max(m, p.ticks.length), 0);
+  if (totalTicks === 0) return [];
+  const windowTicks = Math.max(1, Math.floor(totalTicks * STOCK_EARLY_WINDOW_RATIO));
 
-    const last = path.ticks.length - 1;
-    const idx = Math.min(last, Math.max(0, Math.floor(last * EARLY_SIGNAL_RATIO)));
-    const entryPrice = path.ticks[idx].price;
-    const closePrice = path.ticks[last].price;
-    const actualDir = closePrice >= entryPrice ? 1 : -1; // 노출 틱→종가 실제 방향
-    const shownDir = rng() < EARLY_SIGNAL_ACCURACY ? actualDir : -actualDir;
+  // 발행 항목 구성 — 진짜(코드순) 먼저, 필러(추출 순서) 뒤. 톤 방향·세기를 여기서 결정한다.
+  //   RNG 소비: 진짜당 1회(톤 플립 판정) + 필러당 1회(랜덤 방향). 슬롯 배치에서 추가 소비.
+  const items: Array<{ code: string; level: 10 | 20 | 30; dir: 1 | -1 }> = [];
+  for (const code of targets.reals) {
+    const path = pathByCode.get(code);
+    if (!path || !HINT_TEMPLATES[code] || path.ticks.length === 0) continue;
+    const magnitude = Math.abs(individualBiases[code] ?? 0);
+    if (magnitude === 0) continue;
+    const trueDir: 1 | -1 = (individualBiases[code] ?? 0) > 0 ? 1 : -1;
+    const shownDir: 1 | -1 = rng() < STOCK_EARLY_TONE_ACC ? trueDir : ((-trueDir) as 1 | -1);
+    items.push({ code, level: snapMagnitudeLevel(magnitude), dir: shownDir });
+  }
+  for (const code of targets.fillers) {
+    const path = pathByCode.get(code);
+    if (!path || !HINT_TEMPLATES[code] || path.ticks.length === 0) continue;
+    const dir: 1 | -1 = rng() < 0.5 ? 1 : -1;
+    items.push({ code, level: STOCK_EARLY_FILLER_LEVEL, dir });
+  }
+
+  // 0~WINDOW 창에 균등 슬롯 + ±JITTER 분산 (개장 직후 한 틱 몰림 방지 — 잡뉴스·소문과 동일 패턴)
+  const n = items.length;
+  const result: GeneratedNews[] = [];
+  for (let i = 0; i < n; i++) {
+    const { code, level, dir } = items[i];
+    const path = pathByCode.get(code)!;
     const template = pickUnused(
       rng,
-      templates[levelOf(shownDir * level)],
+      HINT_TEMPLATES[code][levelOf(dir * level)],
       usedTitles[code]
     );
+    const center = Math.floor((windowTicks * (i + 0.5)) / n);
+    const jitter =
+      Math.floor(rng() * (2 * STOCK_EARLY_JITTER_TICKS + 1)) - STOCK_EARLY_JITTER_TICKS;
+    const cap = Math.min(windowTicks, path.ticks.length - 1);
+    const arrIdx = Math.max(0, Math.min(cap, center + jitter));
     result.push({
       date,
       stockCode: code,
       grade: "news",
       ...template,
-      publishedAt: tickTimestamp(date, path.ticks[idx].tickIndex, openHour),
+      publishedAt: tickTimestamp(date, path.ticks[arrIdx].tickIndex, openHour),
     });
   }
   return result;

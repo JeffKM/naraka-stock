@@ -4,10 +4,10 @@ import { generateDailyPath, PRICE_LIMIT_RATE } from "@/lib/engine/randomWalk";
 import { createRng, hashSeed } from "@/lib/engine/rng";
 import {
   generateDisclosures,
-  generateEarlySignalNews,
   generateRegularNews,
   generateSectorRumors,
-  pickEarlySignalTargets,
+  generateStockEarlyNews,
+  pickStockNewsTargets,
   type DailyMove,
   type GeneratedNews,
   type StockDayPath,
@@ -178,18 +178,16 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
     // 교체되므로 이력에서 제외 — 배치 멱등성 유지)
     const usedTitles = await loadUsedHintTitles(tomorrowDate);
 
-    // 장중 조기 방향뉴스 (편향 이벤트 상위 2종을 장 70% 지점에 흘림 — T-505).
-    // 이 종목은 후반 정식뉴스에서 제외해 한 종목당 방향뉴스 하나만 유지한다.
-    // 후보 선정·세기(magnitude)는 반드시 "개별" 편향(individualBiases) 기준이어야 한다.
-    // 결합(섹터 가산 후) 편향을 넘기면 섹터-only 종목이 top-2를 밀어내거나 개별+섹터
-    // 상쇄로 순편향이 낮은 종목이 뽑히는 리뷰 결함이 재발한다 (방향 자체는 아래 함수
-    // 내부에서 "노출 틱→종가 실제 방향"으로 실현 경로 기준 산출되므로 결합 편향의 영향을
-    // 받지 않는다).
-    const earlyTargets = pickEarlySignalTargets(individualBiases);
+    // 종목 초반 톤뉴스 채널 (Phase 3a, 밸런스 결정 B — generate.ts 상단 참고).
+    // 진짜(|개별 bias|≥CUT) + 필러(편향0)를 장 초반 0~40% 창에 방향 미표기(톤만)로 발행한다.
+    // 대상 선정·세기는 반드시 "개별" 편향(individualBiases) 기준이어야 한다 — 결합(섹터 가산
+    // 후) 편향을 넘기면 섹터-only 종목이 끼거나 개별+섹터 상쇄로 순편향 낮은 종목이 뽑히는
+    // 리뷰 결함이 재발한다. 진짜·필러 모두 후반 정식뉴스에서 제외해 한 종목당 뉴스 하나만 유지.
+    const stockNewsTargets = pickStockNewsTargets(individualBiases, rng);
     news.push(
-      ...generateEarlySignalNews(
+      ...generateStockEarlyNews(
         stockPaths,
-        earlyTargets,
+        stockNewsTargets,
         individualBiases,
         tomorrowDate,
         config.openHour,
@@ -206,7 +204,7 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
         usedTitles,
         1,
         undefined,
-        new Set(earlyTargets)
+        new Set([...stockNewsTargets.reals, ...stockNewsTargets.fillers])
       )
     );
 
