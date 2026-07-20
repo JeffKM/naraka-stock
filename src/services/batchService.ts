@@ -1,6 +1,12 @@
 import "server-only";
 import { applySectorEvents, drawDailyBiases, drawSectorEvents, realizeBias } from "@/lib/engine/bias";
-import { generateDailyPath, generateHeadfakePath, PRICE_LIMIT_RATE } from "@/lib/engine/randomWalk";
+import {
+  generateDailyPath,
+  generateHeadfakePath,
+  HEADFAKE_LOUD_VOLUME_SCALE,
+  PRICE_LIMIT_RATE,
+  QUIET_REAL_VOLUME_SCALE,
+} from "@/lib/engine/randomWalk";
 import { createRng, hashSeed } from "@/lib/engine/rng";
 import {
   generateDisclosures,
@@ -8,6 +14,7 @@ import {
   generateSectorRumors,
   generateStockEarlyNews,
   pickStockNewsTargets,
+  pickVolumeTells,
   type DailyMove,
   type GeneratedNews,
   type StockDayPath,
@@ -141,6 +148,11 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
     // (이벤트 미개장이라 시장 구성 변화는 허용). generateStockEarlyNews가 이 타겟을 그대로 재사용.
     const stockNewsTargets = pickStockNewsTargets(individualBiases, rng);
     const headfakeSet = new Set(stockNewsTargets.headfakes);
+    // 거래량 단서 불완전성 (Phase 3b, 하네스 VOL_TELL_ACC=0.8): 진짜 20% 조용·헤드페이크 20%
+    // 시끄럽게 뒤집어 "오르는데 얇으면 헤드페이크"를 확실한 규칙이 아니게 한다. 시장 경로와 분리된
+    // 전용 rng로 결정해 가격은 불변(거래량 세기만 조정) — voltell 시드는 배치 멱등성 유지.
+    const volRng = createRng(hashSeed(`${process.env.SESSION_SECRET}|voltell|${tomorrowDate}`));
+    const { quietReals, loudHeadfakes } = pickVolumeTells(stockNewsTargets, volRng);
 
     for (const stock of stocks) {
       const prevClose = prevCloses[stock.code];
@@ -150,14 +162,22 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
       // 헤드페이크(Phase 3b) 종목은 펌프-덤프 경로, 나머지는 실현 편향 기반 랜덤워크.
       // 실제 경로는 확률적 실현치(realizeBias)를 따르고, 뉴스도 이 실현 경로를 "설명"하는
       // 방식으로 발행된다 (추첨 bias가 아니라 실현 결과 기준 — generate.ts).
+      // 거래량 배율: loud 헤드페이크는 정상 거래량으로 위장, 조용한 진짜는 얇게(단서 불완전).
       const path = headfakeSet.has(stock.code)
-        ? generateHeadfakePath(prevClose, stock.tier as StockTier, rng, config.ticksPerDay)
+        ? generateHeadfakePath(
+            prevClose,
+            stock.tier as StockTier,
+            rng,
+            config.ticksPerDay,
+            loudHeadfakes.has(stock.code) ? HEADFAKE_LOUD_VOLUME_SCALE : undefined
+          )
         : generateDailyPath(
             prevClose,
             realizeBias(biases[stock.code], rng),
             stock.tier as StockTier,
             rng,
-            config.ticksPerDay
+            config.ticksPerDay,
+            quietReals.has(stock.code) ? QUIET_REAL_VOLUME_SCALE : 1
           );
       summaries.push({
         stock_code: stock.code,

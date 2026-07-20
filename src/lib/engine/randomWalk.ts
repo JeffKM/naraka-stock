@@ -135,7 +135,8 @@ export function generateDailyPath(
   bias: number, // %p (-30~+30, 0=중립)
   tier: StockTier,
   rng: Rng,
-  totalTicks: number = TICKS_PER_DAY
+  totalTicks: number = TICKS_PER_DAY,
+  volumeScale: number = 1 // 거래량 배율 (Phase 3b 거래량 단서: 조용한 진짜=QUIET_REAL_VOLUME_SCALE)
 ): DailyPath {
   const upperLimit = roundPrice(prevClose * (1 + PRICE_LIMIT_RATE));
   const lowerLimit = roundPrice(prevClose * (1 - PRICE_LIMIT_RATE));
@@ -171,7 +172,9 @@ export function generateDailyPath(
     price = Math.min(Math.max(price, lowerLimit), upperLimit);
     const rounded = roundPrice(price);
     prices.push(rounded);
-    volumes.push(tickVolume(tier, prev, rounded, rng)); // 가격 확정 후 RNG 소비
+    // 가격 확정 후 RNG 소비(volumeScale과 무관하게 항상 1회 → 가격·재현성 불변).
+    // volumeScale<1은 "조용한 진짜"(거래량 단서를 불완전하게) 연출용.
+    volumes.push(Math.max(1, Math.round(tickVolume(tier, prev, rounded, rng) * volumeScale)));
   }
 
   // VI 마킹: 직전 틱 대비 ±8% 이상 급변 → 다음 틱부터 5분 정지
@@ -290,15 +293,21 @@ const HEADFAKE_CLOSE_MIN = -0.06; // 종가 순수익 하한 (−6%)
 const HEADFAKE_CLOSE_MAX = 0.0; // 종가 순수익 상한 (0%)
 const HEADFAKE_PEAK_FRACTION = 0.3; // 정점 위치 = 톤뉴스 교차검증 창(0~40%) 안, 확인 시점에 맞춤
 const HEADFAKE_NOISE = 0.005; // 틱당 ±0.5% 잔떨림
-const HEADFAKE_VOLUME_SCALE = 0.4; // 얇은 거래량 = 등급 baseline의 40%(변동 스파이크 없음) = 단서
+// 거래량 단서 세기 (Phase 3b, 하네스 VOL_TELL_ACC=0.8 재현):
+export const HEADFAKE_VOLUME_SCALE = 0.4; // 얇은 헤드페이크(80%) = baseline 40%, 스파이크 없음 = 단서 성립
+export const HEADFAKE_LOUD_VOLUME_SCALE = 1.0; // 시끄러운 헤드페이크(20%) = 정상 거래량 → 거래량만 보는 판단도 속임
+export const QUIET_REAL_VOLUME_SCALE = 0.4; // 조용한 진짜(20%) = 얇게 → 거래량 확인이 진짜를 놓침(단서 불완전)
 
 // 헤드페이크 경로 생성. RNG 소비: pump 1 + closeRet 1 + 틱당 (가격 noise 1 + 거래량 noise 1).
 // 완만한 곡선이라 틱 간 ±8% 급변이 없어 VI는 발동하지 않는다(isHalted 전부 false). 상하한 클램프.
+// volumeScale: 거래량 배율. 기본=얇음(0.4). loud 헤드페이크는 HEADFAKE_LOUD_VOLUME_SCALE(1.0)로
+// 호출해 정상 거래량처럼 위장한다. 가격은 volumeScale과 무관(경로·RNG 소비 불변).
 export function generateHeadfakePath(
   prevClose: number,
   tier: StockTier,
   rng: Rng,
-  totalTicks: number = TICKS_PER_DAY
+  totalTicks: number = TICKS_PER_DAY,
+  volumeScale: number = HEADFAKE_VOLUME_SCALE
 ): DailyPath {
   const upperLimit = roundPrice(prevClose * (1 + PRICE_LIMIT_RATE));
   const lowerLimit = roundPrice(prevClose * (1 - PRICE_LIMIT_RATE));
@@ -322,7 +331,7 @@ export function generateHeadfakePath(
     const volNoise = VOLUME_NOISE_MIN + rng() * (VOLUME_NOISE_MAX - VOLUME_NOISE_MIN);
     const volume = Math.max(
       1,
-      Math.round(VOLUME_BASELINE[tier] * HEADFAKE_VOLUME_SCALE * volNoise)
+      Math.round(VOLUME_BASELINE[tier] * volumeScale * volNoise)
     );
     ticks.push({ tickIndex: i, price, isHalted: false, volume });
   }
