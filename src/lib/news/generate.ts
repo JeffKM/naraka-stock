@@ -14,9 +14,13 @@
 //   추종은 동전(블라인드 사멸)이고 초반 시세 브레이크로 교차검증하는 실력자만 이득이다.
 //   진짜/필러 모두 grade "news"라 라벨로는 구별 불가(문안 톤으로만). 이 종목들은 후반 정식뉴스
 //   에서 제외한다. 거래량 단서 = 실제 틱 거래량(진짜=|bias| 큼→움직임 큼→거래량 실림)으로,
-//   시세/차트에 이미 노출되므로 별도 저장이 불필요하다. 헤드페이크(펌프-덤프 함정)는 가격 엔진
-//   변경이 필요해 3b로 분리한다. 하네스 검증(2026-07-20, 288틱·수수료1.5%·헤드페이크0):
-//   교차검증 진입 적중 81%, 실력(거래량+시세 확인) 상위4 68% 압도·블라인드·도박·단타 사멸.
+//   시세/차트에 이미 노출되므로 별도 저장이 불필요하다.
+// - 헤드페이크 (Phase 3b): 편향0 종목 일부(진짜×0.3)를 tone-up "호재처럼" 발행하되, 경로는
+//   펌프-덤프(generateHeadfakePath, randomWalk.ts)라 초반 확 튀었다 종가엔 꺼진다. 순진한
+//   "초반 상승+호재톤" 추종을 유인하는 함정 — 단서는 얇은 거래량(펌프가 완만→거래량 조용).
+//   실력은 "톤+시세브레이크+거래량"을 종합해 진짜 급등과 함정을 가른다. 하네스 검증
+//   (288틱·수수료1.5%): 헤드페이크0=실력 상위4 68%(순진추종도 삶), 0.3=실력 40%·단타 23%
+//   (순진추종 박살·다층 판단 요구), 0.5=과함(단타 역득세) → 0.3 스위트스팟 채택.
 // - 찌라시(55%): 자동 생성하지 않는다. 어드민이 콘솔에서 직접 흘리고(수동), 그에
 //   맞춰 시세를 조정한다.
 // - 공시(오늘자, 100%): 실제 등락 ±5% 이상 또는 상·하한가만 발행. 폐장 시각에 노출.
@@ -55,8 +59,10 @@ const NEWS_ACCURACY = 0.9; // 정식뉴스가 실제 방향과 일치할 확률
 export const STOCK_EARLY_CUT = 20; // 진짜 대상: |개별 bias| ≥ 20 (하네스 STOCKNEWS_CUT)
 const STOCK_EARLY_TONE_ACC = 0.6; // 톤이 진짜 방향을 가리킬 확률 (0.6=애매, 톤 단독 추종 무력화)
 const STOCK_EARLY_NOISE_RATIO = 1.0; // 진짜당 필러(방향성0 종목) 수 (진짜:노이즈 = 1:1)
+const STOCK_EARLY_HEADFAKE_RATIO = 0.3; // 진짜당 헤드페이크(펌프-덤프 함정) 수 (하네스 스위트스팟, Phase 3b)
 const STOCK_EARLY_WINDOW_RATIO = 0.4; // 발행 창 = 장 0~40% 지점 (교차검증할 남은 움직임 확보)
 const STOCK_EARLY_FILLER_LEVEL = 10 as const; // 필러 톤 세기(약) — 방향성0이라 세기 정보 없음
+const STOCK_EARLY_HEADFAKE_LEVEL = 10 as const; // 헤드페이크 톤 세기(약, 항상 tone-up=호재처럼)
 // 발행 슬롯 지터 — 벽시계 ±5분어치 틱(틱 간격 무관하게 분산 폭 보존)
 const STOCK_EARLY_JITTER_TICKS = Math.round((5 * 60) / TICK_INTERVAL_SECONDS);
 const NEUTRAL_TARGET = 27; // 초·중반에 균등 배치할 중립 잡뉴스 목표 개수/일 = 가용 중립 종목 전부 (약 22분 간격, 방향성 없음·피드 밀도용)
@@ -239,41 +245,59 @@ export function generateRegularNews(
 export interface StockNewsTargets {
   reals: string[]; // |개별 bias| ≥ CUT — 톤이 진짜 방향을 힌트, 실제로 크게 움직임(거래량 실림)
   fillers: string[]; // 편향0 종목 — 톤 랜덤(방향성0 노이즈), 실제 움직임 없음
+  headfakes: string[]; // 편향0 종목 — tone-up 호재처럼 펌프했다 종가에 덤프(펌프-덤프 함정, Phase 3b)
 }
 
-// 종목 초반 톤뉴스 대상 선정 (Phase 3a):
+// 종목 초반 톤뉴스 대상 선정 (Phase 3a·3b):
 //   진짜 = 개별 편향 |bias|≥CUT (코드 사전순으로 결정적 — 배치 멱등성 유지)
-//   필러 = 편향0 종목 중 진짜수 × NOISE_RATIO개를 랜덤 추출 (진짜:노이즈 1:1)
-//   RNG 소비는 필러 추출뿐(진짜는 소비 없음) — batchService·이후 뉴스와 순서 일치 필요.
+//   헤드페이크 = 편향0 종목 중 진짜수 × HEADFAKE_RATIO개 랜덤 추출 (Phase 3b, tone-up 함정)
+//   필러 = 남은 편향0 종목 중 진짜수 × NOISE_RATIO개 랜덤 추출 (진짜:노이즈 1:1)
+//   RNG 소비 순서: 헤드페이크 추출 → 필러 추출 (진짜는 소비 없음). 헤드페이크를 먼저 뽑아
+//   같은 pool에서 겹치지 않게 한다(하네스 drawStockNews와 동일 순서). batchService가 이 함수를
+//   경로 루프 前에 호출해 headfakes를 펌프-덤프 경로 대상으로 쓰므로 순서·시드가 재현돼야 한다.
 export function pickStockNewsTargets(
   individualBiases: Record<string, number>,
   rng: Rng
 ): StockNewsTargets {
   const reals: string[] = [];
-  const fillerPool: string[] = [];
+  const pool: string[] = []; // 편향0 종목 = 헤드페이크·필러 후보
   for (const [code, b] of Object.entries(individualBiases).sort((a, z) =>
     a[0] < z[0] ? -1 : 1
   )) {
     if (Math.abs(b) >= STOCK_EARLY_CUT) reals.push(code);
-    else if (b === 0) fillerPool.push(code);
+    else if (b === 0) pool.push(code);
   }
+  const draw = (): string | null =>
+    pool.length ? pool.splice(Math.floor(rng() * pool.length), 1)[0] : null;
+
+  const headfakeCount = Math.min(
+    pool.length,
+    Math.round(reals.length * STOCK_EARLY_HEADFAKE_RATIO)
+  );
+  const headfakes: string[] = [];
+  for (let i = 0; i < headfakeCount; i++) {
+    const code = draw();
+    if (code) headfakes.push(code);
+  }
+
   const fillerCount = Math.min(
-    fillerPool.length,
+    pool.length,
     Math.round(reals.length * STOCK_EARLY_NOISE_RATIO)
   );
   const fillers: string[] = [];
   for (let i = 0; i < fillerCount; i++) {
-    const idx = Math.floor(rng() * fillerPool.length);
-    fillers.push(fillerPool.splice(idx, 1)[0]);
+    const code = draw();
+    if (code) fillers.push(code);
   }
-  return { reals, fillers };
+  return { reals, fillers, headfakes };
 }
 
-// 종목 초반 톤뉴스 발행 (Phase 3a) — 진짜+필러를 장 0~WINDOW 창에 방향 미표기(톤만)로 분산.
+// 종목 초반 톤뉴스 발행 (Phase 3a·3b) — 진짜+헤드페이크+필러를 장 0~WINDOW 창에 방향 미표기(톤만)로 분산.
 //   진짜: 세기(10/20/30)=개별 편향 크기, 톤 방향=진짜 방향을 TONE_ACC로만 일치(아니면 반대) = 애매.
+//   헤드페이크: 세기=약(10), 톤=항상 up(호재처럼) — 경로는 펌프-덤프(generateHeadfakePath)라 종가엔 꺼진다.
 //   필러: 세기=약(10), 톤 방향=랜덤 → 방향성0 노이즈(블라인드 추종을 동전으로 만든다).
 //   grade는 정식뉴스와 동일한 "news"라 라벨 구별 불가, 문안 톤으로만 티가 난다. 실력 = 톤 +
-//   초반 시세 브레이크 + 거래량(시세/차트에 노출된 실제 틱 거래량) 교차검증.
+//   초반 시세 브레이크 + 거래량(진짜=실림 / 헤드페이크=얇음) 교차검증.
 export function generateStockEarlyNews(
   paths: StockDayPath[],
   targets: StockNewsTargets,
@@ -288,8 +312,9 @@ export function generateStockEarlyNews(
   if (totalTicks === 0) return [];
   const windowTicks = Math.max(1, Math.floor(totalTicks * STOCK_EARLY_WINDOW_RATIO));
 
-  // 발행 항목 구성 — 진짜(코드순) 먼저, 필러(추출 순서) 뒤. 톤 방향·세기를 여기서 결정한다.
-  //   RNG 소비: 진짜당 1회(톤 플립 판정) + 필러당 1회(랜덤 방향). 슬롯 배치에서 추가 소비.
+  // 발행 항목 구성 — 진짜(코드순) → 헤드페이크 → 필러(추출 순서) 순. 톤 방향·세기를 여기서 결정한다.
+  //   RNG 소비: 진짜당 1회(톤 플립 판정) + 필러당 1회(랜덤 방향). 헤드페이크는 톤 고정(up)이라 미소비.
+  //   슬롯 배치에서 항목당 추가 1회 소비(지터).
   const items: Array<{ code: string; level: 10 | 20 | 30; dir: 1 | -1 }> = [];
   for (const code of targets.reals) {
     const path = pathByCode.get(code);
@@ -299,6 +324,12 @@ export function generateStockEarlyNews(
     const trueDir: 1 | -1 = (individualBiases[code] ?? 0) > 0 ? 1 : -1;
     const shownDir: 1 | -1 = rng() < STOCK_EARLY_TONE_ACC ? trueDir : ((-trueDir) as 1 | -1);
     items.push({ code, level: snapMagnitudeLevel(magnitude), dir: shownDir });
+  }
+  for (const code of targets.headfakes) {
+    const path = pathByCode.get(code);
+    if (!path || !HINT_TEMPLATES[code] || path.ticks.length === 0) continue;
+    // 헤드페이크는 항상 tone-up(호재처럼) — 초반 펌프와 맞물려 순진한 추종을 유인한다.
+    items.push({ code, level: STOCK_EARLY_HEADFAKE_LEVEL, dir: 1 });
   }
   for (const code of targets.fillers) {
     const path = pathByCode.get(code);

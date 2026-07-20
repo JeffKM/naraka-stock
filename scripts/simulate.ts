@@ -120,7 +120,7 @@ const STOCKNEWS_TONE_ACC = Number(process.env.SIM_STOCKNEWS_TONE_ACC ?? 0.6); //
 const STOCKNEWS_NOISE_RATIO = Number(process.env.SIM_STOCKNEWS_NOISE_RATIO ?? 1.0); // 진짜당 필러 수
 // 헤드페이크(펌프-덤프 함정): 초반에 확 튀어 순진한 가격확인을 통과 → 종가엔 꺼진다.
 // 진짜당 HEADFAKE_RATIO개. "단서"는 거래량 — 진짜는 거래량 실림(volumeHigh), 헤드페이크·필러는 얇음.
-const STOCKNEWS_HEADFAKE_RATIO = Number(process.env.SIM_HEADFAKE_RATIO ?? 0.5);
+const STOCKNEWS_HEADFAKE_RATIO = Number(process.env.SIM_HEADFAKE_RATIO ?? 0.3); // 운영값 0.3(Phase 3b 확정 스위트스팟)
 // 거래량 단서 정확도: 진짜가 거래량 실릴 확률 = 헤드페이크가 얇을 확률. <1이라 단서는 불완전
 // (진짜인데 조용한 경우·헤드페이크인데 거래량 실린 더 교묘한 함정 존재) → "거래량만 보면 끝"이
 // 안 되게 만든다. 실력 = 거래량+가격+톤 종합 판단.
@@ -872,7 +872,7 @@ function main() {
       `매도수수료=${(SELL_FEE_RATE * 100).toFixed(1)}%, ` +
       `톤정확도=${process.env.SIM_STOCKNEWS_TONE_ACC ?? "0.6"}, ` +
       `노이즈비=${process.env.SIM_STOCKNEWS_NOISE_RATIO ?? "1.0"}, ` +
-      `헤드페이크비=${process.env.SIM_HEADFAKE_RATIO ?? "0.5"}, ` +
+      `헤드페이크비=${process.env.SIM_HEADFAKE_RATIO ?? "0.3"}, ` +
       `반전=${process.env.SIM_FLIP_PROB ?? "0.3"})\n`
   );
 
