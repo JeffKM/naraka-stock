@@ -1,0 +1,27 @@
+# Dependabot — 의존성 취약점 자동 감지 및 업데이트 PR 생성
+# 참고: 영상 "1인 개발자 보안 기법" #4 (의존성 취약점 관리 자동화)
+version: 2
+updates:
+  # npm 패키지 — 주간 스캔, minor/patch는 묶어서 PR 수를 줄인다
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions 워크플로우에서 쓰는 액션 버전도 함께 최신 유지
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
