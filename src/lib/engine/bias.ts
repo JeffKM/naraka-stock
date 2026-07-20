@@ -108,7 +108,8 @@ export function drawDailyBiases(stocks: BiasTarget[], rng: Rng): BiasMap {
 // 후반 노출된다.
 // 참여 종목에 가산되는 섹터 공통 편향 세기(%p). 시뮬 튜닝용 env 오버라이드(SIM_SECTOR_MAG).
 // 키우면 확인된 섹터가 더 크게 움직여 소문교차검증(실력)의 정보 기반 집중 꼬리가 커진다(L2).
-const SECTOR_MAGNITUDE = Number(process.env.SIM_SECTOR_MAG ?? 15); // 밸런스 튜닝 대상(Plan 5)
+// 운영값 25 = "실력자 우승" 밸런스 반영(2026-07-20, 15→25). env 미설정 시 25.
+const SECTOR_MAGNITUDE = Number(process.env.SIM_SECTOR_MAG ?? 25);
 const SECTOR_PARTICIPATION_PROB = 0.7; // 섹터 구성원 각자 참여할 확률
 const SECTOR_UP_PROBABILITY = 0.55; // 섹터 이벤트의 상승 방향 확률
 

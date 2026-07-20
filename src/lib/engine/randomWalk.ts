@@ -27,19 +27,22 @@ const TICK_SIGMA: Record<StockTier, number> = {
 
 // 등급별 기본 일일 드리프트(%/일). 편향과 합산돼 하루 드리프트로 반영된다.
 // 우량주에 양(+)의 드리프트를 줘 "오를 확률"을 일반·잡주보다 높인다(우상향).
-// wild은 시뮬 튜닝용 env 오버라이드(SIM_WILD_DRIFT). 운영은 env 미설정 → -0.2.
+// wild은 시뮬 튜닝용 env 오버라이드(SIM_WILD_DRIFT). 운영값 -1.0 = "실력자 우승"
+// 밸런스 반영(2026-07-20, -0.2→-1.0). 잡주 하방을 키워 도박(블라인드 몰빵) 꼬리를 깎되,
+// 급락트랩이 되지 않게 완화값(-1.5 대신) 채택. env 미설정 시 -1.0.
 const DAILY_DRIFT: Record<StockTier, number> = {
   stable: 0.2,
   normal: 0,
-  wild: Number(process.env.SIM_WILD_DRIFT ?? -0.2),
+  wild: Number(process.env.SIM_WILD_DRIFT ?? -1.0),
 };
 
-// 점프 방향(상승) 확률 — 기본 50:50 대칭. wild만 env로 하방편향 스윕(SIM_WILD_JUMP_UP_PROB).
+// 점프 방향(상승) 확률 — stable·normal은 50:50 대칭. wild만 env로 하방편향(SIM_WILD_JUMP_UP_PROB).
 // 낮추면 잡주 급락(크래시)이 잦아져 좌측 꼬리가 두꺼워진다 = 블라인드 몰빵 파산 유도.
+// 운영값 0.35(35:65) = "실력자 우승" 밸런스 반영(2026-07-20, 0.5→0.35, 복권성 보존 완화값).
 const JUMP_UP_PROBABILITY: Record<StockTier, number> = {
   stable: 0.5,
   normal: 0.5,
-  wild: Number(process.env.SIM_WILD_JUMP_UP_PROB ?? 0.5),
+  wild: Number(process.env.SIM_WILD_JUMP_UP_PROB ?? 0.35),
 };
 
 export const PRICE_LIMIT_RATE = 0.3; // 상하한 ±30%

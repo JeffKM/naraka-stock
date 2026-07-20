@@ -866,9 +866,9 @@ function main() {
     `개장일 ${openDays().length}일 × ${runs}회 몬테카를로 시뮬레이션 ` +
       `(틱수=${TOTAL_TICKS}, 뉴스=${NEWS_TIMING}, ` +
       `잡주up=${process.env.SIM_WILD_UP_PROB ?? "0.5"}, ` +
-      `잡주drift=${process.env.SIM_WILD_DRIFT ?? "-0.2"}, ` +
-      `잡주점프up=${process.env.SIM_WILD_JUMP_UP_PROB ?? "0.5"}, ` +
-      `섹터강도=${process.env.SIM_SECTOR_MAG ?? "15"}, ` +
+      `잡주drift=${process.env.SIM_WILD_DRIFT ?? "-1.0"}, ` +
+      `잡주점프up=${process.env.SIM_WILD_JUMP_UP_PROB ?? "0.35"}, ` +
+      `섹터강도=${process.env.SIM_SECTOR_MAG ?? "25"}, ` +
       `매도수수료=${(SELL_FEE_RATE * 100).toFixed(1)}%, ` +
       `톤정확도=${process.env.SIM_STOCKNEWS_TONE_ACC ?? "0.6"}, ` +
       `노이즈비=${process.env.SIM_STOCKNEWS_NOISE_RATIO ?? "1.0"}, ` +
