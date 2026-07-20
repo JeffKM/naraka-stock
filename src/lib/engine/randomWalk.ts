@@ -27,10 +27,19 @@ const TICK_SIGMA: Record<StockTier, number> = {
 
 // 등급별 기본 일일 드리프트(%/일). 편향과 합산돼 하루 드리프트로 반영된다.
 // 우량주에 양(+)의 드리프트를 줘 "오를 확률"을 일반·잡주보다 높인다(우상향).
+// wild은 시뮬 튜닝용 env 오버라이드(SIM_WILD_DRIFT). 운영은 env 미설정 → -0.2.
 const DAILY_DRIFT: Record<StockTier, number> = {
   stable: 0.2,
   normal: 0,
-  wild: -0.2,
+  wild: Number(process.env.SIM_WILD_DRIFT ?? -0.2),
+};
+
+// 점프 방향(상승) 확률 — 기본 50:50 대칭. wild만 env로 하방편향 스윕(SIM_WILD_JUMP_UP_PROB).
+// 낮추면 잡주 급락(크래시)이 잦아져 좌측 꼬리가 두꺼워진다 = 블라인드 몰빵 파산 유도.
+const JUMP_UP_PROBABILITY: Record<StockTier, number> = {
+  stable: 0.5,
+  normal: 0.5,
+  wild: Number(process.env.SIM_WILD_JUMP_UP_PROB ?? 0.5),
 };
 
 export const PRICE_LIMIT_RATE = 0.3; // 상하한 ±30%
@@ -153,7 +162,7 @@ export function generateDailyPath(
     // 확률적 점프 (방향 50:50)
     if (rng() < jumpProbability) {
       const size = JUMP_MIN + rng() * (JUMP_MAX - JUMP_MIN);
-      price *= rng() < 0.5 ? 1 + size : 1 - size;
+      price *= rng() < JUMP_UP_PROBABILITY[tier] ? 1 + size : 1 - size;
       h = clusterBoost(h); // 여진: 다음 틱들 σ 상승
     }
     price = Math.min(Math.max(price, lowerLimit), upperLimit);
@@ -239,7 +248,7 @@ export function regenerateRemainingPath(
     h = clusterStep(h, Math.abs(nextGaussian(rng)) - MEAN_ABS_GAUSSIAN);
     if (rng() < jumpProbability) {
       const size = JUMP_MIN + rng() * (JUMP_MAX - JUMP_MIN);
-      price *= rng() < 0.5 ? 1 + size : 1 - size;
+      price *= rng() < JUMP_UP_PROBABILITY[tier] ? 1 + size : 1 - size;
       h = clusterBoost(h); // 여진: 다음 틱들 σ 상승
     }
     price = Math.min(Math.max(price, lowerLimit), upperLimit);
