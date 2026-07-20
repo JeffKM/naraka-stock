@@ -1,0 +1,39 @@
+# CI — 린트·타입체크·의존성 취약점 스캔 자동화
+# main 푸시 및 모든 PR에서 실행 (배포 전 게이트)
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 같은 브랜치에서 새 커밋이 오면 이전 실행은 취소해 러너를 아낀다
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: 타입 체크
+        run: npx tsc --noEmit
+
+      # 의존성 취약점 스캔 — high 이상 발견 시 실패 (moderate는 Dependabot이 처리)
+      - name: 의존성 취약점 스캔
+        run: npm audit --audit-level=high

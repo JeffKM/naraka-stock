@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // 설치된 스킬 번들·벤더 산출물 (프로젝트 소스 아님)
+    ".agents/**",
   ]),
 ]);
 
