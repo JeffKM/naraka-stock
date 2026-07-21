@@ -4,8 +4,10 @@ import {
   generateDailyPath,
   generateHeadfakePath,
   HEADFAKE_LOUD_VOLUME_SCALE,
+  HEADFAKE_VOLUME_SCALE,
   PRICE_LIMIT_RATE,
   QUIET_REAL_VOLUME_SCALE,
+  stockVolumeScale,
 } from "@/lib/engine/randomWalk";
 import { createRng, hashSeed } from "@/lib/engine/rng";
 import {
@@ -163,13 +165,17 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
       // 실제 경로는 확률적 실현치(realizeBias)를 따르고, 뉴스도 이 실현 경로를 "설명"하는
       // 방식으로 발행된다 (추첨 bias가 아니라 실현 결과 기준 — generate.ts).
       // 거래량 배율: loud 헤드페이크는 정상 거래량으로 위장, 조용한 진짜는 얇게(단서 불완전).
+      // 종목 고유 배율(stockScale)을 두 경로에 동일하게 곱해 종목 간 거래량을 다양화하되,
+      // 단서 배율(0.4/1.0)과의 상대비는 보존한다(곱셈 합성 → 진위 단서 불변).
+      const stockScale = stockVolumeScale(stock.code);
       const path = headfakeSet.has(stock.code)
         ? generateHeadfakePath(
             prevClose,
             stock.tier as StockTier,
             rng,
             config.ticksPerDay,
-            loudHeadfakes.has(stock.code) ? HEADFAKE_LOUD_VOLUME_SCALE : undefined
+            (loudHeadfakes.has(stock.code) ? HEADFAKE_LOUD_VOLUME_SCALE : HEADFAKE_VOLUME_SCALE) *
+              stockScale
           )
         : generateDailyPath(
             prevClose,
@@ -177,7 +183,7 @@ export async function runDailyBatch(overrideToday?: string): Promise<BatchResult
             stock.tier as StockTier,
             rng,
             config.ticksPerDay,
-            quietReals.has(stock.code) ? QUIET_REAL_VOLUME_SCALE : 1
+            (quietReals.has(stock.code) ? QUIET_REAL_VOLUME_SCALE : 1) * stockScale
           );
       summaries.push({
         stock_code: stock.code,

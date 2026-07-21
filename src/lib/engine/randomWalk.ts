@@ -15,7 +15,7 @@
 
 import type { StockTier } from "@/types/domain";
 import { TICKS_PER_DAY } from "@/lib/market";
-import { nextGaussian, type Rng } from "./rng";
+import { nextGaussian, createRng, hashSeed, type Rng } from "./rng";
 
 // 등급별 틱당 변동성 — 종가·장중이 함께 커지는 현실형. 생동감 있게 튜닝하되
 // 등급 순서 유지(2026-07-15 재튜닝). 우량도 월 3일쯤 두 자릿수 등락이 나온다.
@@ -88,6 +88,22 @@ const VOLUME_BASELINE: Record<StockTier, number> = {
 const VOLUME_MOVE_K = 40; // |틱 변동률|(0~)에 대한 거래량 스파이크 계수
 const VOLUME_NOISE_MIN = 0.6; // noise 균등분포 [min, max]
 const VOLUME_NOISE_MAX = 1.4;
+
+// 종목 고유 거래량 배율 (2026-07-21): 같은 등급이면 baseline이 동일해 종목 간 거래량이
+// 서로 수렴("다 비슷비슷") → 종목 code로 결정론적 고정 배율을 곱해 다양성을 준다.
+// 로그균등 [0.7, 1.5]. 곱셈적 배율이라 기하적으로 균등하게 뽑는다. 범위를 이 폭으로
+// 잡아 등급 baseline 순서를 보존한다: stable[5600,12000] > normal[2100,4500] > wild[840,1800].
+// 진위 단서 보존: 이 배율은 정상 경로·헤드페이크 경로 양쪽에 "동일하게" 곱해지므로
+// (호출부에서 volumeScale과 곱), "오를 때 거래량이 실리는가/헤드페이크는 자기 평소의 40%"라는
+// 시계열 상대 단서는 배율과 독립적으로 유지된다.
+const VOLUME_SCALE_MIN = 0.7;
+const VOLUME_SCALE_MAX = 1.5;
+export function stockVolumeScale(code: string): number {
+  const u = createRng(hashSeed(`volscale|${code}`))();
+  return Math.exp(
+    Math.log(VOLUME_SCALE_MIN) + u * (Math.log(VOLUME_SCALE_MAX) - Math.log(VOLUME_SCALE_MIN))
+  );
+}
 
 // 틱 거래량: prevPrice→price 변동률과 등급 baseline로 산출. RNG 1 소비(noise).
 // adminService의 동결 구간(가격 변화 없는 구간) 채우기에서도 재사용하도록 export.
@@ -217,7 +233,8 @@ export function regenerateRemainingPath(
   rng: Rng,
   totalTicks: number = TICKS_PER_DAY,
   biasTicks: number | null = null, // 편향이 걸리는 틱 수 (null = 남은 전체)
-  resumeBias: number = 0 // 창 종료 후 복귀할 편향 (%p, 하루 전체 기준 드리프트)
+  resumeBias: number = 0, // 창 종료 후 복귀할 편향 (%p, 하루 전체 기준 드리프트)
+  volumeScale: number = 1 // 거래량 배율 (종목 고유 배율·단서 배율 합성 — generateDailyPath와 대칭)
 ): Tick[] {
   const upperLimit = roundPrice(prevClose * (1 + PRICE_LIMIT_RATE));
   const lowerLimit = roundPrice(prevClose * (1 - PRICE_LIMIT_RATE));
@@ -264,7 +281,8 @@ export function regenerateRemainingPath(
       tickIndex: i,
       price: rounded,
       isHalted: false,
-      volume: tickVolume(tier, prev, rounded, rng), // 가격 확정 후 RNG 소비
+      // 가격 확정 후 RNG 소비(volumeScale과 무관하게 항상 1회 → 가격·재현성 불변)
+      volume: Math.max(1, Math.round(tickVolume(tier, prev, rounded, rng) * volumeScale)),
     });
   }
 

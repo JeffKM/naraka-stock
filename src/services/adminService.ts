@@ -5,6 +5,7 @@ import { realizeBias } from "@/lib/engine/bias";
 import {
   generateDailyPath,
   regenerateRemainingPath,
+  stockVolumeScale,
   tickVolume,
   type Tick,
 } from "@/lib/engine/randomWalk";
@@ -577,13 +578,14 @@ export async function reconcileTodayTicks(): Promise<ReconcileResult | null> {
       // 동결 구간(경로 끝 ~ 현재)은 표시·체결됐던 마지막 틱 가격 그대로 채운다.
       // 가격 변화가 없어도(moveRate=0) baseline×noise로 거래량은 채운다 —
       // 0으로 두면 거래량 히스토그램이 이 구간만 끊긴다.
+      const stockScale = stockVolumeScale(stock.code); // 종목 고유 거래량 배율(경로와 이음새 유지)
       const flat: Tick[] = [];
       for (let i = lastIndex + 1; i <= Math.min(currentTick, totalTicks - 1); i++) {
         flat.push({
           tickIndex: i,
           price: anchorPrice,
           isHalted: false,
-          volume: tickVolume(tier, anchorPrice, anchorPrice, rng),
+          volume: Math.max(1, Math.round(tickVolume(tier, anchorPrice, anchorPrice, rng) * stockScale)),
         });
       }
       fromTick = anchor;
@@ -599,13 +601,21 @@ export async function reconcileTodayTicks(): Promise<ReconcileResult | null> {
           rng,
           totalTicks,
           1,
-          bias
+          bias,
+          stockScale
         ),
       ];
     } else if (hour < hours.openHour) {
       // 개장 전: 하루 전체 재생성 + 잠정 요약 OHLC 갱신
       if (lastIndex === totalTicks - 1) continue;
-      const path = generateDailyPath(prevClose, realizeBias(bias, rng), tier, rng, totalTicks);
+      const path = generateDailyPath(
+        prevClose,
+        realizeBias(bias, rng),
+        tier,
+        rng,
+        totalTicks,
+        stockVolumeScale(stock.code)
+      );
       fromTick = -1;
       newTicks = path.ticks;
       const { error: summaryError } = await supabase

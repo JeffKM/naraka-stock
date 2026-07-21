@@ -53,9 +53,23 @@ const GRADE_META: Record<NewsGrade, GradeMeta> = {
   },
 };
 
-function formatDate(date: string): string {
-  const [, m, d] = date.split("-");
-  return `${Number(m)}/${Number(d)}`;
+// 발행 시각(publishedAt, UTC ISO)을 KST "M/D HH:MM"으로. 뉴스 등급마다 노출 시각이
+// 달라(공시=폐장/정식=장 후반/찌라시=장중) 분 단위로 "언제 터진 소식인지"를 드러낸다.
+// 브라우저 타임존과 무관하게 항상 KST로 고정(이벤트가 KST 기준).
+function formatPublishedAt(iso: string): string {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Seoul",
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    })
+      .formatToParts(new Date(iso))
+      .map((x) => [x.type, x.value])
+  );
+  return `${p.month}/${p.day} ${p.hour}:${p.minute}`;
 }
 
 // 게시물 작성자 정보 — 등급 + 종목으로 결정.
@@ -242,7 +256,7 @@ export function NewsList({
                 )}
                 <span className="truncate text-muted-foreground">{author.handle}</span>
                 <span className="text-muted-foreground">·</span>
-                <span className="shrink-0 text-muted-foreground">{formatDate(n.date)}</span>
+                <span className="shrink-0 text-muted-foreground">{formatPublishedAt(n.publishedAt)}</span>
               </div>
 
               {/* 본문 */}
