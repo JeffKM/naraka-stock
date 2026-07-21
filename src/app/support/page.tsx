@@ -82,6 +82,7 @@ function SupportComposeDialog() {
                 key={c.value}
                 size="sm"
                 variant={category === c.value ? "default" : "outline"}
+                aria-pressed={category === c.value}
                 onClick={() => setCategory(c.value)}
               >
                 {c.label}
@@ -89,6 +90,7 @@ function SupportComposeDialog() {
             ))}
           </div>
           <textarea
+            aria-label="문의 내용"
             placeholder="내용을 적어주세요 (최대 1,000자)"
             value={content}
             onChange={(e) => setContent(e.target.value)}
@@ -171,6 +173,7 @@ function SupportPostItem({ post }: { post: SupportPost }) {
       {editing ? (
         <div className="flex flex-col gap-2">
           <textarea
+            aria-label="문의 수정"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             maxLength={1000}

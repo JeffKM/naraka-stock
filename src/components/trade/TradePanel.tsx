@@ -214,6 +214,7 @@ function OrderTypeTabs({
       <Button
         size="sm"
         variant={value === "market" ? "default" : "outline"}
+        aria-pressed={value === "market"}
         className="flex-1"
         onClick={() => onChange("market")}
       >
@@ -222,6 +223,7 @@ function OrderTypeTabs({
       <Button
         size="sm"
         variant={value === "limit" ? "default" : "outline"}
+        aria-pressed={value === "limit"}
         className="flex-1"
         onClick={() => onChange("limit")}
       >
@@ -260,6 +262,7 @@ function LimitPriceInput({
         type="number"
         inputMode="numeric"
         min={0}
+        aria-label="지정가"
         placeholder="지정가 (원)"
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -388,6 +391,7 @@ function BuyDialog({
               <Button
                 size="sm"
                 variant={mode === "amount" ? "default" : "outline"}
+                aria-pressed={mode === "amount"}
                 className="flex-1"
                 onClick={() => {
                   setMode("amount");
@@ -399,6 +403,7 @@ function BuyDialog({
               <Button
                 size="sm"
                 variant={mode === "qty" ? "default" : "outline"}
+                aria-pressed={mode === "qty"}
                 className="flex-1"
                 onClick={() => {
                   setMode("qty");
@@ -415,6 +420,7 @@ function BuyDialog({
             inputMode="numeric"
             min={0}
             step={!isLimit && mode === "qty" ? "1" : undefined}
+            aria-label={!isLimit && mode === "qty" ? "구매 수량" : "구매 금액"}
             placeholder={!isLimit && mode === "qty" ? "수량 (주)" : "금액 (원)"}
             value={amountText}
             autoFocus={!isLimit}
@@ -615,6 +621,7 @@ function SellDialog({
               <Button
                 size="sm"
                 variant={mode === "qty" ? "default" : "outline"}
+                aria-pressed={mode === "qty"}
                 className="flex-1"
                 onClick={() => {
                   setMode("qty");
@@ -626,6 +633,7 @@ function SellDialog({
               <Button
                 size="sm"
                 variant={mode === "amount" ? "default" : "outline"}
+                aria-pressed={mode === "amount"}
                 className="flex-1"
                 onClick={() => {
                   setMode("amount");
@@ -642,6 +650,7 @@ function SellDialog({
             inputMode="decimal"
             min={0}
             step="any"
+            aria-label={!isLimit && mode === "amount" ? "판매 금액" : "판매 수량"}
             placeholder={!isLimit && mode === "amount" ? "금액 (원)" : "수량 (주)"}
             value={text}
             autoFocus={!isLimit}
