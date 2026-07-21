@@ -20,12 +20,33 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const OG_DESCRIPTION =
+  "요괴 컨셉카페 나라카의 8월 이벤트 — 가상 화폐로 즐기는 모의 주식 거래";
+
 export const metadata: Metadata = {
+  // OG·Twitter 이미지/canonical을 절대 URL로 승격하기 위한 기준 도메인 (프로덕션)
+  metadataBase: new URL("https://naraka.cafe"),
   title: {
     default: "나라카증권",
     template: "나라카증권 | %s",
   },
-  description: "요괴 컨셉카페 나라카의 8월 이벤트 — 가상 화폐로 즐기는 모의 주식 거래",
+  description: OG_DESCRIPTION,
+  // 카카오톡·SNS 공유 미리보기 카드 (1200×630 og.png)
+  openGraph: {
+    type: "website",
+    siteName: "나라카증권",
+    title: "나라카증권",
+    description: OG_DESCRIPTION,
+    url: "/",
+    locale: "ko_KR",
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "나라카증권" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "나라카증권",
+    description: OG_DESCRIPTION,
+    images: ["/og.png"],
+  },
 };
 
 export const viewport: Viewport = {

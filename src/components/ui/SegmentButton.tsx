@@ -12,6 +12,8 @@ export function SegmentButton({
 }) {
   return (
     <button
+      type="button"
+      aria-pressed={active}
       onClick={onClick}
       className={cn(
         "flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",

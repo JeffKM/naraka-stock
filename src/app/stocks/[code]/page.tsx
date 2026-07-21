@@ -129,11 +129,13 @@ export default function StockDetailPage({
       {/* 스크롤 시 종목명·현재가를 잃지 않게 한 줄 요약을 상단 고정 */}
       <div
         aria-hidden={!pinned}
+        // padding·border-color를 애니메이션에서 제외하고 py를 고정(border-box라 max-h-0이면 그대로 접힘).
+        // 프레임당 리플로우·paint·backdrop-blur 재평가를 max-height+opacity로 축소 (모션 성능)
         className={cn(
-          "sticky top-14 z-20 -mx-4 overflow-hidden border-b bg-card/95 px-4 backdrop-blur transition-[max-height,opacity,padding,border-color] duration-200",
+          "sticky top-14 z-20 -mx-4 overflow-hidden border-b border-border bg-card/95 px-4 py-2 backdrop-blur transition-[max-height,opacity] duration-200",
           pinned
-            ? "max-h-16 border-border py-2 opacity-100"
-            : "pointer-events-none max-h-0 border-transparent py-0 opacity-0"
+            ? "max-h-16 opacity-100"
+            : "pointer-events-none max-h-0 opacity-0"
         )}
       >
         <div className="flex items-center justify-between gap-2">
